@@ -1,0 +1,25 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "type": "module",
+  "types": "index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "npx tsgo && npx esbuild main.ts --bundle --sourcemap --platform=node --format=esm --outfile=bundle.js",
+    "start": "node main.ts",
+    "gen_model_type": "node scripts/gen_model_types.cjs models/models.prisma -o models/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/ws": "^8.18.1",
+    "@typescript/native-preview": "^7.0.0-dev.20260401.1",
+    "@wecom/crypto": "^1.0.1"
+  },
+  "dependencies": {
+    "ws": "^8.20.0"
+  }
+}

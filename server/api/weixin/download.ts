@@ -1,0 +1,116 @@
+import { writeFileSync, existsSync, mkdirSync } from "node:fs"
+import { join, extname } from "node:path"
+import { createHash } from "node:crypto"
+import { execSync } from "node:child_process"
+import { getAccessToken } from './token.ts'
+
+const UPLOADS_DIR = join(process.cwd(), 'uploads')
+
+const ensureUploadsDir = (): void => {
+  if (!existsSync(UPLOADS_DIR)) {
+    mkdirSync(UPLOADS_DIR, { recursive: true })
+  }
+}
+
+const convertPdfToPs = (pdfPath: string): void => {
+  const psPath = pdfPath.replace(/\.pdf$/i, '.ps')
+  try {
+    execSync(`gs -dNOPAUSE -dBATCH -sDEVICE=ps2write -sOutputFile="${psPath}" "${pdfPath}"`, {
+      stdio: 'ignore'
+    })
+  } catch (error) {
+    console.error('PDF转PS失败:', error)
+  }
+}
+
+const getFilenameFromResponse = (response: Response, mediaId: string): string => {
+  const contentDisposition = response.headers.get('content-disposition')
+  if (contentDisposition) {
+    const filenameMatch = contentDisposition.match(/filename\*?[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+    if (filenameMatch && filenameMatch[1]) {
+      let filename = filenameMatch[1].replace(/['"]/g, '')
+      filename = filename.replace(/^utf-8['"]*/i, '')
+      return decodeURIComponent(filename)
+    }
+  }
+  
+  const contentType = response.headers.get('content-type')
+  const ext = getExtensionFromContentType(contentType)
+  return `${mediaId}${ext}`
+}
+
+const getExtensionFromContentType = (contentType: string | null): string => {
+  if (!contentType) return ''
+  
+  const typeMap: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'audio/amr': '.amr',
+    'video/mp4': '.mp4',
+    'application/pdf': '.pdf',
+    'application/msword': '.doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+    'application/vnd.ms-excel': '.xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+    'application/vnd.ms-powerpoint': '.ppt',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  }
+  
+  for (const [type, ext] of Object.entries(typeMap)) {
+    if (contentType.includes(type)) {
+      return ext
+    }
+  }
+  
+  return ''
+}
+
+export type DownloadResult = {
+  fileId: string
+  filename: string
+}
+
+export const downloadMedia = async (mediaId: string): Promise<DownloadResult> => {
+  ensureUploadsDir()
+  
+  const accessToken = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/media/get?access_token=${accessToken}&media_id=${mediaId}`
+  
+  const response = await fetch(url)
+  
+  if (!response.ok) {
+    throw new Error(`下载文件失败: HTTP ${response.status}`)
+  }
+  
+  const contentType = response.headers.get('content-type')
+  if (contentType?.includes('application/json')) {
+    const errorData = await response.json() as { errcode?: number; errmsg?: string }
+    if (errorData.errcode && errorData.errcode !== 0) {
+      throw new Error(`下载文件失败: ${errorData.errmsg} (errcode: ${errorData.errcode})`)
+    }
+  }
+  
+  const filename = getFilenameFromResponse(response, mediaId)
+  
+  const arrayBuffer = await response.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+  
+  const hash = createHash('sha256').update(buffer).digest('hex').slice(0, 16)
+  const ext = extname(filename)
+  const fileHash = hash + ext
+  
+  const filePath = join(UPLOADS_DIR, fileHash)
+  
+  writeFileSync(filePath, buffer)
+  
+  if (ext.toLowerCase() === '.pdf') {
+    convertPdfToPs(filePath)
+  }
+  
+  return { fileId: hash, filename }
+}
+
+export const getUploadsDir = (): string => {
+  return UPLOADS_DIR
+}

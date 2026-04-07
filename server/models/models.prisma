@@ -1,0 +1,60 @@
+datasource db {
+  provider = "sqlite"
+  url = "file:./dev.db"
+}
+
+model User {
+  id   Int @id
+  username String @unique
+  password String
+  email String? @unique
+  weixinKfUsers WeixinKfUser[]
+  computers Computer[]
+}
+
+model WeixinKf {
+  id String @id
+  messageCursor String
+}
+
+model WeixinKfUser {
+  externalUserId String @id
+  user User @relation(fields: [userId], references: [id])
+  userId Int
+}
+
+model Computer {
+  id String @id
+  name String
+  user User @relation(fields: [userId], references: [id])
+  userId Int
+  printers Printer[]
+}
+
+model Printer {
+  id Int @id
+  name String
+  computer Computer @relation(fields: [computerId], references: [id])
+  computerId String
+}
+
+model PrintJob {
+  id Int @id
+  state String
+  printTasks PrintTask[]
+  user User @relation(fields: [userId], references: [id])
+  userId Int
+  computerId String
+  printerName String
+}
+
+model PrintTask {
+  id Int @id
+  state String
+  printJob PrintJob @relation(fields: [printJobId], references: [id])
+  printJobId Int
+  fileId String
+  filename String
+  duplex Boolean
+  tumple Boolean
+}
