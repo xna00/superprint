@@ -4,4 +4,5 @@ server/music
 *.local.*
 server/uploads/
 server/dev.db
-server/node_modules/
+node_modules/
+dist

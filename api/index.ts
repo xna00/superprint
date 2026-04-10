@@ -8,7 +8,7 @@ export const createHandler = (base: string, options?: {
   beforeResponse?: (res: Response) => Promise<Response>;
 }): Promisify<Api> => {
   return new Proxy(() => { }, {
-    get(target, p: string, receiver) {
+    get(_target, p: string, _receiver) {
       let ret = createHandler(`${base}/${p as string}`, options);
       if (p === "makeRequest") {
         ret = createHandler(`${base}`, options);
@@ -17,7 +17,7 @@ export const createHandler = (base: string, options?: {
       }
       return ret;
     },
-    apply(target: any, thisArg, argArray) {
+    apply(target: any, _thisArg, argArray) {
       const isGet = isGetMethod(base);
       const req = new Request(
         isGet

@@ -1,16 +1,20 @@
 import { useState } from 'react'
 import { api } from '../api'
 
-declare const WeixinJSBridge: {
-  call: (method: string) => void
-} | undefined
+declare global {
+  interface Window {
+    WeixinJSBridge?: {
+      call: (method: string) => void
+    }
+  }
+}
 
 const closeWindow = () => {
-  if (typeof WeixinJSBridge !== 'undefined') {
-    WeixinJSBridge.call('closeWindow')
+  if (typeof window.WeixinJSBridge !== 'undefined') {
+    window.WeixinJSBridge.call('closeWindow')
   } else if (document.addEventListener) {
     document.addEventListener('WeixinJSBridgeReady', () => {
-      WeixinJSBridge?.call('closeWindow')
+      window.WeixinJSBridge?.call('closeWindow')
     }, false)
   } else {
     window.close()
