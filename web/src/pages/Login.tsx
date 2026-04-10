@@ -26,6 +26,7 @@ export function Login() {
   const urlParams = new URLSearchParams(window.location.search)
   const externalUserId = urlParams.get('external_userid')
   const openKfId = urlParams.get('open_kfid')
+  const redirect = urlParams.get('redirect')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,7 +45,13 @@ export function Login() {
         localStorage.setItem('token', result.token)
         localStorage.setItem('userId', result.id.toString())
         localStorage.setItem('username', result.username)
-        closeWindow()
+        
+        if (redirect === 'print-job') {
+          const id = urlParams.get('id')
+          window.location.href = `/print-job?id=${id}`
+        } else {
+          closeWindow()
+        }
       } else {
         setError('登录失败')
       }

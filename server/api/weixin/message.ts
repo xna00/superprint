@@ -328,7 +328,8 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       taskInfo += `${typeLabel} ${displayName} (${duplexLabel}/${tumbleLabel})\n`
     }
 
-    taskInfo += `\n回复"确认"开始打印`
+    taskInfo += `\n回复"确认"开始打印\n`
+    taskInfo += `\n🔗 查看详情: https://superprint.xna00.top/print-job?id=${printJobId}`
 
     await sendTextMessage(taskInfo, kfid, externalUserId)
     console.log('✅ 打印任务信息已发送给用户')
