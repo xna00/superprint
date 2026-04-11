@@ -140,10 +140,12 @@ export type Computer = ComputerBase & ComputerRel
 export type PrinterBase = {
 id: number,
 name: string,
-computerId: string
+computerId: string,
+disabled: boolean
 }
 export type PrinterRel = {
-computer: "Computer"
+computer: "Computer",
+printJobs: "PrintJob[]"
 }
 export type Printer = PrinterBase & PrinterRel
 
@@ -151,12 +153,12 @@ export type PrintJobBase = {
 id: number,
 state: string,
 userId: number,
-computerId: string,
-printerName: string
+printerId: number
 }
 export type PrintJobRel = {
 printTasks: "PrintTask[]",
-user: "User"
+user: "User",
+printer: "Printer"
 }
 export type PrintJob = PrintJobBase & PrintJobRel
 
@@ -221,14 +223,15 @@ db.exec(`CREATE TABLE IF NOT EXISTS Printer
 (id INTEGER NOT NULL  PRIMARY KEY,
 name TEXT NOT NULL  ,
 computerId TEXT NOT NULL  ,
+disabled BOOLEAN NOT NULL  ,
 FOREIGN KEY (computerId) REFERENCES Computer (id))`)
 db.exec(`CREATE TABLE IF NOT EXISTS PrintJob
 (id INTEGER NOT NULL  PRIMARY KEY,
 state TEXT NOT NULL  ,
 userId INTEGER NOT NULL  ,
-computerId TEXT NOT NULL  ,
-printerName TEXT NOT NULL  ,
-FOREIGN KEY (userId) REFERENCES User (id))`)
+printerId INTEGER NOT NULL  ,
+FOREIGN KEY (userId) REFERENCES User (id),
+FOREIGN KEY (printerId) REFERENCES Printer (id))`)
 db.exec(`CREATE TABLE IF NOT EXISTS PrintTask
 (id INTEGER NOT NULL  PRIMARY KEY,
 state TEXT NOT NULL  ,
@@ -298,7 +301,7 @@ export const Computer = {
 };
 export type PrinterCriteria = Partial<Criteria<PrinterBase>>
 export type PrinterInsert = CreateModel<PrinterBase, "id">
-const PrinterBaseFields = ["id", "name", "computerId"]
+const PrinterBaseFields = ["id", "name", "computerId", "disabled"]
 export const Printer = {
   findBy: <T extends Cas<"Printer"> = {}>(criteria: PrinterCriteria, relation?: T extends Cas<"Printer"> ? T : never) => {
     return [] as unknown as (PrinterBase & DeepPick<"PrinterRel", T>)[]
@@ -312,7 +315,7 @@ export const Printer = {
 };
 export type PrintJobCriteria = Partial<Criteria<PrintJobBase>>
 export type PrintJobInsert = CreateModel<PrintJobBase, "id">
-const PrintJobBaseFields = ["id", "state", "userId", "computerId", "printerName"]
+const PrintJobBaseFields = ["id", "state", "userId", "printerId"]
 export const PrintJob = {
   findBy: <T extends Cas<"PrintJob"> = {}>(criteria: PrintJobCriteria, relation?: T extends Cas<"PrintJob"> ? T : never) => {
     return [] as unknown as (PrintJobBase & DeepPick<"PrintJobRel", T>)[]
@@ -455,6 +458,9 @@ row.printers = Printer.findBy({computerId: row.id}, typeof relation!["printers"]
 const t = Computer.findBy({id: row.computerId}).at(0)
 assert(t)
 row.computer = t
+},
+printJobs: (row) => {
+row.printJobs = PrintJob.findBy({printerId: row.id}, typeof relation!["printJobs"] === "object" ? relation!["printJobs"] : undefined)
 } }
     let ret = db.prepare("SELECT * FROM Printer " + makeWhere(criteria)).all()
     ret = ret.map(row => {
@@ -464,16 +470,16 @@ row.computer = t
       }
     })
       const _row = row as any
-      
+      _row["disabled"] = Boolean(_row["disabled"])
       return row
     })
     return ret as any
   }
 
   Printer.insert = (data: CreateModel<PrinterBase, "id">[]) => {
-    const values_str = ",(?, ?, ?)".repeat(data.length).slice(1)
-    const stmt = db.prepare('INSERT INTO Printer (id, name, computerId) VALUES ' + values_str)
-    const values = data.map(row => [row["id"] ?? null, row["name"], row["computerId"]]).flat()
+    const values_str = ",(?, ?, ?, ?)".repeat(data.length).slice(1)
+    const stmt = db.prepare('INSERT INTO Printer (id, name, computerId, disabled) VALUES ' + values_str)
+    const values = data.map(row => [row["id"] ?? null, row["name"], row["computerId"], Number(row["disabled"])]).flat()
     return stmt.run(...values)
   }
 
@@ -486,6 +492,11 @@ user: (row) => {
 const t = User.findBy({id: row.userId}).at(0)
 assert(t)
 row.user = t
+},
+printer: (row) => {
+const t = Printer.findBy({id: row.printerId}).at(0)
+assert(t)
+row.printer = t
 } }
     let ret = db.prepare("SELECT * FROM PrintJob " + makeWhere(criteria)).all()
     ret = ret.map(row => {
@@ -502,9 +513,9 @@ row.user = t
   }
 
   PrintJob.insert = (data: CreateModel<PrintJobBase, "id">[]) => {
-    const values_str = ",(?, ?, ?, ?, ?)".repeat(data.length).slice(1)
-    const stmt = db.prepare('INSERT INTO PrintJob (id, state, userId, computerId, printerName) VALUES ' + values_str)
-    const values = data.map(row => [row["id"] ?? null, row["state"], row["userId"], row["computerId"], row["printerName"]]).flat()
+    const values_str = ",(?, ?, ?, ?)".repeat(data.length).slice(1)
+    const stmt = db.prepare('INSERT INTO PrintJob (id, state, userId, printerId) VALUES ' + values_str)
+    const values = data.map(row => [row["id"] ?? null, row["state"], row["userId"], row["printerId"]]).flat()
     return stmt.run(...values)
   }
 

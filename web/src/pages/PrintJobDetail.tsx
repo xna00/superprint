@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api'
 
-interface Printer {
+interface PrinterOption {
+  printerId: number
   printerName: string
   computerId: string
   computerName: string
+  disabled: boolean
 }
 
 interface PrintTask {
@@ -17,22 +19,27 @@ interface PrintTask {
   tumple: boolean
 }
 
+interface Printer {
+  id: number
+  name: string
+  computerId: string
+}
+
 interface PrintJobDetailData {
   id: number
   state: string
-  computerId: string
-  printerName: string
+  printerId: number
   printTasks: PrintTask[]
-  computer?: { name: string }
+  printer?: Printer
 }
 
 export function PrintJobDetail() {
   const [data, setData] = useState<PrintJobDetailData | null>(null)
-  const [printers, setPrinters] = useState<Printer[]>([])
+  const [printers, setPrinters] = useState<PrinterOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [pendingPrinter, setPendingPrinter] = useState<{ computerId: string; printerName: string } | null>(null)
+  const [pendingPrinterId, setPendingPrinterId] = useState<number | null>(null)
   const [pendingTasks, setPendingTasks] = useState<Map<number, { duplex: boolean; tumple: boolean }>>(new Map())
 
   const params = new URLSearchParams(window.location.search)
@@ -60,7 +67,7 @@ export function PrintJobDetail() {
       ])
       setData(detail)
       setPrinters(printerList)
-      setPendingPrinter({ computerId: detail.computerId, printerName: detail.printerName })
+      setPendingPrinterId(detail.printerId)
       const taskMap = new Map<number, { duplex: boolean; tumple: boolean }>()
       detail.printTasks.forEach(t => taskMap.set(t.id, { duplex: t.duplex, tumple: t.tumple }))
       setPendingTasks(taskMap)
@@ -71,8 +78,8 @@ export function PrintJobDetail() {
     }
   }
 
-  const handlePrinterChange = (computerId: string, printerName: string) => {
-    setPendingPrinter({ computerId, printerName })
+  const handlePrinterChange = (printerId: number) => {
+    setPendingPrinterId(printerId)
   }
 
   const handleTaskChange = (taskId: number, duplex: boolean, tumple: boolean) => {
@@ -86,11 +93,11 @@ export function PrintJobDetail() {
     try {
       console.log('=== handleConfirm ===')
       console.log('data.id:', data.id, typeof data.id)
-      console.log('pendingPrinter:', pendingPrinter)
-      console.log('API call args:', [data.id, pendingPrinter?.computerId, pendingPrinter?.printerName])
-      if (pendingPrinter && (pendingPrinter.computerId !== data.computerId || pendingPrinter.printerName !== data.printerName)) {
-        console.log('Calling updatePrintJob with:', data.id, pendingPrinter.computerId, pendingPrinter.printerName)
-        const result = await api.printJob.updatePrintJob(data.id, pendingPrinter.computerId, pendingPrinter.printerName)
+      console.log('pendingPrinterId:', pendingPrinterId)
+      console.log('API call args:', [data.id, pendingPrinterId])
+      if (pendingPrinterId !== null && pendingPrinterId !== data.printerId) {
+        console.log('Calling updatePrintJob with:', data.id, pendingPrinterId)
+        const result = await api.printJob.updatePrintJob(data.id, pendingPrinterId)
         console.log('updatePrintJob result:', result)
       }
       for (const [taskId, options] of pendingTasks) {
@@ -127,6 +134,8 @@ export function PrintJobDetail() {
     )
   }
 
+  const currentPrinter = printers.find(p => p.printerId === (pendingPrinterId ?? data?.printerId))
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
@@ -158,23 +167,20 @@ export function PrintJobDetail() {
             <label className="block text-sm font-medium text-gray-700 mb-2">打印机</label>
             {isEditable ? (
               <select
-                value={pendingPrinter ? `${pendingPrinter.computerId}|${pendingPrinter.printerName}` : ''}
-                onChange={(e) => {
-                  const [computerId, printerName] = e.target.value.split('|')
-                  handlePrinterChange(computerId, printerName)
-                }}
+                value={pendingPrinterId ?? ''}
+                onChange={(e) => handlePrinterChange(parseInt(e.target.value))}
                 disabled={saving}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
               >
-                {printers.map(p => (
-                  <option key={`${p.computerId}|${p.printerName}`} value={`${p.computerId}|${p.printerName}`}>
+                {printers.filter(p => !p.disabled).map(p => (
+                  <option key={p.printerId} value={p.printerId}>
                     {p.computerName} - {p.printerName}
                   </option>
                 ))}
               </select>
             ) : (
               <div className="px-3 py-2 bg-gray-50 rounded-md text-gray-900">
-                {data?.computer?.name} - {data?.printerName}
+                {currentPrinter?.computerName} - {currentPrinter?.printerName}
               </div>
             )}
           </div>

@@ -155,7 +155,7 @@ const handleConfirm = async (openKfId: string, externalUserId: string, userId: n
   const printJobs = PrintJob.findBy({
     userId,
     state: 'waiting_confirmation'
-  })
+  }, { printer: true })
 
   if (printJobs.length === 0) {
     await sendTextMessage(
@@ -168,7 +168,9 @@ const handleConfirm = async (openKfId: string, externalUserId: string, userId: n
 
   for (const job of printJobs) {
     PrintJob.update({ id: job.id }, { state: 'waiting_print' })
-    notifyCheckJobs(userId, job.computerId)
+    if (job.printer) {
+      notifyCheckJobs(userId, job.printer.computerId)
+    }
   }
 
   await sendTextMessage(
@@ -278,8 +280,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       const printJobResult = PrintJob.insert([{
         state: 'waiting_confirmation',
         userId: kfUser.userId,
-        computerId: defaultComputer.id,
-        printerName: defaultPrinter.name
+        printerId: defaultPrinter.id
       }])
       printJobId = printJobResult.lastInsertRowid as number
       isNewJob = true

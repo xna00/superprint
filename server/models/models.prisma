@@ -36,6 +36,8 @@ model Printer {
   name String
   computer Computer @relation(fields: [computerId], references: [id])
   computerId String
+  printJobs PrintJob[]
+  disabled Boolean
 }
 
 model PrintJob {
@@ -44,8 +46,8 @@ model PrintJob {
   printTasks PrintTask[]
   user User @relation(fields: [userId], references: [id])
   userId Int
-  computerId String
-  printerName String
+  printer Printer @relation(fields: [printerId], references: [id])
+  printerId Int
 }
 
 model PrintTask {
