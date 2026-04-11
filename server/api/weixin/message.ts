@@ -168,7 +168,7 @@ const handleConfirm = async (openKfId: string, externalUserId: string, userId: n
 
   for (const job of printJobs) {
     PrintJob.update({ id: job.id }, { state: 'waiting_print' })
-    notifyCheckJobs(userId)
+    notifyCheckJobs(userId, job.computerId)
   }
 
   await sendTextMessage(

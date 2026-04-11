@@ -99,9 +99,17 @@ export const createWebSocketServer = (server: Server) => {
   });
 };
 
-export const notifyCheckJobs = (userId: number) => {
+export const notifyCheckJobs = (userId: number, computerId?: string) => {
   const userSockets = wsMap[userId];
-  if (userSockets) {
+  if (!userSockets) return;
+
+  if (computerId) {
+    const ws = userSockets[computerId];
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "check_jobs" }));
+      console.log(`已向用户 ${userId} 设备 ${computerId} 发送 check_jobs 通知`);
+    }
+  } else {
     for (const ws of Object.values(userSockets)) {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "check_jobs" }));
