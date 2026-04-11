@@ -34,8 +34,15 @@ export const addComputerPrinter = async (computerId: string, printerName: string
   if (!computer || computer.userId !== user.id) {
     throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
   }
-  Printer.insert([{ name: printerName, computerId }]);
-  return { success: true };
+  
+  const existingPrinter = Printer.findOne({ computerId, name: printerName });
+  if (existingPrinter) {
+    Printer.update({ computerId, name: printerName }, { disabled: false });
+    return { success: true, restored: true };
+  }
+  
+  Printer.insert([{ name: printerName, computerId, disabled: false }]);
+  return { success: true, restored: false };
 };
 
 export const removeComputerPrinter = async (computerId: string, printerName: string) => {
@@ -44,7 +51,7 @@ export const removeComputerPrinter = async (computerId: string, printerName: str
   if (!computer || computer.userId !== user.id) {
     throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
   }
-  Printer.remove({ computerId, name: printerName });
+  Printer.update({ computerId, name: printerName }, { disabled: true });
   return { success: true };
 };
 
