@@ -13,19 +13,35 @@ const wsMap: Record<number, Record<string, WebSocket | undefined> | undefined> =
 
 const HEARTBEAT_INTERVAL = 30000;
 
+const findWsInfo = (ws: WebSocket): { userId: number; computerId: string } | null => {
+  for (const [userId, computers] of Object.entries(wsMap)) {
+    if (!computers) continue;
+    for (const [computerId, socket] of Object.entries(computers)) {
+      if (socket === ws) {
+        return { userId: Number(userId), computerId };
+      }
+    }
+  }
+  return null;
+};
+
 export const createWebSocketServer = (server: Server) => {
   const wss = new WebSocketServer({ server });
 
   const interval = setInterval(() => {
     wss.clients.forEach((ws) => {
+      const info = findWsInfo(ws);
+      
       if (ws.isAlive === false) {
-        console.log("WebSocket 连接超时");
+        console.log(`WebSocket 连接超时，用户ID: ${info?.userId}, 设备ID: ${info?.computerId}`);
         ws.terminate();
         return;
       }
 
       ws.isAlive = false;
       ws.ping();
+      ws.send(JSON.stringify({type: "heartbeat"}))
+      console.log(`WebSocket ping 已发送，用户ID: ${info?.userId}, 设备ID: ${info?.computerId}`);
     });
   }, HEARTBEAT_INTERVAL);
 
@@ -37,6 +53,8 @@ export const createWebSocketServer = (server: Server) => {
     ws.isAlive = true;
     ws.on("pong", () => {
       ws.isAlive = true;
+      const info = findWsInfo(ws);
+      console.log(`WebSocket pong 已收到，用户ID: ${info?.userId}, 设备ID: ${info?.computerId}`);
     });
 
     const cookie = req.headers.cookie || "";
