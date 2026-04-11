@@ -2,11 +2,6 @@
     "name": "superprint",
     "version": "1.0.0",
     "private": true,
-    "workspaces": [
-        "server",
-        "web",
-        "api"
-    ],
     "scripts": {
         "build": "cd server && npm run buildtype && cd ../web && npm run build",
         "serve": "npm run build && cd server && node main.ts"
