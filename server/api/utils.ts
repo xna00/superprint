@@ -83,10 +83,6 @@ export const makeJsonResponse = (
   headers.delete("content-type");
   headers.delete("content-length");
 
-  if (Array.isArray(obj)) {
-    body = gzipSync(body);
-    headers.set("content-encoding", "gzip");
-  }
 
   headers.set("content-type", "application/json");
   headers.set("content-length", body.length.toString());
