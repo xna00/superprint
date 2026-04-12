@@ -8,6 +8,6 @@ if ($versionLine) {
         exe = 'PrintDriver.exe'
         setupexe = 'PrintDriver-Setup.exe'
     } | ConvertTo-Json -Depth 3
-    $json | Out-File -FilePath "$scriptDir\..\output\printdriver.json" -Encoding UTF8
+    [System.IO.File]::WriteAllText("$scriptDir\..\output\printdriver.json", $json, [System.Text.UTF8Encoding]::new($false))
     Write-Host "Generated output\printdriver.json"
 }

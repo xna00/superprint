@@ -122,6 +122,29 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 add_log(version_log);
             }
             
+            {
+                wchar_t marker_path[MAX_PATH];
+                GetTempPathW(MAX_PATH, marker_path);
+                wcscat_s(marker_path, MAX_PATH, L"PrintDriver-UpdatePending");
+                
+                FILE *marker_fp = NULL;
+                _wfopen_s(&marker_fp, marker_path, L"r");
+                if (marker_fp) {
+                    char old_version[64] = {0};
+                    if (fgets(old_version, sizeof(old_version), marker_fp)) {
+                        size_t len = strlen(old_version);
+                        if (len > 0 && old_version[len-1] == '\n') {
+                            old_version[len-1] = '\0';
+                        }
+                        wchar_t log[256];
+                        swprintf(log, 256, L"更新成功：从 v%S 升级到 v%S", old_version, CURRENT_VERSION);
+                        add_log(log);
+                    }
+                    fclose(marker_fp);
+                    DeleteFileW(marker_path);
+                }
+            }
+            
             init_printer_tab();
             
             if (enum_local_printers(&g_local_printers) != 0) {
@@ -446,12 +469,18 @@ void on_websocket_message(const char *message) {
         json_object *version_obj;
         if (json_object_object_get_ex(root, "version", &version_obj)) {
             const char *server_version = json_object_get_string(version_obj);
-            if (server_version && strcmp(server_version, CURRENT_VERSION) != 0) {
-                wchar_t log[256];
-                swprintf(log, 256, L"发现新版本 %S，正在检查更新...", server_version);
-                add_log(log);
-                start_update_check(g_http_client, g_hwnd);
+            if (server_version) {
+                if (strcmp(server_version, CURRENT_VERSION) != 0) {
+                    wchar_t log[256];
+                    swprintf(log, 256, L"发现新版本 %S，正在检查更新...", server_version);
+                    add_log(log);
+                    start_update_check(g_http_client, g_hwnd);
+                } else {
+                    add_log(L"心跳正常，版本一致");
+                }
             }
+        } else {
+            add_log(L"心跳正常");
         }
     } else {
         add_log(L"WebSocket收到消息:");

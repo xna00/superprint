@@ -6,7 +6,7 @@
 #include "version.h"
 
 #define CURRENT_VERSION PROJECT_VERSION
-#define UPDATE_CHECK_URL "https://superprint6.xna00.top/api/version/check"
+#define UPDATE_CHECK_URL "https://superprint.xna00.top/api/version/check"
 
 typedef struct _VersionInfo {
     char download_url[512];

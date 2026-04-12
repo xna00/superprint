@@ -16,3 +16,4 @@
 ## PrintDriver 构建
 - 使用 Inno Setup 5 构建 installer（支持 MinVersion 6.0）
 - Inno Setup 6 要求 MinVersion >= 6.1
+- 不要自动升级版本号，需要用户手动确认后再升级
