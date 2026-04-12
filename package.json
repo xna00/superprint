@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "private": true,
     "scripts": {
-        "build": "cd server && npm run buildtype && cd ../web && npm run build",
+        "build": "cd server && npm run buildtype && cd ../web && npm run build && node -e \"require('fs').cpSync('dist','../server/static',{recursive:true})\"",
         "serve": "npm run build && cd server && node main.ts"
     }
 }
