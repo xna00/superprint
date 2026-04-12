@@ -1,4 +1,4 @@
-﻿/*
+/*
  * PrintDriver - 主程序入口
  * 
  * 功能说明:
@@ -87,8 +87,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     g_http_client = http_client_init();
     http_client_load_cookie(g_http_client, COOKIE_FILE);
     
-    start_update_check(g_http_client, g_hwnd);
-    
     memset(&g_nid, 0, sizeof(g_nid));
     g_nid.cbSize = sizeof(g_nid);
     g_nid.hWnd = g_hwnd;
@@ -117,6 +115,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_CREATE:
             g_status_static = NULL;
             init_ui_controls(hwnd, g_hInst);
+            
+            {
+                wchar_t version_log[64];
+                swprintf(version_log, 64, L"PrintDriver v%S", CURRENT_VERSION);
+                add_log(version_log);
+            }
+            
             init_printer_tab();
             
             if (enum_local_printers(&g_local_printers) != 0) {
@@ -438,7 +443,16 @@ void on_websocket_message(const char *message) {
         add_log(L"收到打印任务检查消息");
         handle_print_job();
     } else if (strcmp(msg_type, "heartbeat") == 0 || strcmp(msg_type, "ping") == 0) {
-        add_log(L"收到心跳消息");
+        json_object *version_obj;
+        if (json_object_object_get_ex(root, "version", &version_obj)) {
+            const char *server_version = json_object_get_string(version_obj);
+            if (server_version && strcmp(server_version, CURRENT_VERSION) != 0) {
+                wchar_t log[256];
+                swprintf(log, 256, L"发现新版本 %S，正在检查更新...", server_version);
+                add_log(log);
+                start_update_check(g_http_client, g_hwnd);
+            }
+        }
     } else {
         add_log(L"WebSocket收到消息:");
         wchar_t wmessage[512];

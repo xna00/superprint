@@ -1,5 +1,7 @@
 import type { Server } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { decryptString } from "../api/utils.ts";
 import { PrintJob } from "../models/index.ts";
 
@@ -12,6 +14,21 @@ declare module "ws" {
 const wsMap: Record<number, Record<string, WebSocket | undefined> | undefined> = {};
 
 const HEARTBEAT_INTERVAL = 30000;
+
+const staticDir = join(import.meta.dirname, "..", "static");
+
+const getVersionInfo = (): { version: string; setupexe: string } | null => {
+  const jsonPath = join(staticDir, "printdriver.json");
+  if (!existsSync(jsonPath)) return null;
+  try {
+    const content = readFileSync(jsonPath, "utf-8");
+    const info = JSON.parse(content);
+    if (info.version && info.setupexe) return info;
+    return null;
+  } catch {
+    return null;
+  }
+};
 
 const findWsInfo = (ws: WebSocket): { userId: number; computerId: string } | null => {
   for (const [userId, computers] of Object.entries(wsMap)) {
@@ -29,6 +46,8 @@ export const createWebSocketServer = (server: Server) => {
   const wss = new WebSocketServer({ server });
 
   const interval = setInterval(() => {
+    const versionInfo = getVersionInfo();
+    
     wss.clients.forEach((ws) => {
       const info = findWsInfo(ws);
       
@@ -40,7 +59,13 @@ export const createWebSocketServer = (server: Server) => {
 
       ws.isAlive = false;
       ws.ping();
-      ws.send(JSON.stringify({type: "heartbeat"}))
+      
+      const heartbeatMsg: { type: string; version?: string } = { type: "heartbeat" };
+      if (versionInfo) {
+        heartbeatMsg.version = versionInfo.version;
+      }
+      ws.send(JSON.stringify(heartbeatMsg));
+      
       console.log(`WebSocket ping 已发送，用户ID: ${info?.userId}, 设备ID: ${info?.computerId}`);
     });
   }, HEARTBEAT_INTERVAL);
