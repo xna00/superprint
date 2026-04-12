@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { createReadStream, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createServer } from "node:http";
-import { dirname, extname, join } from "node:path";
+import { dirname, extname, join, normalize, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { apiHandler } from "./api/handler.ts";
@@ -63,7 +63,17 @@ const mimeTypes: Record<string, string> = {
 };
 
 const serveStatic = (pathname: string, res: ServerResponse) => {
-  let filePath = join(staticDir, pathname);
+  const normalizedPath = normalize(pathname);
+  let filePath = join(staticDir, normalizedPath);
+  
+  const resolvedPath = resolve(filePath);
+  const resolvedStaticDir = resolve(staticDir);
+  
+  if (!resolvedPath.startsWith(resolvedStaticDir)) {
+    res.writeHead(403, "Forbidden");
+    res.end("Forbidden");
+    return;
+  }
   
   try {
     const stat = statSync(filePath);
