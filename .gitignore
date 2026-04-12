@@ -2,6 +2,7 @@ server/music
 .DS_Store
 .vscode
 *.local.*
+!*.local.d.ts
 server/uploads/
 server/dev.db
 node_modules/
