@@ -29,9 +29,10 @@ export const _outUploadStatic = async (req: Request): Promise<Response> => {
     await mkdir(staticDir, { recursive: true });
 
     for (const [filename, data] of Object.entries(unzipped)) {
-      if (filename.endsWith("/")) continue;
+      if (filename.endsWith("/") || filename.endsWith("\\")) continue;
 
-      const filePath = join(staticDir, filename);
+      const normalizedFilename = filename.replace(/\\/g, "/");
+      const filePath = join(staticDir, normalizedFilename);
       const dir = join(filePath, "..");
 
       if (!existsSync(dir)) {
