@@ -1,0 +1,9 @@
+build/
+vcpkg_installed/
+*.exe
+*.pdb
+*.ilk
+*.obj
+cookie.txt
+temp.ps1
+downloads
