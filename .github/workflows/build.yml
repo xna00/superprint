@@ -3,19 +3,85 @@ name: Build and Upload PrintDriver
 on:
   push:
     branches: [main]
-    paths:
-      - 'printdriver/**'
-      - 'web/**'
-      - 'server/**'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgJsonGlob: printdriver/vcpkg.json
+          doNotCache: false
+        env:
+          VCPKG_DEFAULT_TRIPLET: x64-windows-static
+
+      - name: Install Inno Setup
+        run: |
+            choco install innosetup --version 5.6.1 -y --allow-downgrade
+
+      - name: Verify Inno Setup
+        run: |
+          $cmd = Get-Command iscc -ErrorAction SilentlyContinue
+          if ($null -eq $cmd) {
+            Write-Error "iscc not found in PATH. PATH=$env:Path"
+            exit 1
+          } else {
+            Write-Host "iscc found: $($cmd.Source)"
+          }
+
+      - name: Configure CMake
+        run: |
+          cd printdriver
+          cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static
+          cmake --build build --config Release
+
+      - name: Build Installer
+        run: |
+          cd printdriver
+          mkdir output -Force
+          copy build\Release\PrintDriver.exe build\PrintDriver.exe
+          copy build\Release\PrintDriver.exe output\PrintDriver.exe
+          iscc installer\PrintDriver.iss
+
+      - name: Sign executables
+        run: |
+          $pfxPath = "printdriver\cert\PrintDriver.pfx"
+          if (Test-Path $pfxPath) {
+            $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" | Select-Object -Last 1
+            
+            Write-Host "Signing PrintDriver.exe..."
+            & $signtool.FullName sign /f $pfxPath /p "PrintDriver2024" /fd sha256 "printdriver\output\PrintDriver.exe"
+            
+            Write-Host "Signing PrintDriver-Setup.exe..."
+            & $signtool.FullName sign /f $pfxPath /p "PrintDriver2024" /fd sha256 "printdriver\output\PrintDriver-Setup.exe"
+          } else {
+            Write-Host "Certificate not found, skipping signing"
+          }
+
+      - name: Generate version info
+        shell: pwsh
+        run: |
+          cd printdriver
+          $versionLine = Select-String -Path "CMakeLists.txt" -Pattern 'VERSION\s+(\d+\.\d+\.\d+)' | Select-Object -First 1
+          if ($versionLine) {
+            $version = $versionLine.Matches.Groups[1].Value
+            $json = @{
+              version = $version
+              exe = 'PrintDriver.exe'
+              setupexe = 'PrintDriver-Setup.exe'
+            } | ConvertTo-Json -Depth 3
+            [System.IO.File]::WriteAllText("$PWD\output\printdriver.json", $json, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "Generated printdriver.json with version $version"
+          }
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,49 +100,6 @@ jobs:
           npm ci
           npm run build
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
-          vcpkgJsonGlob: 'printdriver/vcpkg.json'
-
-      - name: Configure CMake
-        run: |
-          cd printdriver
-          cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
-
-      - name: Build
-        run: |
-          cd printdriver
-          cmake --build build --config Release
-
-      - name: Install Inno Setup
-        run: |
-          choco install innosetup -y
-
-      - name: Build Installer
-        run: |
-          cd printdriver
-          mkdir output -Force
-          copy build\PrintDriver.exe output\PrintDriver.exe
-          iscc installer\PrintDriver.iss
-
-      - name: Generate version info
-        shell: pwsh
-        run: |
-          cd printdriver
-          $versionLine = Select-String -Path "CMakeLists.txt" -Pattern 'VERSION\s+(\d+\.\d+\.\d+)' | Select-Object -First 1
-          if ($versionLine) {
-            $version = $versionLine.Matches.Groups[1].Value
-            $json = @{
-              version = $version
-              exe = 'PrintDriver.exe'
-              setupexe = 'PrintDriver-Setup.exe'
-            } | ConvertTo-Json -Depth 3
-            [System.IO.File]::WriteAllText("$PWD\output\printdriver.json", $json, [System.Text.UTF8Encoding]::new($false))
-            Write-Host "Generated printdriver.json with version $version"
-          }
-
       - name: Prepare static files
         run: |
           mkdir static -Force
@@ -87,6 +110,7 @@ jobs:
 
       - name: Create ZIP archive
         run: |
+          if (Test-Path static.zip) { Remove-Item static.zip -Force }
           Compress-Archive -Path static\* -DestinationPath static.zip -CompressionLevel Optimal
 
       - name: Upload to server

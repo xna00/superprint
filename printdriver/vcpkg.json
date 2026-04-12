@@ -1,7 +1,7 @@
 {
   "name": "myapp",
   "version": "1.0.6",
-  "builtin-baseline": "81e3c888ef717a026eb57bb2f3cb0dbd30246271",
+  "builtin-baseline": "123648765f656cb111a4cb9aef20e50536446840",
   "dependencies": [
     "vcpkg-cmake",
     "vcpkg-cmake-config",
