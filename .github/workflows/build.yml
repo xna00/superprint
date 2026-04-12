@@ -1,0 +1,116 @@
+name: Build and Upload PrintDriver
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'printdriver/**'
+      - 'web/**'
+      - 'server/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Server Types
+        run: |
+          cd server
+          npm ci
+          npm run buildtype
+
+      - name: Build Web
+        run: |
+          cd web
+          npm ci
+          npm run build
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
+          vcpkgJsonGlob: 'printdriver/vcpkg.json'
+
+      - name: Configure CMake
+        run: |
+          cd printdriver
+          cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build
+        run: |
+          cd printdriver
+          cmake --build build --config Release
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup -y
+
+      - name: Build Installer
+        run: |
+          cd printdriver
+          mkdir output -Force
+          copy build\PrintDriver.exe output\PrintDriver.exe
+          iscc installer\PrintDriver.iss
+
+      - name: Generate version info
+        shell: pwsh
+        run: |
+          cd printdriver
+          $versionLine = Select-String -Path "CMakeLists.txt" -Pattern 'VERSION\s+(\d+\.\d+\.\d+)' | Select-Object -First 1
+          if ($versionLine) {
+            $version = $versionLine.Matches.Groups[1].Value
+            $json = @{
+              version = $version
+              exe = 'PrintDriver.exe'
+              setupexe = 'PrintDriver-Setup.exe'
+            } | ConvertTo-Json -Depth 3
+            [System.IO.File]::WriteAllText("$PWD\output\printdriver.json", $json, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "Generated printdriver.json with version $version"
+          }
+
+      - name: Prepare static files
+        run: |
+          mkdir static -Force
+          Copy-Item -Path web\dist\* -Destination static -Recurse -Force
+          Copy-Item -Path printdriver\output\PrintDriver.exe -Destination static -Force
+          Copy-Item -Path printdriver\output\PrintDriver-Setup.exe -Destination static -Force
+          Copy-Item -Path printdriver\output\printdriver.json -Destination static -Force
+
+      - name: Create ZIP archive
+        run: |
+          Compress-Archive -Path static\* -DestinationPath static.zip -CompressionLevel Optimal
+
+      - name: Upload to server
+        env:
+          UPLOAD_TOKEN: ${{ secrets.UPLOAD_TOKEN }}
+          UPLOAD_URL: ${{ secrets.UPLOAD_URL }}
+        run: |
+          $headers = @{
+            'token' = $env:UPLOAD_TOKEN
+            'Content-Type' = 'application/zip'
+          }
+          try {
+            $response = Invoke-WebRequest -Uri $env:UPLOAD_URL -Method POST -Headers $headers -InFile 'static.zip' -ErrorAction Stop
+            Write-Host "Upload successful: $($response.Content)"
+          } catch {
+            Write-Host "Upload failed: $($_.Exception.Message)"
+            exit 1
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrintDriver
+          path: |
+            printdriver/output/PrintDriver.exe
+            printdriver/output/PrintDriver-Setup.exe
+            printdriver/output/printdriver.json
