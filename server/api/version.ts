@@ -26,7 +26,7 @@ export const check = (currentVersion: string): { downloadUrl?: string; message?:
     
     if (info.version !== currentVersion) {
       return {
-        downloadUrl: `/${info.setupexe}`,
+        downloadUrl: `https://superprint.xna00.top/${info.setupexe}`,
         message: `发现新版本 ${info.version}`,
       };
     }
