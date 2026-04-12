@@ -3,7 +3,7 @@
 
 param(
     [string]$CertName = "PrintDriver",
-    [string]$OutputPath = ".\cert"
+    [string]$OutputPath = "..\cert"
 )
 
 Write-Host "========================================" -ForegroundColor Cyan
