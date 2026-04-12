@@ -1,11 +1,11 @@
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.6"
 #define MyAppPublisher "XNA"
 #define MyAppName "PrintDriver"
 #define MyAppURL "https://github.com/xna00/windevtest"
 #define MyAppExeName "PrintDriver.exe"
 
 [Setup]
-AppId={{PrintDriver-2024-1.0.0}}
+AppId={{PrintDriver-2024-1.0.6}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
@@ -48,6 +48,13 @@ Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 Filename: "certutil.exe"; Parameters: "-addstore ""TrustedPublisher"" ""{tmp}\PrintDriver.cer"""; Flags: runhidden waituntilterminated; StatusMsg: "Configuring security settings..."
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait runhidden; StatusMsg: "Starting application..."; Check: IsSilentInstall
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
+
+[Code]
+function IsSilentInstall: Boolean;
+begin
+  Result := WizardSilent;
+end;

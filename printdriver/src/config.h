@@ -15,7 +15,7 @@
  * 服务器基础URL
  * 所有API都基于此URL构建
  */
-#define API_BASE_URL "https://superprint6.xna00.top"
+#define API_BASE_URL "https://superprint.xna00.top"
 
 
 /*
@@ -90,7 +90,7 @@
  * WebSocket服务器地址
  * 用于实时接收打印任务通知
  */
-#define API_WEBSOCKET_URL "wss://superprint6.xna00.top/ws/print"
+#define API_WEBSOCKET_URL "wss://superprint.xna00.top/ws/print"
 
 /* ==================== 窗口配置 ==================== */
 /* 窗口类名 */
