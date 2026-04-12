@@ -14,10 +14,7 @@ if exist "C:\Program Files (x86)\Inno Setup 5\ISCC.exe" (
 ) else if exist "C:\Program Files\Inno Setup 6\ISCC.exe" (
     set ISCC="C:\Program Files\Inno Setup 6\ISCC.exe"
 ) else (
-    echo Error: Inno Setup not found
-    echo Please download from https://jrsoftware.org/isdownload.php
-    pause
-    exit /b 1
+    set ISCC="issc"
 )
 
 REM Build program
@@ -93,4 +90,3 @@ echo   - output\PrintDriver.exe
 echo   - output\PrintDriver-Setup.exe
 echo   - output\printdriver.json
 echo ========================================
-pause
