@@ -2,11 +2,20 @@
 # Signs exe files with self-signed certificate
 
 param(
-    [string]$ExePath = ".\build\PrintDriver.exe",
-    [string]$PfxPath = ".\cert\PrintDriver.pfx",
+    [string]$ExePath = "..\build\PrintDriver.exe",
+    [string]$PfxPath = "..\cert\PrintDriver.pfx",
     [string]$Password = "PrintDriver2024",
-    [string]$TimestampUrl = "http://timestamp.digicert.com"
+    [string]$TimestampUrl = "",
+    [switch]$NoTimestamp
 )
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+if (-not [System.IO.Path]::IsPathRooted($ExePath)) {
+    $ExePath = Join-Path $scriptDir $ExePath
+}
+if (-not [System.IO.Path]::IsPathRooted($PfxPath)) {
+    $PfxPath = Join-Path $scriptDir $PfxPath
+}
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "PrintDriver Code Signing Tool" -ForegroundColor Cyan
@@ -26,6 +35,7 @@ if (-not (Test-Path $PfxPath)) {
 
 # Find signtool
 $signtoolPaths = @(
+    "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe",
     "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe",
     "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\x64\signtool.exe",
     "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe"
@@ -54,13 +64,11 @@ if (-not $signtool) {
 Write-Host "Using signtool: $signtool" -ForegroundColor Green
 Write-Host "Signing file: $ExePath" -ForegroundColor Green
 
-# Execute signing
+# Execute signing (without timestamp for self-signed cert)
 $signArgs = @(
     "sign",
     "/f", $PfxPath,
     "/p", $Password,
-    "/tr", $TimestampUrl,
-    "/td", "sha256",
     "/fd", "sha256",
     $ExePath
 )
@@ -78,7 +86,7 @@ if ($LASTEXITCODE -eq 0) {
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Signature verification passed!" -ForegroundColor Green
     } else {
-        Write-Host "Signature verification failed" -ForegroundColor Yellow
+        Write-Host "Signature verification failed (self-signed cert is normal)" -ForegroundColor Yellow
     }
 } else {
     Write-Host "Signing failed:" -ForegroundColor Red
