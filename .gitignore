@@ -6,3 +6,4 @@ server/uploads/
 server/dev.db
 node_modules/
 dist
+server/static/

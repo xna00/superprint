@@ -1,8 +1,8 @@
 import assert from "node:assert";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { createReadStream, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createServer } from "node:http";
-import { dirname, extname, join, relative } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { apiHandler } from "./api/handler.ts";
@@ -11,6 +11,7 @@ import {createWebSocketServer} from './ws/index.ts'
 console.log(createWebSocketServer)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const staticDir = join(__dirname, 'static');
 
 
 const port = 8000;
@@ -50,36 +51,6 @@ export const respond = (
   }
 };
 
-const loadStaticFiles = (distPath: string): Record<string, number[]> => {
-  const files: Record<string, number[]> = {};
-  
-  if (!existsSync(distPath)) {
-    console.warn(`Dist directory not found: ${distPath}`);
-    return files;
-  }
-
-  const loadDir = (dir: string) => {
-    const entries = readdirSync(dir);
-    for (const entry of entries) {
-      const fullPath = join(dir, entry);
-      const stat = statSync(fullPath);
-      if (stat.isDirectory()) {
-        loadDir(fullPath);
-      } else {
-        const relativePath = '/' + relative(distPath, fullPath);
-        const content = readFileSync(fullPath);
-        files[relativePath] = Array.from(content);
-      }
-    }
-  };
-
-  loadDir(distPath);
-  return files;
-};
-
-const staticFiles: Record<string, number[]> = loadStaticFiles(join(__dirname, '../web/dist'));
-
-
 const mimeTypes: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript",
@@ -91,6 +62,28 @@ const mimeTypes: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
+const serveStatic = (pathname: string, res: ServerResponse) => {
+  let filePath = join(staticDir, pathname);
+  
+  try {
+    const stat = statSync(filePath);
+    if (!stat.isFile()) {
+      throw new Error("not a file");
+    }
+  } catch {
+    filePath = join(staticDir, 'index.html');
+  }
+  
+  const ext = extname(filePath).toLowerCase();
+  const contentType = mimeTypes[ext] || "application/octet-stream";
+  
+  res.writeHead(200, "OK", {
+    "content-type": contentType,
+  });
+  
+  createReadStream(filePath).pipe(res);
+};
+
 const server = createServer({}, (req, res) => {
   console.log(req.url);
 
@@ -99,13 +92,7 @@ const server = createServer({}, (req, res) => {
   if (req.url.startsWith("/api/")) {
     apiHandler(makeRequest(req)).then(respond.bind(null, res));
   } else {
-    const path = staticFiles[pathname] !== undefined ? pathname : "/index.html";
-    const ext = extname(path).toLowerCase();
-    const contentType = mimeTypes[ext] || "application/octet-stream";
-    res.writeHead(200, "OK", {
-      "content-type": contentType,
-    });
-    res.end(Buffer.from(staticFiles[path]));
+    serveStatic(pathname, res);
   }
 });
 
