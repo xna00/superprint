@@ -9,3 +9,5 @@ node_modules/
 dist
 server/static/
 printdriver/output/
+printdriver/src/version.h
+static.backup
