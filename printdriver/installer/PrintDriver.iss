@@ -1,11 +1,11 @@
-#define MyAppVersion "1.0.6"
+#define MyAppVersion "1.0.7"
 #define MyAppPublisher "XNA"
 #define MyAppName "PrintDriver"
 #define MyAppURL "https://github.com/xna00/windevtest"
 #define MyAppExeName "PrintDriver.exe"
 
 [Setup]
-AppId={{PrintDriver-2024-1.0.6}}
+AppId={{PrintDriver-2024-1.0.7}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
