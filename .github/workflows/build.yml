@@ -211,6 +211,10 @@ jobs:
             cp printdriver/output/PrintDriver.exe static/
             cp printdriver/output/PrintDriver-Setup.exe static/
             cp printdriver/output/printdriver.json static/
+            
+            VERSION=$(grep -oP '"version":\s*"\K[^"]+' printdriver/output/printdriver.json)
+            cp printdriver/output/PrintDriver.exe "static/PrintDriver-${VERSION}.exe"
+            cp printdriver/output/PrintDriver-Setup.exe "static/PrintDriver-Setup-${VERSION}.exe"
           fi
 
       - name: Create ZIP archive
