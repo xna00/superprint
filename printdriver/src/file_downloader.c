@@ -170,5 +170,5 @@ int download_and_print_file(HttpClient *client, const char *file_id) {
     }
     
     /* 打印文件 */
-    return print_file_to_default_printer(local_path);
+    return print_file(local_path, NULL);
 }

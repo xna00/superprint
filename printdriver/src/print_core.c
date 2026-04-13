@@ -14,35 +14,27 @@
 #include <string.h>
 
 /*
- * 打印文件到默认打印机
+ * 打印文件到指定打印机
  * 使用Windows Winspool API进行RAW模式打印
  * @param file_path 文件路径
+ * @param printer_name 打印机名称，如果为NULL或空则使用默认打印机
  * @return 0成功，-1失败
  */
-int print_file_to_default_printer(const char *file_path) {
-    wchar_t printer_name[256];
-    DWORD buf_size = sizeof(printer_name);
+int print_file(const char *file_path, const char *printer_name) {
+    wchar_t w_printer_name[256];
+    DWORD buf_size = sizeof(w_printer_name);
     
-    /* 获取系统默认打印机名称
-     * GetDefaultPrinterW - 获取默认打印机的名称
-     * 参数1: 指向接收打印机名称的宽字符缓冲区的指针
-     * 参数2: 指向变量的指针，该变量指定缓冲区的大小（以字符为单位）
-     * 返回值: 如果函数成功，返回非零值；如果失败，返回零
-     */
-    if (!GetDefaultPrinterW(printer_name, &buf_size)) {
-        add_log(L"获取默认打印机失败");
-        return -1;
+    if (printer_name && printer_name[0] != '\0') {
+        MultiByteToWideChar(CP_UTF8, 0, printer_name, -1, w_printer_name, 256);
+    } else {
+        if (!GetDefaultPrinterW(w_printer_name, &buf_size)) {
+            add_log(L"获取默认打印机失败");
+            return -1;
+        }
     }
     
-    /* 打开打印机
-     * OpenPrinterW - 打开指定的打印机并返回打印机句柄
-     * 参数1: 打印机名称
-     * 参数2: 指向接收打印机句柄的变量的指针
-     * 参数3: 指向PRINTER_DEFAULTS结构的指针，NULL表示使用默认值
-     * 返回值: 如果函数成功，返回非零值；如果失败，返回零
-     */
     HANDLE hPrinter;
-    if (!OpenPrinterW(printer_name, &hPrinter, NULL)) {
+    if (!OpenPrinterW(w_printer_name, &hPrinter, NULL)) {
         add_log(L"打开打印机失败");
         return -1;
     }
