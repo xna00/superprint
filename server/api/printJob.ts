@@ -1,6 +1,7 @@
 import { Computer, Printer, PrintJob, PrintTask, type PrintJobBase, type PrinterRel } from "../models/index.ts"
 import { _currentUser } from "./user.ts"
 import { ApiError } from "./utils.ts"
+import { notifyCheckJobs } from "../ws/index.ts"
 
 export const listPrintJobsWithTasks = async (query?: { computerId?: string; state?: string }) => {
     const user = await _currentUser()
@@ -88,7 +89,7 @@ export const updatePrintTask = async (taskId: number, duplex: boolean, tumple: b
 
 export const confirmPrintJob = async (printJobId: number) => {
     const user = await _currentUser()
-    const printJob = PrintJob.findOne({ id: printJobId })
+    const printJob = PrintJob.findOne({ id: printJobId }, { printer: true })
 
     if (!printJob || printJob.userId !== user.id) {
         throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
@@ -99,6 +100,11 @@ export const confirmPrintJob = async (printJobId: number) => {
     }
 
     PrintJob.update({ id: printJobId }, { state: 'waiting_print' })
+    
+    if (printJob.printer) {
+        notifyCheckJobs(user.id, printJob.printer.computerId)
+    }
+    
     return { success: true }
 }
 
