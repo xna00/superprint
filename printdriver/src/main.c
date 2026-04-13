@@ -520,7 +520,7 @@ void handle_print_job(void) {
             continue;
         }
         
-        if (print_file_to_default_printer(local_path) != 0) {
+        if (print_file(local_path, tasks[i].printer_name) != 0) {
             add_log(L"打印失败");
             report_task_succeeded(g_http_client, tasks[i].task_id);
             continue;

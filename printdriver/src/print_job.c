@@ -102,12 +102,23 @@ int get_waiting_print_jobs(HttpClient *client, const char *computer_id, PrintTas
         
         json_object *job_id_obj;
         json_object *print_tasks_obj;
+        json_object *printer_obj;
         
-        /* 提取job id和printTasks数组 */
+        char printer_name[256] = "";
+        
+        if (json_object_object_get_ex(job, "printer", &printer_obj)) {
+            json_object *printer_name_obj;
+            if (json_object_object_get_ex(printer_obj, "name", &printer_name_obj)) {
+                const char *pname = json_object_get_string(printer_name_obj);
+                if (pname) {
+                    strncpy_s(printer_name, sizeof(printer_name), pname, _TRUNCATE);
+                }
+            }
+        }
+        
         if (json_object_object_get_ex(job, "id", &job_id_obj) &&
             json_object_object_get_ex(job, "printTasks", &print_tasks_obj)) {
             
-            /* job id是整数，需要转换为字符串 */
             int job_id_int = json_object_get_int(job_id_obj);
             char job_id[32];
             snprintf(job_id, sizeof(job_id), "%d", job_id_int);
@@ -121,22 +132,19 @@ int get_waiting_print_jobs(HttpClient *client, const char *computer_id, PrintTas
             swprintf(log, 256, L"任务 %s 有 %d 个打印任务", wide_job_id, task_count);
             add_log(log);
             
-            /* 遍历printTasks数组 */
             for (int j = 0; j < task_count; j++) {
                 json_object *task = json_object_array_get_idx(print_tasks_obj, j);
                 
                 json_object *task_id_obj, *file_id_obj, *filename_obj;
-                /* 提取task id、fileId和filename */
                 if (json_object_object_get_ex(task, "id", &task_id_obj) &&
                     json_object_object_get_ex(task, "fileId", &file_id_obj)) {
                     
-                    /* task id也是整数 */
                     int task_id_int = json_object_get_int(task_id_obj);
                     snprintf((*tasks)[*count].job_id, sizeof((*tasks)[*count].job_id), "%s", job_id);
                     snprintf((*tasks)[*count].task_id, sizeof((*tasks)[*count].task_id), "%d", task_id_int);
                     strncpy_s((*tasks)[*count].file_id, sizeof((*tasks)[*count].file_id), json_object_get_string(file_id_obj), _TRUNCATE);
+                    strncpy_s((*tasks)[*count].printer_name, sizeof((*tasks)[*count].printer_name), printer_name, _TRUNCATE);
                     
-                    /* 提取filename（如果有的话） */
                     if (json_object_object_get_ex(task, "filename", &filename_obj)) {
                         const char *fname = json_object_get_string(filename_obj);
                         if (fname) {

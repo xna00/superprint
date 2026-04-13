@@ -9,6 +9,7 @@ typedef struct _PrintTaskInfo {
     char task_id[256];
     char file_id[256];
     char filename[256];
+    char printer_name[256];
 } PrintTaskInfo;
 
 int get_waiting_print_jobs(HttpClient *client, const char *computer_id, PrintTaskInfo **tasks, int *count);
