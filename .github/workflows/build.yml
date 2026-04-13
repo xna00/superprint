@@ -1,22 +1,31 @@
-name: Build and Upload PrintDriver
+name: Build and Upload
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+env:
+  NODE_VERSION: '24'
+
 jobs:
-  build:
+  build-printdriver:
     runs-on: windows-latest
     defaults:
       run:
         shell: pwsh
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Cache printdriver output
+        id: cache-printdriver
+        uses: actions/cache@v5
+        with:
+          path: printdriver/output
+          key: ${{ runner.os }}-printdriver-output-${{ hashFiles('printdriver/src/**', 'printdriver/CMakeLists.txt', 'printdriver/vcpkg.json', 'printdriver/cert/**', 'printdriver/installer/**') }}
 
       - name: Setup vcpkg
+        if: steps.cache-printdriver.outputs.cache-hit != 'true'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgJsonGlob: printdriver/vcpkg.json
@@ -25,26 +34,19 @@ jobs:
           VCPKG_DEFAULT_TRIPLET: x64-windows-static
 
       - name: Install Inno Setup
+        if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
             choco install innosetup --version 5.6.1 -y --allow-downgrade
 
-      - name: Verify Inno Setup
-        run: |
-          $cmd = Get-Command iscc -ErrorAction SilentlyContinue
-          if ($null -eq $cmd) {
-            Write-Error "iscc not found in PATH. PATH=$env:Path"
-            exit 1
-          } else {
-            Write-Host "iscc found: $($cmd.Source)"
-          }
-
-      - name: Configure CMake
+      - name: Configure and Build CMake
+        if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
           cd printdriver
           cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static
           cmake --build build --config Release
 
       - name: Build Installer
+        if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
           cd printdriver
           mkdir output -Force
@@ -53,6 +55,7 @@ jobs:
           iscc installer\PrintDriver.iss
 
       - name: Sign executables
+        if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
           $pfxPath = "printdriver\cert\PrintDriver.pfx"
           if (Test-Path $pfxPath) {
@@ -68,7 +71,7 @@ jobs:
           }
 
       - name: Generate version info
-        shell: pwsh
+        if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
           cd printdriver
           $versionLine = Select-String -Path "CMakeLists.txt" -Pattern 'VERSION\s+(\d+\.\d+\.\d+)' | Select-Object -First 1
@@ -83,58 +86,145 @@ jobs:
             Write-Host "Generated printdriver.json with version $version"
           }
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build Server Types
-        run: |
-          cd server
-          npm ci
-          npm run buildtype
-
-      - name: Build Web
-        run: |
-          cd web
-          npm ci
-          npm run build
-
-      - name: Prepare static files
-        run: |
-          mkdir static -Force
-          Copy-Item -Path web\dist\* -Destination static -Recurse -Force
-          Copy-Item -Path printdriver\output\PrintDriver.exe -Destination static -Force
-          Copy-Item -Path printdriver\output\PrintDriver-Setup.exe -Destination static -Force
-          Copy-Item -Path printdriver\output\printdriver.json -Destination static -Force
-
-      - name: Create ZIP archive
-        run: |
-          if (Test-Path static.zip) { Remove-Item static.zip -Force }
-          Compress-Archive -Path static\* -DestinationPath static.zip -CompressionLevel Optimal
-
-      - name: Upload to server
-        env:
-          UPLOAD_TOKEN: ${{ secrets.UPLOAD_TOKEN }}
-          UPLOAD_URL: ${{ secrets.UPLOAD_URL }}
-        run: |
-          $headers = @{
-            'token' = $env:UPLOAD_TOKEN
-            'Content-Type' = 'application/zip'
-          }
-          try {
-            $response = Invoke-WebRequest -Uri $env:UPLOAD_URL -Method POST -Headers $headers -InFile 'static.zip' -ErrorAction Stop
-            Write-Host "Upload successful: $($response.Content)"
-          } catch {
-            Write-Host "Upload failed: $($_.Exception.Message)"
-            exit 1
-          }
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload printdriver artifacts
+        uses: actions/upload-artifact@v6
         with:
           name: PrintDriver
           path: |
             printdriver/output/PrintDriver.exe
             printdriver/output/PrintDriver-Setup.exe
             printdriver/output/printdriver.json
+
+  build-server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache server build
+        id: cache-server
+        uses: actions/cache@v5
+        with:
+          path: server/dist
+          key: ${{ runner.os }}-server-dist-${{ hashFiles('server/**/*.ts') }}
+
+      - name: Build Server
+        if: steps.cache-server.outputs.cache-hit != 'true'
+        run: |
+          cd server
+          npm ci
+          npm run buildtype
+
+      - name: Upload server artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: server-artifacts
+          path: server/dist
+          retention-days: 1
+
+  build-web:
+    needs: build-server
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download server artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: server-artifacts
+          path: server/dist
+          merge-multiple: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache web build
+        id: cache-web
+        uses: actions/cache@v5
+        with:
+          path: web/dist
+          key: ${{ runner.os }}-web-dist-${{ hashFiles('web/**') }}-${{ hashFiles('server/**/*.ts') }}
+
+      - name: Build Web
+        if: steps.cache-web.outputs.cache-hit != 'true'
+        run: |
+          cd web
+          npm ci
+          npm run build
+
+      - name: Upload web artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-artifacts
+          path: web/dist
+          retention-days: 1
+
+  assemble:
+    needs: [build-printdriver, build-server, build-web]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download printdriver artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: PrintDriver
+          path: printdriver/output
+          merge-multiple: true
+
+      - name: Download server artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: server-artifacts
+          path: server/dist
+          merge-multiple: true
+
+      - name: Download web artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: web-artifacts
+          path: web/dist
+          merge-multiple: true
+
+      - name: Prepare static files
+        run: |
+          mkdir -p static
+          if [ -d "web/dist" ] && [ "$(ls -A web/dist 2>/dev/null)" ]; then
+            cp -r web/dist/* static/
+          fi
+          if [ -d "printdriver/output" ] && ls printdriver/output/*.exe printdriver/output/*.json 1> /dev/null 2>&1; then
+            cp printdriver/output/PrintDriver.exe static/
+            cp printdriver/output/PrintDriver-Setup.exe static/
+            cp printdriver/output/printdriver.json static/
+          fi
+
+      - name: Create ZIP archive
+        run: |
+          if [ -f "static.zip" ]; then rm static.zip; fi
+          zip -r static.zip static
+
+      - name: Upload to server
+        env:
+          UPLOAD_TOKEN: ${{ secrets.UPLOAD_TOKEN }}
+          UPLOAD_URL: ${{ secrets.UPLOAD_URL }}
+        run: |
+          curl -X POST \
+            -H "token: $UPLOAD_TOKEN" \
+            -H "Content-Type: application/zip" \
+            --data-binary "@static.zip" \
+            "$UPLOAD_URL"
