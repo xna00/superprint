@@ -8,4 +8,5 @@ server/dev.db
 node_modules/
 dist
 server/static/
+server/static.backup
 printdriver/output/
