@@ -215,8 +215,7 @@ jobs:
 
       - name: Create ZIP archive
         run: |
-          if [ -f "static.zip" ]; then rm static.zip; fi
-          zip -r static.zip static
+          cd static && zip -r ../static.zip .
 
       - name: Upload to server
         env:
