@@ -57,10 +57,6 @@ jobs:
       - name: Show directory contents
         run: |
           tree .
-      - name: Install Inno Setup
-        if: steps.cache-printdriver.outputs.cache-hit != 'true'
-        run: |
-            choco install innosetup --version 5.6.1 -y --allow-downgrade
 
       - name: Configure and Build CMake
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
