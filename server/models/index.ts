@@ -169,7 +169,7 @@ printJobId: number,
 fileId: string,
 filename: string,
 duplex: boolean,
-tumple: boolean
+tumble: boolean
 }
 export type PrintTaskRel = {
 printJob: "PrintJob"
@@ -239,7 +239,7 @@ printJobId INTEGER NOT NULL  ,
 fileId TEXT NOT NULL  ,
 filename TEXT NOT NULL  ,
 duplex BOOLEAN NOT NULL  ,
-tumple BOOLEAN NOT NULL  ,
+tumble BOOLEAN NOT NULL  ,
 FOREIGN KEY (printJobId) REFERENCES PrintJob (id))`)
 
 }
@@ -329,7 +329,7 @@ export const PrintJob = {
 };
 export type PrintTaskCriteria = Partial<Criteria<PrintTaskBase>>
 export type PrintTaskInsert = CreateModel<PrintTaskBase, "id">
-const PrintTaskBaseFields = ["id", "state", "printJobId", "fileId", "filename", "duplex", "tumple"]
+const PrintTaskBaseFields = ["id", "state", "printJobId", "fileId", "filename", "duplex", "tumble"]
 export const PrintTask = {
   findBy: <T extends Cas<"PrintTask"> = {}>(criteria: PrintTaskCriteria, relation?: T extends Cas<"PrintTask"> ? T : never) => {
     return [] as unknown as (PrintTaskBase & DeepPick<"PrintTaskRel", T>)[]
@@ -535,7 +535,7 @@ row.printJob = t
     })
       const _row = row as any
       _row["duplex"] = Boolean(_row["duplex"])
-_row["tumple"] = Boolean(_row["tumple"])
+_row["tumble"] = Boolean(_row["tumble"])
       return row
     })
     return ret as any
@@ -543,8 +543,8 @@ _row["tumple"] = Boolean(_row["tumple"])
 
   PrintTask.insert = (data: CreateModel<PrintTaskBase, "id">[]) => {
     const values_str = ",(?, ?, ?, ?, ?, ?, ?)".repeat(data.length).slice(1)
-    const stmt = db.prepare('INSERT INTO PrintTask (id, state, printJobId, fileId, filename, duplex, tumple) VALUES ' + values_str)
-    const values = data.map(row => [row["id"] ?? null, row["state"], row["printJobId"], row["fileId"], row["filename"], Number(row["duplex"]), Number(row["tumple"])]).flat()
+    const stmt = db.prepare('INSERT INTO PrintTask (id, state, printJobId, fileId, filename, duplex, tumble) VALUES ' + values_str)
+    const values = data.map(row => [row["id"] ?? null, row["state"], row["printJobId"], row["fileId"], row["filename"], Number(row["duplex"]), Number(row["tumble"])]).flat()
     return stmt.run(...values)
   }
 

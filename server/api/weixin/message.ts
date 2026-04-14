@@ -305,7 +305,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         fileId: result.fileId,
         filename: result.filename,
         duplex: true,
-        tumple: false
+        tumble: false
       }])
       const taskId = taskResult.lastInsertRowid
       console.log(`PrintTask 已创建，ID: ${taskId}, 文件: ${result.filename}`)
@@ -324,7 +324,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       const isImage = task.filename.match(/\.(jpg|jpeg|png|gif)$/i)
       const typeLabel = isImage ? '🖼️' : '📄'
       const duplexLabel = task.duplex ? '双面' : '单面'
-      const tumbleLabel = task.tumple ? '短边' : '长边'
+      const tumbleLabel = task.tumble ? '短边' : '长边'
       headContent += `${typeLabel} ${task.filename} (${duplexLabel}/${tumbleLabel})\n`
     }
 

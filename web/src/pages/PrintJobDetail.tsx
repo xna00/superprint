@@ -16,7 +16,7 @@ interface PrintTask {
   fileId: string
   filename: string
   duplex: boolean
-  tumple: boolean
+  tumble: boolean
 }
 
 interface Printer {
@@ -40,7 +40,7 @@ export function PrintJobDetail() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [pendingPrinterId, setPendingPrinterId] = useState<number | null>(null)
-  const [pendingTasks, setPendingTasks] = useState<Map<number, { duplex: boolean; tumple: boolean }>>(new Map())
+  const [pendingTasks, setPendingTasks] = useState<Map<number, { duplex: boolean; tumble: boolean }>>(new Map())
 
   const params = new URLSearchParams(window.location.search)
   const printJobId = params.get('id')
@@ -68,8 +68,8 @@ export function PrintJobDetail() {
       setData(detail)
       setPrinters(printerList)
       setPendingPrinterId(detail.printerId)
-      const taskMap = new Map<number, { duplex: boolean; tumple: boolean }>()
-      detail.printTasks.forEach(t => taskMap.set(t.id, { duplex: t.duplex, tumple: t.tumple }))
+      const taskMap = new Map<number, { duplex: boolean; tumble: boolean }>()
+      detail.printTasks.forEach(t => taskMap.set(t.id, { duplex: t.duplex, tumble: t.tumble }))
       setPendingTasks(taskMap)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
@@ -82,8 +82,8 @@ export function PrintJobDetail() {
     setPendingPrinterId(printerId)
   }
 
-  const handleTaskChange = (taskId: number, duplex: boolean, tumple: boolean) => {
-    setPendingTasks(prev => new Map(prev).set(taskId, { duplex, tumple }))
+  const handleTaskChange = (taskId: number, duplex: boolean, tumble: boolean) => {
+    setPendingTasks(prev => new Map(prev).set(taskId, { duplex, tumble }))
   }
 
   const handleConfirm = async () => {
@@ -102,8 +102,8 @@ export function PrintJobDetail() {
       }
       for (const [taskId, options] of pendingTasks) {
         const original = data.printTasks.find(t => t.id === taskId)
-        if (original && (original.duplex !== options.duplex || original.tumple !== options.tumple)) {
-          await api.printJob.updatePrintTask(taskId, options.duplex, options.tumple)
+        if (original && (original.duplex !== options.duplex || original.tumble !== options.tumble)) {
+          await api.printJob.updatePrintTask(taskId, options.duplex, options.tumble)
         }
       }
       await api.printJob.confirmPrintJob(data.id)
@@ -210,7 +210,7 @@ export function PrintJobDetail() {
                     <input
                       type="checkbox"
                       checked={pending.duplex}
-                      onChange={(e) => handleTaskChange(task.id, e.target.checked, pending.tumple)}
+                      onChange={(e) => handleTaskChange(task.id, e.target.checked, pending.tumble)}
                       disabled={saving}
                       className="mr-2"
                     />
@@ -219,7 +219,7 @@ export function PrintJobDetail() {
                   <label className="flex items-center">
                     <input
                       type="checkbox"
-                      checked={pending.tumple}
+                      checked={pending.tumble}
                       onChange={(e) => handleTaskChange(task.id, pending.duplex, e.target.checked)}
                       disabled={saving}
                       className="mr-2"
@@ -231,7 +231,7 @@ export function PrintJobDetail() {
               
               {!isEditable && (
                 <div className="text-sm text-gray-500 mt-1">
-                  {task.duplex ? '双面' : '单面'} / {task.tumple ? '短边' : '长边'}
+                  {task.duplex ? '双面' : '单面'} / {task.tumble ? '短边' : '长边'}
                 </div>
               )}
             </div>

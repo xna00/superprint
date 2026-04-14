@@ -65,7 +65,7 @@ export const updatePrintJob = async (printJobId: number, printerId: number) => {
     return { success: true }
 }
 
-export const updatePrintTask = async (taskId: number, duplex: boolean, tumple: boolean) => {
+export const updatePrintTask = async (taskId: number, duplex: boolean, tumble: boolean) => {
     const user = await _currentUser()
     const task = PrintTask.findOne({ id: taskId })
 
@@ -83,7 +83,7 @@ export const updatePrintTask = async (taskId: number, duplex: boolean, tumple: b
         throw new ApiError(400, {}, '只能修改待确认状态的任务', 'INVALID_STATE')
     }
 
-    PrintTask.update({ id: taskId }, { duplex, tumple })
+    PrintTask.update({ id: taskId }, { duplex, tumble })
     return { success: true }
 }
 

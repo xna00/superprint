@@ -58,5 +58,5 @@ model PrintTask {
   fileId String
   filename String
   duplex Boolean
-  tumple Boolean
+  tumble Boolean
 }
