@@ -32,7 +32,7 @@ jobs:
 
       - name: Setup vcpkg
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
-        uses: lukka/run-vcpkg@v11
+        uses: lukka/run-vcpkg@v11.5
         with:
           vcpkgJsonGlob: printdriver/vcpkg.json
           doNotCache: false
