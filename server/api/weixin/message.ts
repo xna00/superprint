@@ -263,7 +263,6 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       )
       return
     }
-    const defaultPrinter = defaultComputer.printers[0]
 
     let existingPrintJob = PrintJob.findBy({
       userId: kfUser.userId,
@@ -272,19 +271,29 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
 
     let printJobId: number
     let isNewJob = false
+    let printerId: number
 
     if (existingPrintJob) {
       printJobId = existingPrintJob.id
+      printerId = existingPrintJob.printerId
       console.log(`使用现有 PrintJob，ID: ${printJobId}`)
     } else {
+      const lastJob = PrintJob.findBy({userId: kfUser.userId}, {printTasks: false, printer: false, user: false}).sort((a, b) => b.id - a.id)[0]
+      printerId = lastJob?.printerId ?? defaultComputer.printers[0].id
       const printJobResult = PrintJob.insert([{
         state: 'waiting_confirmation',
         userId: kfUser.userId,
-        printerId: defaultPrinter.id
+        printerId: printerId
       }])
       printJobId = printJobResult.lastInsertRowid as number
       isNewJob = true
       console.log(`PrintJob 已创建，ID: ${printJobId}`)
+    }
+
+    const printer = Printer.findBy({id: printerId}, {computer: true}).at(0)!
+    if (!printer) {
+      await sendTextMessage('未找到可用的打印机，请检查打印机配置。', kfid, externalUserId)
+      return
     }
 
     await Promise.all(mediaMessages.map(async m => {
@@ -311,8 +320,8 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     let taskInfo = isNewJob
       ? `📄 打印工作已创建\n\n`
       : `📄 已添加打印任务\n\n`
-    taskInfo += `计算机: ${defaultComputer.name}\n`
-    taskInfo += `打印机: ${defaultPrinter.name}\n\n`
+    taskInfo += `计算机: ${printer.computer.name}\n`
+    taskInfo += `打印机: ${printer.name}\n\n`
     taskInfo += `打印工作ID: ${printJobId}\n`
     taskInfo += `任务数量: ${allTasks.length}\n\n`
     taskInfo += `任务列表:\n`
