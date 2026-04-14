@@ -2,6 +2,7 @@ name: Build and Upload
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 env:
@@ -203,6 +204,7 @@ jobs:
 
   assemble:
     needs: [build-printdriver, build-server, build-web]
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     defaults:
       run:
