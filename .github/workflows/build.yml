@@ -32,12 +32,25 @@ jobs:
 
       - name: Setup vcpkg
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
-        uses: lukka/run-vcpkg@v11.5
+        uses: lukka/run-vcpkg@v11
         with:
           vcpkgJsonGlob: printdriver/vcpkg.json
           doNotCache: false
         env:
           VCPKG_DEFAULT_TRIPLET: x64-windows-static
+
+      - name: Install vcpkg manifest deps (explicit)
+        if: steps.cache-printdriver.outputs.cache-hit != 'true'
+        run: |
+          cd printdriver
+          if (Test-Path $env:VCPKG_ROOT) {
+            & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x64-windows-static
+          } elseif (Test-Path "$PWD\vcpkg\vcpkg.exe") {
+            & "$PWD\vcpkg\vcpkg.exe" install --triplet x64-windows-static
+          } else {
+            Write-Error 'vcpkg executable not found; ensure run-vcpkg or bootstrap ran'
+            exit 1
+          }
 
       - name: Install Inno Setup
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
@@ -48,12 +61,12 @@ jobs:
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
           cd printdriver
-          cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static
+          cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DVCPKG_MANIFEST_INSTALL=OFF
           cmake --build build --config Release
 
       - name: Show directory contents
         run: |
-          tree .
+          tree printdriver
 
       - name: Build Installer
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
