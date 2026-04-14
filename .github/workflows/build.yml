@@ -2,7 +2,6 @@ name: Build and Upload
 
 on:
   push:
-    branches: [main]
   workflow_dispatch:
 
 env:
@@ -17,6 +16,36 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Cache innosetup
+        id: cache-innosetup
+        uses: actions/cache@v5
+        with:
+          path: C:\Program Files (x86)\Inno Setup 5
+          key: ${{ runner.os }}-innosetup-5.6.1
+
+      - name: Install Inno Setup
+        if: steps.cache-innosetup.outputs.cache-hit != 'true'
+        run: |
+          choco install innosetup --version 5.6.1 -y --allow-downgrade
+
+      - name: Cache CMake build
+        id: cache-cmake
+        uses: actions/cache@v5
+        with:
+          path: printdriver/build
+          key: ${{ runner.os }}-cmake-build-${{ hashFiles('printdriver/src/**', 'printdriver/CMakeLists.txt', 'printdriver/vcpkg.json') }}
+          restore-keys: |
+            ${{ runner.os }}-cmake-build-
+
+      - name: Cache vcpkg
+        id: cache-vcpkg
+        uses: actions/cache@v5
+        with:
+          path: |
+            vcpkg
+            printdriver/vcpkg_installed
+          key: ${{ runner.os }}-vcpkg-x64-windows-static-${{ hashFiles('printdriver/vcpkg.json') }}
+
       - name: Cache printdriver output
         id: cache-printdriver
         uses: actions/cache@v5
@@ -25,7 +54,7 @@ jobs:
           key: ${{ runner.os }}-printdriver-output-${{ hashFiles('printdriver/src/**', 'printdriver/CMakeLists.txt', 'printdriver/vcpkg.json', 'printdriver/cert/**', 'printdriver/installer/**') }}
 
       - name: Setup vcpkg
-        if: steps.cache-printdriver.outputs.cache-hit != 'true'
+        if: steps.cache-printdriver.outputs.cache-hit != 'true' && steps.cache-vcpkg.outputs.cache-hit != 'true'
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgJsonGlob: printdriver/vcpkg.json
@@ -33,16 +62,17 @@ jobs:
         env:
           VCPKG_DEFAULT_TRIPLET: x64-windows-static
 
-      - name: Install Inno Setup
-        if: steps.cache-printdriver.outputs.cache-hit != 'true'
+      - name: Install vcpkg manifest deps (explicit)
+        if: steps.cache-printdriver.outputs.cache-hit != 'true' && steps.cache-vcpkg.outputs.cache-hit != 'true'
         run: |
-            choco install innosetup --version 5.6.1 -y --allow-downgrade
+          cd printdriver
+          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x64-windows-static
 
       - name: Configure and Build CMake
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
           cd printdriver
-          cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static
+          cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="../vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DVCPKG_MANIFEST_INSTALL=OFF -DVCPKG_INSTALLED_DIR="$PWD\vcpkg_installed"
           cmake --build build --config Release
 
       - name: Build Installer
@@ -52,7 +82,7 @@ jobs:
           mkdir output -Force
           copy build\Release\PrintDriver.exe build\PrintDriver.exe
           copy build\Release\PrintDriver.exe output\PrintDriver.exe
-          iscc installer\PrintDriver.iss
+          & (Join-Path 'C:\Program Files (x86)' 'Inno Setup 5\ISCC.exe') installer\PrintDriver.iss
 
       - name: Sign executables
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
