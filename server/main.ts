@@ -4,7 +4,7 @@ import { init, PrintTask } from "./models/index.ts";
 //     'printJobId': 0,
 //     fileId: "a.pdf",
 //     'duplex': true,
-//     'tumple': true
+//     'tumble': true
 // }])
 // console.log(PrintTask.findBy({}))
 init();
