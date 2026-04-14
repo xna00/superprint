@@ -12,19 +12,12 @@ const ensureUploadsDir = (): void => {
   }
 }
 
-const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: boolean = false): void => {
+const convertPdfToPs = (pdfPath: string): void => {
   const psPath = pdfPath.replace(/\.pdf$/i, '.ps')
   try {
-    let cmd = `gs -q -dSAFER -dBATCH -dNOPAUSE -sDEVICE=ps2write -r300 -sOutputFile="${psPath}"`
-
-    if (duplex) {
-      const duplexSetting = tumble ? 'Duplex true /Tumble true' : 'Duplex true'
-      cmd += ` -c '<</PSDocOptions (<</${duplexSetting}>> setpagedevice)>> setdistillerparams'`
-    }
-
-    cmd += ` -f "${pdfPath}"`
-
-    execSync(cmd, { stdio: 'ignore', shell: true } as any)
+    execSync(`gs -dNOPAUSE -dBATCH -sDEVICE=ps2write -sOutputFile="${psPath}" "${pdfPath}"`, {
+      stdio: 'ignore'
+    })
   } catch (error) {
     console.error('PDF转PS失败:', error)
   }
@@ -78,11 +71,7 @@ export type DownloadResult = {
   filename: string
 }
 
-export const downloadMedia = async (
-  mediaId: string,
-  duplex: boolean = true,
-  tumble: boolean = false
-): Promise<DownloadResult> => {
+export const downloadMedia = async (mediaId: string): Promise<DownloadResult> => {
   ensureUploadsDir()
   
   const accessToken = await getAccessToken()
@@ -116,30 +105,10 @@ export const downloadMedia = async (
   writeFileSync(filePath, buffer)
   
   if (ext.toLowerCase() === '.pdf') {
-    convertPdfToPs(filePath, duplex, tumble)
+    convertPdfToPs(filePath)
   }
   
   return { fileId: hash, filename }
-}
-
-export const getFilePath = (fileId: string): string | null => {
-  const exts = ['.pdf', '.ps', '.jpg', '.png', '.gif', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
-  for (const ext of exts) {
-    const filePath = join(UPLOADS_DIR, fileId + ext)
-    if (existsSync(filePath)) {
-      return filePath
-    }
-  }
-  return null
-}
-
-export const reconvertPdfToPs = (fileId: string, duplex: boolean, tumble: boolean): boolean => {
-  const filePath = getFilePath(fileId)
-  if (!filePath || !filePath.toLowerCase().endsWith('.pdf')) {
-    return false
-  }
-  convertPdfToPs(filePath, duplex, tumble)
-  return true
 }
 
 export const getUploadsDir = (): string => {
