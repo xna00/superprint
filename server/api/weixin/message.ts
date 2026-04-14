@@ -172,14 +172,18 @@ const handleConfirmById = async (openKfId: string, externalUserId: string, print
   console.log(`✅ 已确认打印任务 ID: ${printJobId}`)
 }
 
-const processMediaMessage = async (message: Message): Promise<{ fileId: string; filename: string; type: 'image' | 'pdf' } | null> => {
+const processMediaMessage = async (
+  message: Message,
+  duplex: boolean = true,
+  tumble: boolean = false
+): Promise<{ fileId: string; filename: string; type: 'image' | 'pdf' } | null> => {
   if (message.msgtype === 'image' && message.image?.media_id) {
-    const result = await downloadMedia(message.image.media_id)
+    const result = await downloadMedia(message.image.media_id, duplex, tumble)
     return { ...result, type: 'image' }
   }
 
   if (message.msgtype === 'file' && message.file?.media_id) {
-    const result = await downloadMedia(message.file.media_id)
+    const result = await downloadMedia(message.file.media_id, duplex, tumble)
 
     if (!result.filename.toLowerCase().endsWith('.pdf')) {
       console.log(`文件类型不是PDF: ${result.filename}`)
