@@ -2,7 +2,6 @@ name: Build and Upload
 
 on:
   push:
-    branches: [main]
   workflow_dispatch:
 
 env:
@@ -16,6 +15,13 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v6
+
+      - name: Cache vcpkg
+        id: cache-vcpkg
+        uses: actions/cache@v5
+        with:
+          path: vcpkg
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('printdriver/vcpkg.json') }}
 
       - name: Cache printdriver output
         id: cache-printdriver
