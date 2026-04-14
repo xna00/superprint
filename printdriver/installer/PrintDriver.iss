@@ -23,7 +23,7 @@ OutputBaseFilename=PrintDriver-Setup
 SetupIconFile=
 Compression=lzma
 SolidCompression=yes
-PrivilegesRequired=low
+PrivilegesRequired=lowest
 MinVersion=6.0
 
 [Languages]
