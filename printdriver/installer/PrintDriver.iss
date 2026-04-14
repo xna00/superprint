@@ -5,14 +5,14 @@
 #define MyAppExeName "PrintDriver.exe"
 
 [Setup]
-AppId={{PrintDriver-2024-1.0.7}}
+AppId={{PrintDriver-2024-1.0.7}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-DefaultDirName={pf}\{#MyAppName}
+DefaultDirName={localappdata}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=
@@ -23,7 +23,7 @@ OutputBaseFilename=PrintDriver-Setup
 SetupIconFile=
 Compression=lzma
 SolidCompression=yes
-PrivilegesRequired=admin
+PrivilegesRequired=low
 MinVersion=6.0
 
 [Languages]
