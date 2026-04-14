@@ -82,7 +82,7 @@ jobs:
           mkdir output -Force
           copy build\Release\PrintDriver.exe build\PrintDriver.exe
           copy build\Release\PrintDriver.exe output\PrintDriver.exe
-          C:\Program Files (x86)\Inno Setup 5\ISCC.exe installer\PrintDriver.iss
+          & (Join-Path 'C:\Program Files (x86)' 'Inno Setup 5\ISCC.exe') installer\PrintDriver.iss
 
       - name: Sign executables
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
