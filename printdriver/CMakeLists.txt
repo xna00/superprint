@@ -1,17 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
-project(PrintDriver VERSION 1.0.00000 LANGUAGES C)
+project(PrintDriver VERSION 1.0.109000 LANGUAGES C)
 
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h"
 )
-
-set(CMAKE_PREFIX_PATH 
-    "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/vcpkg/pkgs/curl_x64-windows-static"
-    "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/vcpkg/pkgs/zlib_x64-windows-static"
-    CACHE STRING "Search paths for finding packages")
-
-set(json-c_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/vcpkg/pkgs/json-c_x64-windows-static/share/json-c")
 
 find_package(CURL REQUIRED)
 find_package(ZLIB REQUIRED)
