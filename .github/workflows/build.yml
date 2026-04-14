@@ -42,6 +42,7 @@ jobs:
       - name: Install vcpkg manifest deps (explicit)
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
+          cd printdriver
           if (Test-Path $env:VCPKG_ROOT) {
             & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x64-windows-static
           } elseif (Test-Path "$PWD\vcpkg\vcpkg.exe") {
