@@ -7,3 +7,4 @@ vcpkg_installed/
 cookie.txt
 temp.ps1
 downloads
+version.h
