@@ -1,4 +1,4 @@
-import { sendTextMessage } from './send.ts'
+import { sendTextMessage, sendMsgMenuMessage } from './send.ts'
 import { downloadMedia } from './download.ts'
 import { WeixinKfUser, PrintJob, PrintTask, Printer, Computer } from '../../models/index.ts'
 import { notifyCheckJobs } from '../../ws/index.ts'
@@ -121,7 +121,6 @@ const HELP_MESSAGE = `📖 帮助信息
 
 可用命令：
 • 帮助 - 显示此帮助信息
-• 确认 - 确认打印任务
 • 退出登录 - 解除微信账号绑定
 
 发送图片或PDF文件即可创建打印任务。`
@@ -151,34 +150,26 @@ const handleLogout = async (openKfId: string, externalUserId: string) => {
   }
 }
 
-const handleConfirm = async (openKfId: string, externalUserId: string, userId: number) => {
-  const printJobs = PrintJob.findBy({
-    userId,
-    state: 'waiting_confirmation'
-  }, { printer: true })
+const handleConfirmById = async (openKfId: string, externalUserId: string, printJobId: number) => {
+  const printJob = PrintJob.findOne({ id: printJobId }, { printer: true })
 
-  if (printJobs.length === 0) {
-    await sendTextMessage(
-      '没有待确认的打印任务。',
-      openKfId,
-      externalUserId
-    )
+  if (!printJob) {
+    await sendTextMessage('未找到对应的打印任务。', openKfId, externalUserId)
     return
   }
 
-  for (const job of printJobs) {
-    PrintJob.update({ id: job.id }, { state: 'waiting_print' })
-    if (job.printer) {
-      notifyCheckJobs(userId, job.printer.computerId)
-    }
+  if (printJob.state !== 'waiting_confirmation') {
+    await sendTextMessage('该打印任务已处理。', openKfId, externalUserId)
+    return
   }
 
-  await sendTextMessage(
-    `✅ 已确认 ${printJobs.length} 个打印任务，等待打印中。`,
-    openKfId,
-    externalUserId
-  )
-  console.log(`✅ 已确认 ${printJobs.length} 个打印任务`)
+  PrintJob.update({ id: printJobId }, { state: 'waiting_print' })
+  if (printJob.printer) {
+    notifyCheckJobs(printJob.userId, printJob.printer.computerId)
+  }
+
+  await sendTextMessage('✅ 打印任务已确认，等待打印中。', openKfId, externalUserId)
+  console.log(`✅ 已确认打印任务 ID: ${printJobId}`)
 }
 
 const processMediaMessage = async (message: Message): Promise<{ fileId: string; filename: string; type: 'image' | 'pdf' } | null> => {
@@ -238,8 +229,13 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         await sendHelp(kfid, externalUserId)
       } else if (msg === '退出登录' || msg === 'logout') {
         await handleLogout(kfid, externalUserId)
-      } else if (msg === '确认') {
-        await handleConfirm(kfid, externalUserId, kfUser.userId)
+      } else {
+        const menuMsg = textMessages.find(m => m.text.content.trim() === msg)
+        const menuId = menuMsg?.text.menu_id
+        if (menuId?.startsWith('confirm_')) {
+          const printJobId = parseInt(menuId.replace('confirm_', ''))
+          await handleConfirmById(kfid, externalUserId, printJobId)
+        }
       }
     }
 
@@ -317,31 +313,30 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
 
     const allTasks = PrintTask.findBy({ printJobId })
 
-    let taskInfo = isNewJob
+    let headContent = isNewJob
       ? `📄 打印工作已创建\n\n`
       : `📄 已添加打印任务\n\n`
-    taskInfo += `计算机: ${printer.computer.name}\n`
-    taskInfo += `打印机: ${printer.name}\n\n`
-    taskInfo += `打印工作ID: ${printJobId}\n`
-    taskInfo += `任务数量: ${allTasks.length}\n\n`
-    taskInfo += `任务列表:\n`
+    headContent += `计算机: ${printer.computer.name}\n`
+    headContent += `打印机: ${printer.name}\n\n`
+    headContent += `文件列表:\n`
 
     for (const task of allTasks) {
       const isImage = task.filename.match(/\.(jpg|jpeg|png|gif)$/i)
       const typeLabel = isImage ? '🖼️' : '📄'
       const duplexLabel = task.duplex ? '双面' : '单面'
       const tumbleLabel = task.tumple ? '短边' : '长边'
-      let displayName = task.filename
-      if (isImage && displayName.length > 10) {
-        displayName = displayName.slice(0, 10) + '...'
-      }
-      taskInfo += `${typeLabel} ${displayName} (${duplexLabel}/${tumbleLabel})\n`
+      headContent += `${typeLabel} ${task.filename} (${duplexLabel}/${tumbleLabel})\n`
     }
 
-    taskInfo += `\n回复"确认"开始打印\n`
-    taskInfo += `\n🔗 查看详情: https://superprint.xna00.top/print-job?id=${printJobId}`
-
-    await sendTextMessage(taskInfo, kfid, externalUserId)
+    await sendMsgMenuMessage(
+      headContent,
+      [
+        { content: '确认打印', id: `confirm_${printJobId}` },
+        { content: '查看详情', url: `https://superprint.xna00.top/print-job?id=${printJobId}` }
+      ],
+      kfid,
+      externalUserId
+    )
     console.log('✅ 打印任务信息已发送给用户')
   })).then(() => {
     console.log('✅ 所有用户消息已处理')
