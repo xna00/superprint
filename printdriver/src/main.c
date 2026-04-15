@@ -22,7 +22,7 @@
 #include "config.h"
 #include "http_client.h"
 #include "login_dlg.h"
-#include "print_job.h"
+#include "print_task.h"
 #include "print_core.h"
 #include "file_downloader.h"
 #include "device_id.h"
@@ -493,12 +493,12 @@ void on_websocket_message(const char *message) {
 }
 
 void handle_print_job(void) {
-    PrintTaskInfo *tasks = NULL;
+    PrintFileInfo *files = NULL;
     int count = 0;
     
     add_log(L"正在获取待打印任务...");
     
-    if (get_waiting_print_jobs(g_http_client, g_computer_id, &tasks, &count) != 0) {
+    if (get_waiting_print_files(g_http_client, g_computer_id, &files, &count) != 0) {
         add_log(L"获取打印任务失败");
         return;
     }
@@ -514,24 +514,24 @@ void handle_print_job(void) {
         add_log(log);
         
         char local_path[MAX_PATH];
-        if (download_file_to_local(g_http_client, tasks[i].file_id, tasks[i].filename, local_path, sizeof(local_path)) != 0) {
+        if (download_file_to_local(g_http_client, files[i].file_id, files[i].filename, local_path, sizeof(local_path)) != 0) {
             add_log(L"下载文件失败");
-            report_task_succeeded(g_http_client, tasks[i].task_id);
+            report_file_succeeded(g_http_client, files[i].file_id);
             continue;
         }
         
-        if (print_file(local_path, tasks[i].printer_name) != 0) {
+        if (print_file(local_path, files[i].printer_name) != 0) {
             add_log(L"打印失败");
-            report_task_succeeded(g_http_client, tasks[i].task_id);
+            report_file_succeeded(g_http_client, files[i].file_id);
             continue;
         }
         
-        if (report_task_succeeded(g_http_client, tasks[i].task_id) == 0) {
+        if (report_file_succeeded(g_http_client, files[i].file_id) == 0) {
             add_log(L"任务完成");
         } else {
             add_log(L"上报任务状态失败");
         }
     }
     
-    free(tasks);
+    free(files);
 }

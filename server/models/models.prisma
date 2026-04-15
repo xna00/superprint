@@ -36,25 +36,25 @@ model Printer {
   name String
   computer Computer @relation(fields: [computerId], references: [id])
   computerId String
-  printJobs PrintJob[]
+  printTasks PrintTask[]
   disabled Boolean
 }
 
-model PrintJob {
+model PrintTask {
   id Int @id
   state String
-  printTasks PrintTask[]
+  printFiles PrintFile[]
   user User @relation(fields: [userId], references: [id])
   userId Int
   printer Printer @relation(fields: [printerId], references: [id])
   printerId Int
 }
 
-model PrintTask {
+model PrintFile {
   id Int @id
   state String
-  printJob PrintJob @relation(fields: [printJobId], references: [id])
-  printJobId Int
+  printTask PrintTask @relation(fields: [printTaskId], references: [id])
+  printTaskId Int
   fileId String
   filename String
   duplex Boolean

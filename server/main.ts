@@ -1,10 +1,16 @@
-import { init, PrintTask } from "./models/index.ts";
+import { init, PrintTask, PrintFile } from "./models/index.ts";
 
 // PrintTask.insert([{
-//     'printJobId': 0,
+//     'printerId': 0,
+//     'state': 'waiting_confirmation',
+//     'userId': 0
+// }])
+// PrintFile.insert([{
+//     'printTaskId': 0,
 //     fileId: "a.pdf",
 //     'duplex': true,
-//     'tumble': true
+//     'tumble': true,
+//     'state': 'waiting_print'
 // }])
 // console.log(PrintTask.findBy({}))
 init();
