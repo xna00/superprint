@@ -50,9 +50,9 @@ export function Login() {
         localStorage.setItem('userId', result.id.toString())
         localStorage.setItem('username', result.username)
         
-        if (redirect === 'print-job') {
+        if (redirect === 'print-task') {
           const id = urlParams.get('id')
-          window.location.href = `/print-job?id=${id}`
+          window.location.href = `/print-task?id=${id}`
         } else {
           closeWindow()
         }

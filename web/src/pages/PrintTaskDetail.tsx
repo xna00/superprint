@@ -33,7 +33,7 @@ interface PrintTaskDetailData {
   printer?: Printer
 }
 
-export function PrintJobDetail() {
+export function PrintTaskDetail() {
   const [data, setData] = useState<PrintTaskDetailData | null>(null)
   const [printers, setPrinters] = useState<PrinterOption[]>([])
   const [loading, setLoading] = useState(true)

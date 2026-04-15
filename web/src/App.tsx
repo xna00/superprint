@@ -1,24 +1,24 @@
 import { useState, useEffect } from 'react'
 import { Login } from './pages/Login'
-import { PrintJobDetail } from './pages/PrintJobDetail'
+import { PrintTaskDetail } from './pages/PrintTaskDetail'
 
 function App() {
-  const [page, setPage] = useState<'login' | 'printJobDetail'>('login')
+  const [page, setPage] = useState<'login' | 'printTaskDetail'>('login')
 
   useEffect(() => {
     const path = window.location.pathname
     const params = new URLSearchParams(window.location.search)
-    const printJobId = params.get('id')
+    const printTaskId = params.get('id')
 
-    if (path === '/print-job' && printJobId) {
-      setPage('printJobDetail')
+    if (path === '/print-task' && printTaskId) {
+      setPage('printTaskDetail')
     } else {
       setPage('login')
     }
   }, [])
 
-  if (page === 'printJobDetail') {
-    return <PrintJobDetail />
+  if (page === 'printTaskDetail') {
+    return <PrintTaskDetail />
   }
 
   return <Login />
