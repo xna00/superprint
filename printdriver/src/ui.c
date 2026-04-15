@@ -40,7 +40,17 @@ extern char g_computer_name[256];
 
 void add_log(const wchar_t *msg) {
     if (g_log_static && msg) {
-        int index = SendMessageW(g_log_static, LB_ADDSTRING, 0, (LPARAM)msg);
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        
+        wchar_t timestamp[32];
+        swprintf(timestamp, 32, L"[%02d/%02d %02d:%02d:%02d] ", st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+        
+        wchar_t full_msg[512];
+        wcscpy_s(full_msg, sizeof(full_msg) / sizeof(wchar_t), timestamp);
+        wcscat_s(full_msg, sizeof(full_msg) / sizeof(wchar_t), msg);
+        
+        int index = SendMessageW(g_log_static, LB_ADDSTRING, 0, (LPARAM)full_msg);
         SendMessageW(g_log_static, LB_SETCURSEL, (WPARAM)index, 0);
     }
 }
