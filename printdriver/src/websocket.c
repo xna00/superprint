@@ -152,22 +152,26 @@ int ws_send(WebSocketClient *ws, const char *message) {
 int ws_receive(WebSocketClient *ws, char *buffer, size_t buf_size, size_t *recv_bytes) {
     if (!ws || !ws->connected) return -1;
     
+    curl_easy_setopt(ws->curl, CURLOPT_TIMEOUT, 60L);
+    
     const struct curl_ws_frame *frame = NULL;
     CURLcode res = curl_ws_recv(ws->curl, buffer, buf_size, recv_bytes, &frame);
     
+    /* 恢复为无超时 */
+    curl_easy_setopt(ws->curl, CURLOPT_TIMEOUT, 0L);
+    
     if (res == CURLE_OK) {
-        /* 收到任何消息都更新时间 */
         ws_update_message_time(ws);
         return 0;
     }
     
-    /* CURLE_AGAIN表示没有数据可读，不是连接错误 */
+    /* CURLE_AGAIN 表示没有数据可读，不是连接错误 */
     if (res == CURLE_AGAIN) {
         *recv_bytes = 0;
         return 0;
     }
     
-    /* 其他错误才标记为断开连接 */
+    /* 超时或其他错误，标记为断开连接 */
     ws->connected = 0;
     return -1;
 }
