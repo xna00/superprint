@@ -10,7 +10,7 @@ function App() {
     const params = new URLSearchParams(window.location.search)
     const printTaskId = params.get('id')
 
-    if (path === '/print-task' && printTaskId) {
+    if (path === '/printTask' && printTaskId) {
       setPage('printTaskDetail')
     } else {
       setPage('login')

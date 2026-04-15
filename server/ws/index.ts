@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { decryptString } from "../api/utils.ts";
-import { PrintJob } from "../models/index.ts";
+import { PrintTask } from "../models/index.ts";
 
 declare module "ws" {
   interface WebSocket {
@@ -108,7 +108,7 @@ export const createWebSocketServer = (server: Server) => {
       wsMap[id][computerId] = ws;
       console.log(`WebSocket 已连接，用户ID: ${id}, 设备ID: ${computerId}`);
 
-      const waitingJobs = PrintJob.findBy({
+      const waitingJobs = PrintTask.findBy({
         userId: id,
         state: "waiting_print",
       });

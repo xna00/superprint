@@ -344,7 +344,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       headContent,
       [
         { content: '确认打印', id: `confirm_${printTaskId}` },
-        { content: '查看详情', url: `https://superprint.xna00.top/print-task?id=${printTaskId}` }
+        { content: '查看详情', url: `https://superprint.xna00.top/printTask?id=${printTaskId}` }
       ],
       kfid,
       externalUserId
