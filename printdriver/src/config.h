@@ -35,7 +35,7 @@
  * 使用POST请求，body格式: [{"state": "waiting_print", "computerId": "xxx", "printerName": "xxx"}]
  * 参数都是可选的
  */
-#define API_LIST_PRINTJOBS API_BASE_URL "/api/printJob/listPrintJobsWithTasks"
+#define API_LIST_PRINTTASKS API_BASE_URL "/api/printTask/listPrintTasks"
 
 /*
  * 下载打印文件（普通文件）
@@ -50,10 +50,10 @@
 #define API_GET_PS_FILE API_BASE_URL "/api/files/getPsFile"
 
 /*
- * 报告打印任务成功
- * 使用POST请求，body格式: [taskId]
+ * 报告打印文件成功
+ * 使用POST请求，body格式: [id]
  */
-#define API_TASK_SUCCEED API_BASE_URL "/api/printJob/taskSucced"
+#define API_FILE_SUCCEED API_BASE_URL "/api/printTask/fileSucceed"
 
 /* ==================== 计算机接口 ==================== */
 /*

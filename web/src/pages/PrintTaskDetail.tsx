@@ -9,10 +9,10 @@ interface PrinterOption {
   disabled: boolean
 }
 
-interface PrintTask {
+interface PrintFile {
   id: number
   state: string
-  printJobId: number
+  printTaskId: number
   fileId: string
   filename: string
   duplex: boolean
@@ -25,52 +25,52 @@ interface Printer {
   computerId: string
 }
 
-interface PrintJobDetailData {
+interface PrintTaskDetailData {
   id: number
   state: string
   printerId: number
-  printTasks: PrintTask[]
+  printFiles: PrintFile[]
   printer?: Printer
 }
 
-export function PrintJobDetail() {
-  const [data, setData] = useState<PrintJobDetailData | null>(null)
+export function PrintTaskDetail() {
+  const [data, setData] = useState<PrintTaskDetailData | null>(null)
   const [printers, setPrinters] = useState<PrinterOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [pendingPrinterId, setPendingPrinterId] = useState<number | null>(null)
-  const [pendingTasks, setPendingTasks] = useState<Map<number, { duplex: boolean; tumble: boolean }>>(new Map())
+  const [pendingFiles, setPendingFiles] = useState<Map<number, { duplex: boolean; tumble: boolean }>>(new Map())
 
   const params = new URLSearchParams(window.location.search)
-  const printJobId = params.get('id')
+  const printTaskId = params.get('id')
   const token = localStorage.getItem('token')
 
   useEffect(() => {
-    if (!printJobId) {
+    if (!printTaskId) {
       setError('缺少打印任务ID')
       setLoading(false)
       return
     }
     if (!token) {
-      window.location.href = `/?external_userid=&open_kfid=&redirect=print-job&id=${printJobId}`
+      window.location.href = `/?external_userid=&open_kfid=&redirect=print-job&id=${printTaskId}`
       return
     }
     loadData()
-  }, [printJobId, token])
+  }, [printTaskId, token])
 
   const loadData = async () => {
     try {
       const [detail, printerList] = await Promise.all([
-        api.printJob.getPrintJobDetail(parseInt(printJobId!)),
-        api.printJob.getAllPrinters()
+        api.printTask.getPrintTaskDetail(parseInt(printTaskId!)),
+        api.printTask.getAllPrinters()
       ])
       setData(detail)
       setPrinters(printerList)
       setPendingPrinterId(detail.printerId)
-      const taskMap = new Map<number, { duplex: boolean; tumble: boolean }>()
-      detail.printTasks.forEach(t => taskMap.set(t.id, { duplex: t.duplex, tumble: t.tumble }))
-      setPendingTasks(taskMap)
+      const fileMap = new Map<number, { duplex: boolean; tumble: boolean }>()
+      detail.printFiles.forEach(f => fileMap.set(f.id, { duplex: f.duplex, tumble: f.tumble }))
+      setPendingFiles(fileMap)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
     } finally {
@@ -82,8 +82,8 @@ export function PrintJobDetail() {
     setPendingPrinterId(printerId)
   }
 
-  const handleTaskChange = (taskId: number, duplex: boolean, tumble: boolean) => {
-    setPendingTasks(prev => new Map(prev).set(taskId, { duplex, tumble }))
+  const handleFileChange = (fileId: number, duplex: boolean, tumble: boolean) => {
+    setPendingFiles(prev => new Map(prev).set(fileId, { duplex, tumble }))
   }
 
   const handleConfirm = async () => {
@@ -96,17 +96,17 @@ export function PrintJobDetail() {
       console.log('pendingPrinterId:', pendingPrinterId)
       console.log('API call args:', [data.id, pendingPrinterId])
       if (pendingPrinterId !== null && pendingPrinterId !== data.printerId) {
-        console.log('Calling updatePrintJob with:', data.id, pendingPrinterId)
-        const result = await api.printJob.updatePrintJob(data.id, pendingPrinterId)
-        console.log('updatePrintJob result:', result)
+        console.log('Calling updatePrintTask with:', data.id, pendingPrinterId)
+        const result = await api.printTask.updatePrintTask(data.id, pendingPrinterId)
+        console.log('updatePrintTask result:', result)
       }
-      for (const [taskId, options] of pendingTasks) {
-        const original = data.printTasks.find(t => t.id === taskId)
+      for (const [fileId, options] of pendingFiles) {
+        const original = data.printFiles.find(f => f.id === fileId)
         if (original && (original.duplex !== options.duplex || original.tumble !== options.tumble)) {
-          await api.printJob.updatePrintTask(taskId, options.duplex, options.tumble)
+          await api.printTask.updatePrintFile(fileId, options.duplex, options.tumble)
         }
       }
-      await api.printJob.confirmPrintJob(data.id)
+      await api.printTask.confirmPrintTask(data.id)
       await loadData()
     } catch (err) {
       console.error('Confirm error:', err)
@@ -193,14 +193,14 @@ export function PrintJobDetail() {
         <div className="bg-white rounded-lg shadow-md p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">打印任务</h2>
           
-          {data?.printTasks.map(task => {
-            const pending = pendingTasks.get(task.id)
+          {data?.printFiles.map(file => {
+            const pending = pendingFiles.get(file.id)
             return (
-            <div key={task.id} className="border-b border-gray-200 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0">
+            <div key={file.id} className="border-b border-gray-200 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0">
               <div className="flex items-center justify-between mb-2">
-                <div className="font-medium text-gray-900">{task.filename}</div>
-                <span className={`text-sm ${task.state === 'completed' ? 'text-green-600' : 'text-gray-500'}`}>
-                  {task.state === 'completed' ? '已完成' : '等待打印'}
+                <div className="font-medium text-gray-900">{file.filename}</div>
+                <span className={`text-sm ${file.state === 'completed' ? 'text-green-600' : 'text-gray-500'}`}>
+                  {file.state === 'completed' ? '已完成' : '等待打印'}
                 </span>
               </div>
               
@@ -210,7 +210,7 @@ export function PrintJobDetail() {
                     <input
                       type="checkbox"
                       checked={pending.duplex}
-                      onChange={(e) => handleTaskChange(task.id, e.target.checked, pending.tumble)}
+                      onChange={(e) => handleFileChange(file.id, e.target.checked, pending.tumble)}
                       disabled={saving}
                       className="mr-2"
                     />
@@ -220,7 +220,7 @@ export function PrintJobDetail() {
                     <input
                       type="checkbox"
                       checked={pending.tumble}
-                      onChange={(e) => handleTaskChange(task.id, pending.duplex, e.target.checked)}
+                      onChange={(e) => handleFileChange(file.id, pending.duplex, e.target.checked)}
                       disabled={saving}
                       className="mr-2"
                     />
@@ -231,7 +231,7 @@ export function PrintJobDetail() {
               
               {!isEditable && (
                 <div className="text-sm text-gray-500 mt-1">
-                  {task.duplex ? '双面' : '单面'} / {task.tumble ? '短边' : '长边'}
+                  {file.duplex ? '双面' : '单面'} / {file.tumble ? '短边' : '长边'}
                 </div>
               )}
             </div>

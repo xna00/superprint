@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(PrintDriver VERSION 1.1.2 LANGUAGES C)
+project(PrintDriver VERSION 1.1.7 LANGUAGES C)
 
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in"
@@ -15,7 +15,7 @@ set(SOURCES
     src/http_client.c
     src/websocket.c
     src/login_dlg.c
-    src/print_job.c
+    src/print_task.c
     src/print_core.c
     src/printer_manager.c
     src/computer_manager.c
@@ -30,7 +30,7 @@ set(HEADERS
     src/http_client.h
     src/websocket.h
     src/login_dlg.h
-    src/print_job.h
+    src/print_task.h
     src/print_core.h
     src/printer_manager.h
     src/computer_manager.h

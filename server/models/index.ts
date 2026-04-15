@@ -145,36 +145,36 @@ disabled: boolean
 }
 export type PrinterRel = {
 computer: "Computer",
-printJobs: "PrintJob[]"
+printTasks: "PrintTask[]"
 }
 export type Printer = PrinterBase & PrinterRel
 
-export type PrintJobBase = {
+export type PrintTaskBase = {
 id: number,
 state: string,
 userId: number,
 printerId: number
 }
-export type PrintJobRel = {
-printTasks: "PrintTask[]",
+export type PrintTaskRel = {
+printFiles: "PrintFile[]",
 user: "User",
 printer: "Printer"
 }
-export type PrintJob = PrintJobBase & PrintJobRel
+export type PrintTask = PrintTaskBase & PrintTaskRel
 
-export type PrintTaskBase = {
+export type PrintFileBase = {
 id: number,
 state: string,
-printJobId: number,
+printTaskId: number,
 fileId: string,
 filename: string,
 duplex: boolean,
 tumble: boolean
 }
-export type PrintTaskRel = {
-printJob: "PrintJob"
+export type PrintFileRel = {
+printTask: "PrintTask"
 }
-export type PrintTask = PrintTaskBase & PrintTaskRel
+export type PrintFile = PrintFileBase & PrintFileRel
 
 type TypeMap = {
 UserBase: UserBase;
@@ -192,12 +192,12 @@ Computer: Computer;
 PrinterBase: PrinterBase;
 PrinterRel: PrinterRel;
 Printer: Printer;
-PrintJobBase: PrintJobBase;
-PrintJobRel: PrintJobRel;
-PrintJob: PrintJob;
 PrintTaskBase: PrintTaskBase;
 PrintTaskRel: PrintTaskRel;
 PrintTask: PrintTask;
+PrintFileBase: PrintFileBase;
+PrintFileRel: PrintFileRel;
+PrintFile: PrintFile;
 }
 const db = new DatabaseSync('file:./dev.db');
 
@@ -225,22 +225,22 @@ name TEXT NOT NULL  ,
 computerId TEXT NOT NULL  ,
 disabled BOOLEAN NOT NULL  ,
 FOREIGN KEY (computerId) REFERENCES Computer (id))`)
-db.exec(`CREATE TABLE IF NOT EXISTS PrintJob
+db.exec(`CREATE TABLE IF NOT EXISTS PrintTask
 (id INTEGER NOT NULL  PRIMARY KEY,
 state TEXT NOT NULL  ,
 userId INTEGER NOT NULL  ,
 printerId INTEGER NOT NULL  ,
 FOREIGN KEY (userId) REFERENCES User (id),
 FOREIGN KEY (printerId) REFERENCES Printer (id))`)
-db.exec(`CREATE TABLE IF NOT EXISTS PrintTask
+db.exec(`CREATE TABLE IF NOT EXISTS PrintFile
 (id INTEGER NOT NULL  PRIMARY KEY,
 state TEXT NOT NULL  ,
-printJobId INTEGER NOT NULL  ,
+printTaskId INTEGER NOT NULL  ,
 fileId TEXT NOT NULL  ,
 filename TEXT NOT NULL  ,
 duplex BOOLEAN NOT NULL  ,
 tumble BOOLEAN NOT NULL  ,
-FOREIGN KEY (printJobId) REFERENCES PrintJob (id))`)
+FOREIGN KEY (printTaskId) REFERENCES PrintTask (id))`)
 
 }
 export type UserCriteria = Partial<Criteria<UserBase>>
@@ -313,23 +313,9 @@ export const Printer = {
   remove: (criteria: Partial<Criteria<PrinterBase>>) => remove("Printer", PrinterBaseFields, criteria),
   update: <T extends Partial<PrinterBase>>(criteria: {} extends T ? never : Partial<Criteria<PrinterBase>>, patch: T) => update("Printer", PrinterBaseFields, criteria, patch)
 };
-export type PrintJobCriteria = Partial<Criteria<PrintJobBase>>
-export type PrintJobInsert = CreateModel<PrintJobBase, "id">
-const PrintJobBaseFields = ["id", "state", "userId", "printerId"]
-export const PrintJob = {
-  findBy: <T extends Cas<"PrintJob"> = {}>(criteria: PrintJobCriteria, relation?: T extends Cas<"PrintJob"> ? T : never) => {
-    return [] as unknown as (PrintJobBase & DeepPick<"PrintJobRel", T>)[]
-  },
-  findOne: <T extends Cas<"PrintJob"> = {}>(criteria: PrintJobCriteria, relation?: T extends Cas<"PrintJob"> ? T : never) => {
-    return PrintJob.findBy(criteria, relation).at(0)
-  },
-  insert: (data: PrintJobInsert[]) => ({} as StatementResultingChanges),
-  remove: (criteria: Partial<Criteria<PrintJobBase>>) => remove("PrintJob", PrintJobBaseFields, criteria),
-  update: <T extends Partial<PrintJobBase>>(criteria: {} extends T ? never : Partial<Criteria<PrintJobBase>>, patch: T) => update("PrintJob", PrintJobBaseFields, criteria, patch)
-};
 export type PrintTaskCriteria = Partial<Criteria<PrintTaskBase>>
 export type PrintTaskInsert = CreateModel<PrintTaskBase, "id">
-const PrintTaskBaseFields = ["id", "state", "printJobId", "fileId", "filename", "duplex", "tumble"]
+const PrintTaskBaseFields = ["id", "state", "userId", "printerId"]
 export const PrintTask = {
   findBy: <T extends Cas<"PrintTask"> = {}>(criteria: PrintTaskCriteria, relation?: T extends Cas<"PrintTask"> ? T : never) => {
     return [] as unknown as (PrintTaskBase & DeepPick<"PrintTaskRel", T>)[]
@@ -340,6 +326,20 @@ export const PrintTask = {
   insert: (data: PrintTaskInsert[]) => ({} as StatementResultingChanges),
   remove: (criteria: Partial<Criteria<PrintTaskBase>>) => remove("PrintTask", PrintTaskBaseFields, criteria),
   update: <T extends Partial<PrintTaskBase>>(criteria: {} extends T ? never : Partial<Criteria<PrintTaskBase>>, patch: T) => update("PrintTask", PrintTaskBaseFields, criteria, patch)
+};
+export type PrintFileCriteria = Partial<Criteria<PrintFileBase>>
+export type PrintFileInsert = CreateModel<PrintFileBase, "id">
+const PrintFileBaseFields = ["id", "state", "printTaskId", "fileId", "filename", "duplex", "tumble"]
+export const PrintFile = {
+  findBy: <T extends Cas<"PrintFile"> = {}>(criteria: PrintFileCriteria, relation?: T extends Cas<"PrintFile"> ? T : never) => {
+    return [] as unknown as (PrintFileBase & DeepPick<"PrintFileRel", T>)[]
+  },
+  findOne: <T extends Cas<"PrintFile"> = {}>(criteria: PrintFileCriteria, relation?: T extends Cas<"PrintFile"> ? T : never) => {
+    return PrintFile.findBy(criteria, relation).at(0)
+  },
+  insert: (data: PrintFileInsert[]) => ({} as StatementResultingChanges),
+  remove: (criteria: Partial<Criteria<PrintFileBase>>) => remove("PrintFile", PrintFileBaseFields, criteria),
+  update: <T extends Partial<PrintFileBase>>(criteria: {} extends T ? never : Partial<Criteria<PrintFileBase>>, patch: T) => update("PrintFile", PrintFileBaseFields, criteria, patch)
 };
   User.findBy = <T extends Cas<"User">>(criteria: UserCriteria, relation?: T extends Cas<"User"> ? T : never) => {
     const rels: Record<string, (row: any) => void> = { weixinKfUsers: (row) => {
@@ -459,8 +459,8 @@ const t = Computer.findBy({id: row.computerId}).at(0)
 assert(t)
 row.computer = t
 },
-printJobs: (row) => {
-row.printJobs = PrintJob.findBy({printerId: row.id}, typeof relation!["printJobs"] === "object" ? relation!["printJobs"] : undefined)
+printTasks: (row) => {
+row.printTasks = PrintTask.findBy({printerId: row.id}, typeof relation!["printTasks"] === "object" ? relation!["printTasks"] : undefined)
 } }
     let ret = db.prepare("SELECT * FROM Printer " + makeWhere(criteria)).all()
     ret = ret.map(row => {
@@ -484,9 +484,9 @@ row.printJobs = PrintJob.findBy({printerId: row.id}, typeof relation!["printJobs
   }
 
 
-  PrintJob.findBy = <T extends Cas<"PrintJob">>(criteria: PrintJobCriteria, relation?: T extends Cas<"PrintJob"> ? T : never) => {
-    const rels: Record<string, (row: any) => void> = { printTasks: (row) => {
-row.printTasks = PrintTask.findBy({printJobId: row.id}, typeof relation!["printTasks"] === "object" ? relation!["printTasks"] : undefined)
+  PrintTask.findBy = <T extends Cas<"PrintTask">>(criteria: PrintTaskCriteria, relation?: T extends Cas<"PrintTask"> ? T : never) => {
+    const rels: Record<string, (row: any) => void> = { printFiles: (row) => {
+row.printFiles = PrintFile.findBy({printTaskId: row.id}, typeof relation!["printFiles"] === "object" ? relation!["printFiles"] : undefined)
 },
 user: (row) => {
 const t = User.findBy({id: row.userId}).at(0)
@@ -498,7 +498,7 @@ const t = Printer.findBy({id: row.printerId}).at(0)
 assert(t)
 row.printer = t
 } }
-    let ret = db.prepare("SELECT * FROM PrintJob " + makeWhere(criteria)).all()
+    let ret = db.prepare("SELECT * FROM PrintTask " + makeWhere(criteria)).all()
     ret = ret.map(row => {
       Object.entries(rels).forEach(([k, v]) => {
         if (relation && Object.keys(relation).includes(k)) {
@@ -512,21 +512,21 @@ row.printer = t
     return ret as any
   }
 
-  PrintJob.insert = (data: CreateModel<PrintJobBase, "id">[]) => {
+  PrintTask.insert = (data: CreateModel<PrintTaskBase, "id">[]) => {
     const values_str = ",(?, ?, ?, ?)".repeat(data.length).slice(1)
-    const stmt = db.prepare('INSERT INTO PrintJob (id, state, userId, printerId) VALUES ' + values_str)
+    const stmt = db.prepare('INSERT INTO PrintTask (id, state, userId, printerId) VALUES ' + values_str)
     const values = data.map(row => [row["id"] ?? null, row["state"], row["userId"], row["printerId"]]).flat()
     return stmt.run(...values)
   }
 
 
-  PrintTask.findBy = <T extends Cas<"PrintTask">>(criteria: PrintTaskCriteria, relation?: T extends Cas<"PrintTask"> ? T : never) => {
-    const rels: Record<string, (row: any) => void> = { printJob: (row) => {
-const t = PrintJob.findBy({id: row.printJobId}).at(0)
+  PrintFile.findBy = <T extends Cas<"PrintFile">>(criteria: PrintFileCriteria, relation?: T extends Cas<"PrintFile"> ? T : never) => {
+    const rels: Record<string, (row: any) => void> = { printTask: (row) => {
+const t = PrintTask.findBy({id: row.printTaskId}).at(0)
 assert(t)
-row.printJob = t
+row.printTask = t
 } }
-    let ret = db.prepare("SELECT * FROM PrintTask " + makeWhere(criteria)).all()
+    let ret = db.prepare("SELECT * FROM PrintFile " + makeWhere(criteria)).all()
     ret = ret.map(row => {
       Object.entries(rels).forEach(([k, v]) => {
         if (relation && Object.keys(relation).includes(k)) {
@@ -541,10 +541,10 @@ _row["tumble"] = Boolean(_row["tumble"])
     return ret as any
   }
 
-  PrintTask.insert = (data: CreateModel<PrintTaskBase, "id">[]) => {
+  PrintFile.insert = (data: CreateModel<PrintFileBase, "id">[]) => {
     const values_str = ",(?, ?, ?, ?, ?, ?, ?)".repeat(data.length).slice(1)
-    const stmt = db.prepare('INSERT INTO PrintTask (id, state, printJobId, fileId, filename, duplex, tumble) VALUES ' + values_str)
-    const values = data.map(row => [row["id"] ?? null, row["state"], row["printJobId"], row["fileId"], row["filename"], Number(row["duplex"]), Number(row["tumble"])]).flat()
+    const stmt = db.prepare('INSERT INTO PrintFile (id, state, printTaskId, fileId, filename, duplex, tumble) VALUES ' + values_str)
+    const values = data.map(row => [row["id"] ?? null, row["state"], row["printTaskId"], row["fileId"], row["filename"], Number(row["duplex"]), Number(row["tumble"])]).flat()
     return stmt.run(...values)
   }
 

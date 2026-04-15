@@ -1,6 +1,6 @@
 import { sendTextMessage, sendMsgMenuMessage } from './send.ts'
 import { downloadMedia } from './download.ts'
-import { WeixinKfUser, PrintJob, PrintTask, Printer, Computer } from '../../models/index.ts'
+import { WeixinKfUser, PrintTask, PrintFile, Printer, Computer } from '../../models/index.ts'
 import { notifyCheckJobs } from '../../ws/index.ts'
 
 export type TextMessage = {
@@ -150,26 +150,26 @@ const handleLogout = async (openKfId: string, externalUserId: string) => {
   }
 }
 
-const handleConfirmById = async (openKfId: string, externalUserId: string, printJobId: number) => {
-  const printJob = PrintJob.findOne({ id: printJobId }, { printer: true })
+const handleConfirmById = async (openKfId: string, externalUserId: string, printTaskId: number) => {
+  const printTask = PrintTask.findOne({ id: printTaskId }, { printer: true })
 
-  if (!printJob) {
+  if (!printTask) {
     await sendTextMessage('未找到对应的打印任务。', openKfId, externalUserId)
     return
   }
 
-  if (printJob.state !== 'waiting_confirmation') {
+  if (printTask.state !== 'waiting_confirmation') {
     await sendTextMessage('该打印任务已处理。', openKfId, externalUserId)
     return
   }
 
-  PrintJob.update({ id: printJobId }, { state: 'waiting_print' })
-  if (printJob.printer) {
-    notifyCheckJobs(printJob.userId, printJob.printer.computerId)
+  PrintTask.update({ id: printTaskId }, { state: 'waiting_print' })
+  if (printTask.printer) {
+    notifyCheckJobs(printTask.userId, printTask.printer.computerId)
   }
 
   await sendTextMessage('✅ 打印任务已确认，等待打印中。', openKfId, externalUserId)
-  console.log(`✅ 已确认打印任务 ID: ${printJobId}`)
+  console.log(`✅ 已确认打印任务 ID: ${printTaskId}`)
 }
 
 const isPresentationFile = (filename: string): boolean => {
@@ -245,8 +245,8 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         const menuMsg = textMessages.find(m => m.text.content.trim() === msg)
         const menuId = menuMsg?.text.menu_id
         if (menuId?.startsWith('confirm_')) {
-          const printJobId = parseInt(menuId.replace('confirm_', ''))
-          await handleConfirmById(kfid, externalUserId, printJobId)
+          const printTaskId = parseInt(menuId.replace('confirm_', ''))
+          await handleConfirmById(kfid, externalUserId, printTaskId)
         }
       }
     }
@@ -272,30 +272,30 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       return
     }
 
-    let existingPrintJob = PrintJob.findBy({
+    let existingPrintTask = PrintTask.findBy({
       userId: kfUser.userId,
       state: 'waiting_confirmation'
     }).pop()
 
-    let printJobId: number
+    let printTaskId: number
     let isNewJob = false
     let printerId: number
 
-    if (existingPrintJob) {
-      printJobId = existingPrintJob.id
-      printerId = existingPrintJob.printerId
-      console.log(`使用现有 PrintJob，ID: ${printJobId}`)
+    if (existingPrintTask) {
+      printTaskId = existingPrintTask.id
+      printerId = existingPrintTask.printerId
+      console.log(`使用现有 PrintTask，ID: ${printTaskId}`)
     } else {
-      const lastJob = PrintJob.findBy({userId: kfUser.userId}, {printTasks: false, printer: false, user: false}).sort((a, b) => b.id - a.id)[0]
-      printerId = lastJob?.printerId ?? defaultComputer.printers[0].id
-      const printJobResult = PrintJob.insert([{
+      const lastTask = PrintTask.findBy({userId: kfUser.userId}, {printFiles: false, printer: false, user: false}).sort((a, b) => b.id - a.id)[0]
+      printerId = lastTask?.printerId ?? defaultComputer.printers[0].id
+      const printTaskResult = PrintTask.insert([{
         state: 'waiting_confirmation',
         userId: kfUser.userId,
         printerId: printerId
       }])
-      printJobId = printJobResult.lastInsertRowid as number
+      printTaskId = printTaskResult.lastInsertRowid as number
       isNewJob = true
-      console.log(`PrintJob 已创建，ID: ${printJobId}`)
+      console.log(`PrintTask 已创建，ID: ${printTaskId}`)
     }
 
     const printer = Printer.findBy({id: printerId}, {computer: true}).at(0)!
@@ -311,19 +311,19 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         return
 
       }
-      const taskResult = PrintTask.insert([{
+      const fileResult = PrintFile.insert([{
         state: 'waiting_print',
-        printJobId: printJobId,
+        printTaskId: printTaskId,
         fileId: result.fileId,
         filename: result.filename,
         duplex: true,
         tumble: isPresentationFile(result.filename)
       }])
-      const taskId = taskResult.lastInsertRowid
-      console.log(`PrintTask 已创建，ID: ${taskId}, 文件: ${result.filename}`)
+      const fileId = fileResult.lastInsertRowid
+      console.log(`PrintFile 已创建，ID: ${fileId}, 文件: ${result.filename}`)
     }))
 
-    const allTasks = PrintTask.findBy({ printJobId })
+    const allFiles = PrintFile.findBy({ printTaskId })
 
     let headContent = isNewJob
       ? `📄 打印工作已创建\n\n`
@@ -332,19 +332,19 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     headContent += `打印机: ${printer.name}\n\n`
     headContent += `文件列表:\n`
 
-    for (const task of allTasks) {
-      const isImage = task.filename.match(/\.(jpg|jpeg|png|gif)$/i)
+    for (const file of allFiles) {
+      const isImage = file.filename.match(/\.(jpg|jpeg|png|gif)$/i)
       const typeLabel = isImage ? '🖼️' : '📄'
-      const duplexLabel = task.duplex ? '双面' : '单面'
-      const tumbleLabel = task.tumble ? '短边' : '长边'
-      headContent += `${typeLabel} ${task.filename} (${duplexLabel}/${tumbleLabel})\n`
+      const duplexLabel = file.duplex ? '双面' : '单面'
+      const tumbleLabel = file.tumble ? '短边' : '长边'
+      headContent += `${typeLabel} ${file.filename} (${duplexLabel}/${tumbleLabel})\n`
     }
 
     await sendMsgMenuMessage(
       headContent,
       [
-        { content: '确认打印', id: `confirm_${printJobId}` },
-        { content: '查看详情', url: `https://superprint.xna00.top/print-job?id=${printJobId}` }
+        { content: '确认打印', id: `confirm_${printTaskId}` },
+        { content: '查看详情', url: `https://superprint.xna00.top/printTask?id=${printTaskId}` }
       ],
       kfid,
       externalUserId
@@ -374,4 +374,3 @@ export const handleMessages = async (_messages: Message[]) => {
   }))
 
 }
-
