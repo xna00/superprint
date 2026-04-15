@@ -172,6 +172,12 @@ const handleConfirmById = async (openKfId: string, externalUserId: string, print
   console.log(`✅ 已确认打印任务 ID: ${printJobId}`)
 }
 
+const isPresentationFile = (filename: string): boolean => {
+  const presentationExts = ['.ppt', '.pptx']
+  const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase()
+  return presentationExts.includes(ext)
+}
+
 const processMediaMessage = async (
   message: Message,
   duplex: boolean = true,
@@ -183,14 +189,16 @@ const processMediaMessage = async (
   }
 
   if (message.msgtype === 'file' && message.file?.media_id) {
-    const result = await downloadMedia(message.file.media_id, duplex, tumble)
+    const fileResult = await downloadMedia(message.file.media_id, duplex, tumble)
 
-    if (!result.filename.toLowerCase().endsWith('.pdf')) {
-      console.log(`文件类型不是PDF: ${result.filename}`)
+    const ext = fileResult.filename.substring(fileResult.filename.lastIndexOf('.')).toLowerCase()
+    const officeExts = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
+    if (!officeExts.includes(ext)) {
+      console.log(`不支持的文件类型: ${fileResult.filename}`)
       return null
     }
 
-    return { ...result, type: 'pdf' }
+    return { ...fileResult, type: 'pdf' }
   }
 
   return null
@@ -309,7 +317,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         fileId: result.fileId,
         filename: result.filename,
         duplex: true,
-        tumble: false
+        tumble: isPresentationFile(result.filename)
       }])
       const taskId = taskResult.lastInsertRowid
       console.log(`PrintTask 已创建，ID: ${taskId}, 文件: ${result.filename}`)

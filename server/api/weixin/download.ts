@@ -30,6 +30,38 @@ const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: boolean
   }
 }
 
+const isOfficeFile = (ext: string): boolean => {
+  const officeExts = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
+  return officeExts.includes(ext.toLowerCase())
+}
+
+const isPresentationFile = (ext: string): boolean => {
+  const presentationExts = ['.ppt', '.pptx']
+  return presentationExts.includes(ext.toLowerCase())
+}
+
+const convertOfficeToPdf = (filePath: string): string | null => {
+  const ext = extname(filePath)
+  if (!isOfficeFile(ext)) return null
+
+  const outputDir = join(UPLOADS_DIR)
+  const absolutePath = filePath.startsWith('/') ? filePath : join(process.cwd(), filePath)
+
+  try {
+    const cmd = `libreoffice --headless --convert-to pdf --outdir "${outputDir}" "${absolutePath}"`
+    execSync(cmd, { stdio: 'ignore', shell: true } as any)
+
+    const pdfPath = filePath.replace(/\.[^.]+$/, '.pdf')
+    if (existsSync(pdfPath)) {
+      return pdfPath
+    }
+    return null
+  } catch (error) {
+    console.error('Office转PDF失败:', error)
+    return null
+  }
+}
+
 const getFilenameFromResponse = (response: Response, mediaId: string): string => {
   const contentDisposition = response.headers.get('content-disposition')
   if (contentDisposition) {
@@ -114,11 +146,19 @@ export const downloadMedia = async (
   const filePath = join(UPLOADS_DIR, fileHash)
   
   writeFileSync(filePath, buffer)
-  
-  if (ext.toLowerCase() === '.pdf') {
+
+  const extLower = ext.toLowerCase()
+
+  if (extLower === '.pdf') {
     convertPdfToPs(filePath, duplex, tumble)
+  } else if (isOfficeFile(extLower)) {
+    const pdfPath = convertOfficeToPdf(filePath)
+    if (pdfPath) {
+      const tumbleForPresentation = isPresentationFile(extLower)
+      convertPdfToPs(pdfPath, duplex, tumbleForPresentation)
+    }
   }
-  
+
   return { fileId: hash, filename }
 }
 
