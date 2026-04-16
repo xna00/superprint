@@ -15,7 +15,7 @@ const ensureUploadsDir = (): void => {
 const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: boolean = false): void => {
   const psPath = pdfPath.replace(/\.pdf$/i, '.ps')
   try {
-    let cmd = `gs -q -dSAFER -dBATCH -dNOPAUSE -sDEVICE=ps2write -r300 -sOutputFile="${psPath}"`
+    let cmd = `gs -q -dSAFER -dBATCH -dNOPAUSE -sDEVICE=ps2write -r300 -sOutputFile="${psPath}" -sPAPERSIZE=a4 -dFIXEDMEDIA -dPDFFitPage`
 
     if (duplex) {
       const duplexSetting = tumble ? 'Duplex true /Tumble true' : 'Duplex true'
