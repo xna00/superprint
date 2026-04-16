@@ -18,8 +18,10 @@ const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: boolean
     let cmd = `gs -q -dSAFER -dBATCH -dNOPAUSE -sDEVICE=ps2write -r300 -sOutputFile="${psPath}"`
 
     if (duplex) {
-      const duplexSetting = tumble ? 'Duplex true /Tumble true' : 'Duplex true'
-      cmd += ` -c '<</PSDocOptions (<</${duplexSetting}>> setpagedevice)>> setdistillerparams'`
+      cmd += ` -dDuplex`
+      if (tumble) {
+        cmd += ` -dTumble`
+      }
     }
 
     cmd += ` -f "${pdfPath}"`
