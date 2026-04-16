@@ -133,3 +133,17 @@ export const fileSucceed = async (id: number) => {
 
     return { success: true }
 }
+
+export const deletePrintTask = async (printTaskId: number) => {
+    const user = await _currentUser()
+    const printTask = PrintTask.findOne({ id: printTaskId })
+
+    if (!printTask || printTask.userId !== user.id) {
+        throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
+    }
+
+    PrintFile.remove({ printTaskId: printTaskId })
+    PrintTask.remove({ id: printTaskId })
+
+    return { success: true }
+}

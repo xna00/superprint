@@ -179,6 +179,36 @@ const handleConfirmById = async (openKfId: string, externalUserId: string, print
   console.log(`✅ 已确认打印任务 ID: ${printTaskId}`)
 }
 
+const handleDeleteById = async (openKfId: string, externalUserId: string, printTaskId: number) => {
+  const kfUser = WeixinKfUser.findOne({ externalUserId })
+  if (!kfUser) {
+    await sendTextMessage('用户未关联。', openKfId, externalUserId)
+    return
+  }
+
+  const printTask = PrintTask.findOne({ id: printTaskId })
+
+  if (!printTask) {
+    await sendTextMessage('未找到对应的打印任务。', openKfId, externalUserId)
+    return
+  }
+
+  if (printTask.userId !== kfUser.userId) {
+    await sendTextMessage('无权删除此任务。', openKfId, externalUserId)
+    return
+  }
+
+  try {
+    PrintFile.remove({ printTaskId: printTaskId })
+    PrintTask.remove({ id: printTaskId })
+    await sendTextMessage('✅ 打印任务已删除。', openKfId, externalUserId)
+    console.log(`✅ 已删除打印任务 ID: ${printTaskId}`)
+  } catch (error) {
+    await sendTextMessage('删除任务失败，请稍后重试。', openKfId, externalUserId)
+    console.error('删除任务失败:', error)
+  }
+}
+
 const isPresentationFile = (filename: string): boolean => {
   const presentationExts = ['.ppt', '.pptx']
   const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase()
@@ -254,6 +284,9 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         if (menuId?.startsWith('confirm_')) {
           const printTaskId = parseInt(menuId.replace('confirm_', ''))
           await handleConfirmById(kfid, externalUserId, printTaskId)
+        } else if (menuId?.startsWith('delete_')) {
+          const printTaskId = parseInt(menuId.replace('delete_', ''))
+          await handleDeleteById(kfid, externalUserId, printTaskId)
         }
       }
     }
@@ -354,6 +387,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       headContent,
       [
         { content: '确认打印', id: `confirm_${printTaskId}` },
+        { content: '删除任务', id: `delete_${printTaskId}` },
         { content: '查看详情', url: printTaskUrl }
       ],
       kfid,
