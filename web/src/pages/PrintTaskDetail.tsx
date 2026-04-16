@@ -144,25 +144,25 @@ export function PrintTaskDetail() {
   const currentPrinter = printers.find(p => p.printerId === (pendingPrinterId ?? data?.printerId))
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className="min-h-screen bg-gray-50 py-4 px-3 sm:py-8 sm:px-4">
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-gray-900">打印任务详情</h1>
-            <div className="flex items-center gap-3">
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">打印任务详情</h1>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {isEditable && (
                 <>
                   <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   >
                     保存
                   </button>
                   <button
                     onClick={handleSaveAndPrint}
                     disabled={saving}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   >
                     保存并打印
                   </button>
@@ -179,7 +179,7 @@ export function PrintTaskDetail() {
             </div>
           </div>
 
-          <div className="mb-6">
+          <div className="mb-4 sm:mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">打印机</label>
             {isEditable ? (
               <select
@@ -202,22 +202,22 @@ export function PrintTaskDetail() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">打印任务</h2>
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">打印任务</h2>
           
           {data?.printFiles.map(file => {
             const pending = pendingFiles.get(file.id)
             return (
-            <div key={file.id} className="border-b border-gray-200 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0">
-              <div className="flex items-center justify-between mb-2">
-                <div className="font-medium text-gray-900">{file.filename}</div>
+            <div key={file.id} className="border-b border-gray-200 pb-3 sm:pb-4 mb-3 sm:mb-4 last:border-0 last:pb-0 last:mb-0">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0 mb-2">
+                <div className="font-medium text-gray-900 text-sm sm:text-base truncate pr-2">{file.filename}</div>
                 <span className={`text-sm ${file.state === 'completed' ? 'text-green-600' : 'text-gray-500'}`}>
                   {file.state === 'completed' ? '已完成' : '等待打印'}
                 </span>
               </div>
               
               {isEditable && pending && (
-                <div className="flex gap-4 mt-2">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-2">
                   <label className="flex items-center">
                     <input
                       type="checkbox"
