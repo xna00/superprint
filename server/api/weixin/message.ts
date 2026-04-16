@@ -4,6 +4,12 @@ import { WeixinKfUser, PrintTask, PrintFile, Printer, Computer } from '../../mod
 import { notifyCheckJobs } from '../../ws/index.ts'
 import { addTokenToUrl } from '../utils.ts'
 
+const generateTaskId = (): number => {
+  const timestamp = Date.now()
+  const random = Math.floor(Math.random() * 1000)
+  return timestamp * 1000 + random
+}
+
 export type TextMessage = {
   content: string
   menu_id?: string
@@ -289,12 +295,13 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     } else {
       const lastTask = PrintTask.findBy({userId: kfUser.userId}, {printFiles: false, printer: false, user: false}).sort((a, b) => b.id - a.id)[0]
       printerId = lastTask?.printerId ?? defaultComputer.printers[0].id
-      const printTaskResult = PrintTask.insert([{
+      printTaskId = generateTaskId()
+      PrintTask.insert([{
+        id: printTaskId,
         state: 'waiting_confirmation',
         userId: kfUser.userId,
         printerId: printerId
       }])
-      printTaskId = printTaskResult.lastInsertRowid as number
       isNewJob = true
       console.log(`PrintTask 已创建，ID: ${printTaskId}`)
     }
