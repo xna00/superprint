@@ -381,6 +381,8 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       headContent += `${typeLabel} ${file.filename} (${duplexLabel}/${tumbleLabel})\n`
     }
 
+    headContent += '\n💡 点击"查看详情"可修改打印设置'
+
     const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, kfUser.userId)
 
     await sendMsgMenuMessage(

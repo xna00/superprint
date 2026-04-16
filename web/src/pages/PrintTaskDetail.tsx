@@ -81,31 +81,43 @@ export function PrintTaskDetail() {
     setPendingFiles(prev => new Map(prev).set(fileId, { duplex, tumble }))
   }
 
-  const handleConfirm = async () => {
+  const saveSettings = async () => {
+    if (!data) return
+    if (pendingPrinterId !== null && pendingPrinterId !== data.printerId) {
+      await api.printTask.updatePrintTask(data.id, pendingPrinterId)
+    }
+    for (const [fileId, options] of pendingFiles) {
+      const original = data.printFiles.find(f => f.id === fileId)
+      if (original && (original.duplex !== options.duplex || original.tumble !== options.tumble)) {
+        await api.printTask.updatePrintFile(fileId, options.duplex, options.tumble)
+      }
+    }
+  }
+
+  const handleSave = async () => {
     if (!data || data.state !== 'waiting_confirmation') return
     setSaving(true)
     setError('')
     try {
-      console.log('=== handleConfirm ===')
-      console.log('data.id:', data.id, typeof data.id)
-      console.log('pendingPrinterId:', pendingPrinterId)
-      console.log('API call args:', [data.id, pendingPrinterId])
-      if (pendingPrinterId !== null && pendingPrinterId !== data.printerId) {
-        console.log('Calling updatePrintTask with:', data.id, pendingPrinterId)
-        const result = await api.printTask.updatePrintTask(data.id, pendingPrinterId)
-        console.log('updatePrintTask result:', result)
-      }
-      for (const [fileId, options] of pendingFiles) {
-        const original = data.printFiles.find(f => f.id === fileId)
-        if (original && (original.duplex !== options.duplex || original.tumble !== options.tumble)) {
-          await api.printTask.updatePrintFile(fileId, options.duplex, options.tumble)
-        }
-      }
+      await saveSettings()
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSaveAndPrint = async () => {
+    if (!data || data.state !== 'waiting_confirmation') return
+    setSaving(true)
+    setError('')
+    try {
+      await saveSettings()
       await api.printTask.confirmPrintTask(data.id)
       await loadData()
     } catch (err) {
-      console.error('Confirm error:', err)
-      setError(err instanceof Error ? err.message : '确认失败')
+      setError(err instanceof Error ? err.message : '保存并打印失败')
     } finally {
       setSaving(false)
     }
@@ -139,13 +151,22 @@ export function PrintTaskDetail() {
             <h1 className="text-2xl font-bold text-gray-900">打印任务详情</h1>
             <div className="flex items-center gap-3">
               {isEditable && (
-                <button
-                  onClick={handleConfirm}
-                  disabled={saving}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  确认打印
-                </button>
+                <>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    保存
+                  </button>
+                  <button
+                    onClick={handleSaveAndPrint}
+                    disabled={saving}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    保存并打印
+                  </button>
+                </>
               )}
               <span className={`px-3 py-1 rounded-full text-sm ${
                 data?.state === 'waiting_confirmation' ? 'bg-yellow-100 text-yellow-800' :
@@ -178,10 +199,6 @@ export function PrintTaskDetail() {
                 {currentPrinter?.computerName} - {currentPrinter?.printerName}
               </div>
             )}
-          </div>
-
-          <div className="text-sm text-gray-500 mb-4">
-            任务ID: {data?.id}
           </div>
         </div>
 
