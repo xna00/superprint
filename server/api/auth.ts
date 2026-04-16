@@ -60,7 +60,7 @@ export const login = async (user: Omit<UserInsert, 'id'> & {
     info.status = 200
     info.headers = {
       'Content-Type': 'application/json',
-      'Set-Cookie': `token=${token}; Path=/; HttpOnly; SameSite=Strict`,
+      'Set-Cookie': `token=${token}; Path=/; SameSite=Strict`,
     }
 
     return {

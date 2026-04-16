@@ -2,6 +2,7 @@ import { sendTextMessage, sendMsgMenuMessage } from './send.ts'
 import { downloadMedia } from './download.ts'
 import { WeixinKfUser, PrintTask, PrintFile, Printer, Computer } from '../../models/index.ts'
 import { notifyCheckJobs } from '../../ws/index.ts'
+import { addTokenToUrl } from '../utils.ts'
 
 export type TextMessage = {
   content: string
@@ -340,11 +341,13 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       headContent += `${typeLabel} ${file.filename} (${duplexLabel}/${tumbleLabel})\n`
     }
 
+    const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, kfUser.userId)
+
     await sendMsgMenuMessage(
       headContent,
       [
         { content: '确认打印', id: `confirm_${printTaskId}` },
-        { content: '查看详情', url: `https://superprint.xna00.top/printTask?id=${printTaskId}` }
+        { content: '查看详情', url: printTaskUrl }
       ],
       kfid,
       externalUserId

@@ -1,6 +1,13 @@
 import { gzipSync } from "node:zlib";
 import { WECOM_ENCODING_AES_KEY } from "./constants.ts";
 
+export const addTokenToUrl = async (url: string, userId: number): Promise<string> => {
+  const parsedUrl = new URL(url)
+  const token = await encryptString(userId.toString())
+  parsedUrl.searchParams.set('token', token)
+  return parsedUrl.toString()
+}
+
 export const succeed = {
   succeed: true,
 };

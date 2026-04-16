@@ -44,7 +44,6 @@ export function PrintTaskDetail() {
 
   const params = new URLSearchParams(window.location.search)
   const printTaskId = params.get('id')
-  const token = localStorage.getItem('token')
 
   useEffect(() => {
     if (!printTaskId) {
@@ -52,12 +51,8 @@ export function PrintTaskDetail() {
       setLoading(false)
       return
     }
-    if (!token) {
-      window.location.href = `/?external_userid=&open_kfid=&redirect=print-job&id=${printTaskId}`
-      return
-    }
     loadData()
-  }, [printTaskId, token])
+  }, [printTaskId])
 
   const loadData = async () => {
     try {
