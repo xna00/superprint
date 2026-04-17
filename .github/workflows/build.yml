@@ -76,24 +76,15 @@ jobs:
           cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="../vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DVCPKG_MANIFEST_INSTALL=OFF -DVCPKG_INSTALLED_DIR="$PWD\vcpkg_installed"
           cmake --build build --config Release
 
-      - name: Download and prepare Chinese language file
+      - name: Create Chinese language file
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
           $langDir = "C:\Program Files (x86)\Inno Setup 5\Languages"
           New-Item -ItemType Directory -Force -Path $langDir | Out-Null
-          
-          $response = Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl"
-          $content = $response.Content
-          
-          $content = $content -replace 'LanguageCodePage=\d+', 'LanguageCodePage=0'
-          
+          $islContent = "; Inno Setup Chinese Simplified`n`n[LangOptions]`nLanguageName=<7B80><4F53><4E2D><6587>`nLanguageID=`$0804`nLanguageCodePage=0`n`n[Messages]`nSetupAppTitle=安装`nSetupWindowTitle=安装 - %1`nButtonNext=下一步`nButtonInstall=安装`nButtonOK=确定`nButtonCancel=取消`nWizardLicense=许可协议`nLicenseLabel=请在继续安装前阅读以下重要信息。`nLicenseAccepted=我同意此协议`nLicenseNotAccepted=我不同意此协议`nWizardSelectDir=选择目标位置`nSelectDirDesc=您想将 [name] 安装在哪里？`nDirExistsTitle=文件夹已存在`nDirExists=文件夹已经存在。`nDirDoesntExistTitle=文件夹不存在`nDirDoesntExist=文件夹不存在。`nWizardReady=准备安装`nReadyLabel1=安装程序准备就绪。`nReadyLabel2a=点击安装继续。`nWizardInstalling=正在安装`nInstallingLabel=正在安装...`nFinishedHeadingLabel=安装完成`nFinishedLabel=安装程序已安装完成。`nClickFinish=点击完成退出。`nWizardUninstalling=卸载`nConfirmUninstall=您确认要卸载 %1 吗？`nUninstallStatusLabel=正在卸载...`nUninstalledAll=已顺利卸载。`n`n[CustomMessages]`nCreateDesktopIcon=创建桌面快捷方式"
           $bom = [byte[]](0xEF, 0xBB, 0xBF)
-          $langBytes = $bom + [System.Text.Encoding]::UTF8.GetBytes($content)
+          $langBytes = $bom + [System.Text.Encoding]::UTF8.GetBytes($islContent)
           [System.IO.File]::WriteAllBytes("$langDir\ChineseSimplified.isl", $langBytes)
-          
-          $issContent = Get-Content "printdriver\installer\PrintDriver.iss" -Raw -Encoding UTF8
-          $issBytes = $bom + [System.Text.Encoding]::UTF8.GetBytes($issContent)
-          [System.IO.File]::WriteAllBytes("printdriver\installer\PrintDriver.iss", $issBytes)
 
       - name: Build Installer
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
