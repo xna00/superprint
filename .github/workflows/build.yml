@@ -95,8 +95,8 @@ jobs:
             Write-Host "Signing PrintDriver.exe..."
             & $signtool.FullName sign /f $pfxPath /p "PrintDriver2024" /fd sha256 "printdriver\output\PrintDriver.exe"
             
-            Write-Host "Signing PrintDriver-Setup.exe..."
-            & $signtool.FullName sign /f $pfxPath /p "PrintDriver2024" /fd sha256 "printdriver\output\PrintDriver-Setup.exe"
+            Write-Host "Signing SuperPrint-Setup.exe..."
+            & $signtool.FullName sign /f $pfxPath /p "PrintDriver2024" /fd sha256 "printdriver\output\SuperPrint-Setup.exe"
           } else {
             Write-Host "Certificate not found, skipping signing"
           }
@@ -111,7 +111,7 @@ jobs:
             $json = @{
               version = $version
               exe = 'PrintDriver.exe'
-              setupexe = 'PrintDriver-Setup.exe'
+              setupexe = 'SuperPrint-Setup.exe'
             } | ConvertTo-Json -Depth 3
             [System.IO.File]::WriteAllText("$PWD\output\printdriver.json", $json, [System.Text.UTF8Encoding]::new($false))
             Write-Host "Generated printdriver.json with version $version"
@@ -123,7 +123,7 @@ jobs:
           name: PrintDriver
           path: |
             printdriver/output/PrintDriver.exe
-            printdriver/output/PrintDriver-Setup.exe
+            printdriver/output/SuperPrint-Setup.exe
             printdriver/output/printdriver.json
 
   build-server:
@@ -241,12 +241,12 @@ jobs:
           fi
           if [ -d "printdriver/output" ] && ls printdriver/output/*.exe printdriver/output/*.json 1> /dev/null 2>&1; then
             cp printdriver/output/PrintDriver.exe static/
-            cp printdriver/output/PrintDriver-Setup.exe static/
+            cp printdriver/output/SuperPrint-Setup.exe static/
             cp printdriver/output/printdriver.json static/
             
             VERSION=$(grep -oP '"version":\s*"\K[^"]+' printdriver/output/printdriver.json)
             cp printdriver/output/PrintDriver.exe "static/PrintDriver-${VERSION}.exe"
-            cp printdriver/output/PrintDriver-Setup.exe "static/PrintDriver-Setup-${VERSION}.exe"
+            cp printdriver/output/SuperPrint-Setup.exe "static/SuperPrint-Setup-${VERSION}.exe"
           fi
 
       - name: Create ZIP archive

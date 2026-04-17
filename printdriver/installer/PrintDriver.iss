@@ -1,6 +1,7 @@
 #define MyAppVersion "1.1.8"
 #define MyAppPublisher "XNA"
-#define MyAppName "超人打印"
+#define MyAppName "SuperPrint"
+#define MyAppDisplayName "超人打印"
 #define MyAppURL "https://github.com/xna00/windevtest"
 #define MyAppExeName "PrintDriver.exe"
 
@@ -13,13 +14,13 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={localappdata}\{#MyAppName}
-DefaultGroupName={#MyAppName}
+DefaultGroupName={#MyAppDisplayName}
 AllowNoIcons=yes
 LicenseFile=
 InfoBeforeFile=
 InfoAfterFile=
 OutputDir=..\output
-OutputBaseFilename=SupermanPrint-Setup
+OutputBaseFilename=SuperPrint-Setup
 SetupIconFile=
 Compression=lzma
 SolidCompression=yes
@@ -37,16 +38,16 @@ Source: "..\build\PrintDriver.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\cert\PrintDriver.cer"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{group}\{#MyAppDisplayName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\Uninstall {#MyAppDisplayName}"; Filename: "{uninstallexe}"
+Name: "{userdesktop}\{#MyAppDisplayName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
-Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "超人打印"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SuperPrint"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue
 
 [Run]
 Filename: "certutil.exe"; Parameters: "-addstore ""TrustedPublisher"" ""{tmp}\PrintDriver.cer"""; Flags: runhidden waituntilterminated; StatusMsg: "Configuring security settings..."
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppDisplayName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
