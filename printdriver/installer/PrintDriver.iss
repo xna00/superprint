@@ -1,11 +1,11 @@
-#define MyAppVersion "1.0.7"
+#define MyAppVersion "1.1.8"
 #define MyAppPublisher "XNA"
-#define MyAppName "PrintDriver"
+#define MyAppName "超人打印"
 #define MyAppURL "https://github.com/xna00/windevtest"
 #define MyAppExeName "PrintDriver.exe"
 
 [Setup]
-AppId={{PrintDriver-2024-1.0.7}}
+AppId={{PrintDriver-2024-1.1.8}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
@@ -19,7 +19,7 @@ LicenseFile=
 InfoBeforeFile=
 InfoAfterFile=
 OutputDir=..\output
-OutputBaseFilename=PrintDriver-Setup
+OutputBaseFilename=超人打印-Setup
 SetupIconFile=
 Compression=lzma
 SolidCompression=yes
@@ -27,11 +27,15 @@ PrivilegesRequired=lowest
 MinVersion=6.0
 
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+
+[Messages]
+chinesesimplified.BeveledLabel=超人打印
+chinesesimplified.SetupAppTitle=安装
+chinesesimplified.SetupWindowTitle=超人打印 - 安装向导
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"; Flags: unchecked
-Name: "autostart"; Description: "Start with Windows"; GroupDescription: "Startup options:"; Flags: checkedonce
+Name: "desktopicon"; Description: "创建桌面快捷方式(&D)"; GroupDescription: "附加图标:"
 
 [Files]
 Source: "..\build\PrintDriver.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -39,16 +43,15 @@ Source: "..\cert\PrintDriver.cer"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
+Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
-Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PrintDriver"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: autostart
+Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "超人打印"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue
 
 [Run]
-Filename: "certutil.exe"; Parameters: "-addstore ""TrustedPublisher"" ""{tmp}\PrintDriver.cer"""; Flags: runhidden waituntilterminated; StatusMsg: "Configuring security settings..."
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
-Filename: "{app}\{#MyAppExeName}"; Flags: nowait runhidden; StatusMsg: "Starting application..."; Check: IsSilentInstall
+Filename: "certutil.exe"; Parameters: "-addstore ""TrustedPublisher"" ""{tmp}\PrintDriver.cer"""; Flags: runhidden waituntilterminated; StatusMsg: "正在配置安全设置..."
+Filename: "{app}\{#MyAppExeName}"; Description: "启动 {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

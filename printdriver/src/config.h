@@ -97,7 +97,7 @@
 #define WINDOW_CLASS_NAME "PrintDriverWindow"
 
 /* 窗口标题 */
-#define WINDOW_TITLE "Print Driver"
+#define WINDOW_TITLE "超人打印"
 
 /* 托盘图标ID */
 #define TRAY_ICON_ID 1
