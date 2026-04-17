@@ -85,6 +85,8 @@ jobs:
           $response = Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl"
           $content = $response.Content
           
+          $content = $content -replace 'LanguageCodePage=\d+', 'LanguageCodePage=0'
+          
           $bom = [byte[]](0xEF, 0xBB, 0xBF)
           $langBytes = $bom + [System.Text.Encoding]::UTF8.GetBytes($content)
           [System.IO.File]::WriteAllBytes("$langDir\ChineseSimplified.isl", $langBytes)
