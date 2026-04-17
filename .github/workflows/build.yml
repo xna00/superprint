@@ -82,6 +82,10 @@ jobs:
           $langDir = "C:\Program Files (x86)\Inno Setup 5\Languages"
           New-Item -ItemType Directory -Force -Path $langDir | Out-Null
           Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl" -OutFile "$langDir\ChineseSimplified.isl"
+          $issContent = Get-Content "printdriver\installer\PrintDriver.iss" -Raw -Encoding UTF8
+          $bom = [byte[]](0xEF, 0xBB, 0xBF)
+          $issBytes = $bom + [System.Text.Encoding]::UTF8.GetBytes($issContent)
+          [System.IO.File]::WriteAllBytes("printdriver\installer\PrintDriver.iss", $issBytes)
 
       - name: Build Installer
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
