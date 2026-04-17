@@ -26,10 +26,10 @@ Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=lowest
 MinVersion=6.0
+DefaultDialogLanguage=chinesesimplified
 
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"; Flags: default
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"
