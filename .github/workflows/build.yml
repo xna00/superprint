@@ -76,6 +76,13 @@ jobs:
           cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="../vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DVCPKG_MANIFEST_INSTALL=OFF -DVCPKG_INSTALLED_DIR="$PWD\vcpkg_installed"
           cmake --build build --config Release
 
+      - name: Download Chinese language file
+        if: steps.cache-printdriver.outputs.cache-hit != 'true'
+        run: |
+          $langDir = "C:\Program Files (x86)\Inno Setup 5\Languages"
+          New-Item -ItemType Directory -Force -Path $langDir | Out-Null
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl" -OutFile "$langDir\ChineseSimplified.isl"
+
       - name: Build Installer
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
