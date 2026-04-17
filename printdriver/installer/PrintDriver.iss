@@ -26,7 +26,6 @@ Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=lowest
 MinVersion=6.0
-DefaultDialogLanguage=chinesesimplified
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"; Flags: default
