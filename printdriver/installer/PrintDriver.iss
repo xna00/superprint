@@ -19,7 +19,7 @@ LicenseFile=
 InfoBeforeFile=
 InfoAfterFile=
 OutputDir=..\output
-OutputBaseFilename=超人打印-Setup
+OutputBaseFilename=SupermanPrint-Setup
 SetupIconFile=
 Compression=lzma
 SolidCompression=yes
@@ -27,15 +27,10 @@ PrivilegesRequired=lowest
 MinVersion=6.0
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
-
-[Messages]
-chinesesimplified.BeveledLabel=超人打印
-chinesesimplified.SetupAppTitle=安装
-chinesesimplified.SetupWindowTitle=超人打印 - 安装向导
+Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "创建桌面快捷方式(&D)"; GroupDescription: "附加图标:"
+Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"
 
 [Files]
 Source: "..\build\PrintDriver.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -43,15 +38,15 @@ Source: "..\cert\PrintDriver.cer"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"
+Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "超人打印"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue
 
 [Run]
-Filename: "certutil.exe"; Parameters: "-addstore ""TrustedPublisher"" ""{tmp}\PrintDriver.cer"""; Flags: runhidden waituntilterminated; StatusMsg: "正在配置安全设置..."
-Filename: "{app}\{#MyAppExeName}"; Description: "启动 {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "certutil.exe"; Parameters: "-addstore ""TrustedPublisher"" ""{tmp}\PrintDriver.cer"""; Flags: runhidden waituntilterminated; StatusMsg: "Configuring security settings..."
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
