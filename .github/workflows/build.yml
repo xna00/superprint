@@ -52,7 +52,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: printdriver/output
-          key: ${{ runner.os }}-printdriver-output-${{ hashFiles('printdriver/src/**', 'printdriver/CMakeLists.txt', 'printdriver/vcpkg.json', 'printdriver/cert/**', 'printdriver/installer/**') }}
+          key: ${{ runner.os }}-printdriver-output-${{ hashFiles('printdriver/src/**', 'printdriver/CMakeLists.txt', 'printdriver/vcpkg.json', 'printdriver/cert/**', 'printdriver/installer/**', 'printdriver/scripts/**') }}
 
       - name: Setup vcpkg
         if: steps.cache-printdriver.outputs.cache-hit != 'true' && steps.cache-vcpkg.outputs.cache-hit != 'true'
@@ -76,29 +76,27 @@ jobs:
           cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="../vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DVCPKG_MANIFEST_INSTALL=OFF -DVCPKG_INSTALLED_DIR="$PWD\vcpkg_installed"
           cmake --build build --config Release
 
-      - name: Build Installer
+      - name: Prepare output files
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
           cd printdriver
           mkdir output -Force
-          copy build\Release\PrintDriver.exe build\PrintDriver.exe
           copy build\Release\PrintDriver.exe output\PrintDriver.exe
-          & (Join-Path 'C:\Program Files (x86)' 'Inno Setup 5\ISCC.exe') installer\PrintDriver.iss
+          copy build\Release\Setup.exe output\Setup.exe
+          Write-Host "Copied exe files from CMake build"
 
       - name: Sign executables
         if: steps.cache-printdriver.outputs.cache-hit != 'true'
         run: |
           $pfxPath = "printdriver\cert\PrintDriver.pfx"
-          if (Test-Path $pfxPath) {
-            $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" | Select-Object -Last 1
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" | Select-Object -Last 1
             
-            Write-Host "Signing PrintDriver.exe..."
-            & $signtool.FullName sign /f $pfxPath /p "PrintDriver2024" /fd sha256 "printdriver\output\PrintDriver.exe"
+          Write-Host "Signing PrintDriver.exe..."
+          & $signtool.FullName sign /f $pfxPath /p "PrintDriver2024" /fd sha256 "printdriver\output\PrintDriver.exe"
             
-            Write-Host "Signing PrintDriver-Setup.exe..."
-            & $signtool.FullName sign /f $pfxPath /p "PrintDriver2024" /fd sha256 "printdriver\output\PrintDriver-Setup.exe"
-          } else {
-            Write-Host "Certificate not found, skipping signing"
+          Write-Host "Signing Setup.exe..."
+          if (Test-Path "printdriver\output\Setup.exe") {
+            & $signtool.FullName sign /f $pfxPath /p "PrintDriver2024" /fd sha256 "printdriver\output\Setup.exe"
           }
 
       - name: Generate version info
@@ -111,7 +109,7 @@ jobs:
             $json = @{
               version = $version
               exe = 'PrintDriver.exe'
-              setupexe = 'PrintDriver-Setup.exe'
+              setupexe = 'Setup.exe'
             } | ConvertTo-Json -Depth 3
             [System.IO.File]::WriteAllText("$PWD\output\printdriver.json", $json, [System.Text.UTF8Encoding]::new($false))
             Write-Host "Generated printdriver.json with version $version"
@@ -123,7 +121,7 @@ jobs:
           name: PrintDriver
           path: |
             printdriver/output/PrintDriver.exe
-            printdriver/output/PrintDriver-Setup.exe
+            printdriver/output/Setup.exe
             printdriver/output/printdriver.json
 
   build-server:
@@ -241,12 +239,12 @@ jobs:
           fi
           if [ -d "printdriver/output" ] && ls printdriver/output/*.exe printdriver/output/*.json 1> /dev/null 2>&1; then
             cp printdriver/output/PrintDriver.exe static/
-            cp printdriver/output/PrintDriver-Setup.exe static/
+            cp printdriver/output/Setup.exe static/
             cp printdriver/output/printdriver.json static/
             
             VERSION=$(grep -oP '"version":\s*"\K[^"]+' printdriver/output/printdriver.json)
             cp printdriver/output/PrintDriver.exe "static/PrintDriver-${VERSION}.exe"
-            cp printdriver/output/PrintDriver-Setup.exe "static/PrintDriver-Setup-${VERSION}.exe"
+            cp printdriver/output/Setup.exe "static/Setup-${VERSION}.exe"
           fi
 
       - name: Create ZIP archive
