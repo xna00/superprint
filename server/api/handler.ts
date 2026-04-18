@@ -51,7 +51,7 @@ export const apiHandler = async (req: Request): Promise<Response> => {
     headers: {},
   };
   try {
-    const tmp = fn(...params);
+    const tmp = fn(params);
     state.id++;
     const ret = await tmp;
     if (ret instanceof Response) res = ret;
