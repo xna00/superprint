@@ -25,14 +25,18 @@ export const check = (currentVersion: string): { downloadUrl?: string; message?:
     }
     
     if (info.version !== currentVersion) {
-      const versionedSetup = `PrintDriver-Setup-${info.version}.exe`;
+      const versionedSetup = `Setup-${info.version}.exe`;
       return {
-        downloadUrl: `https://superprint.xna00.top/${versionedSetup}`,
+	version: info.version,
+        downloadUrls: [`https://superprint.xna00.top/${versionedSetup}`],
         message: `发现新版本 ${info.version}`,
       };
     }
     
-    return {};
+    return {
+	version: info.version,
+	message: '已是最新版本'
+    };
   } catch {
     return {};
   }
