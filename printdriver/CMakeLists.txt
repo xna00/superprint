@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(PrintDriver VERSION 1.1.7 LANGUAGES C)
+project(PrintDriver VERSION 1.1.8 LANGUAGES C)
 
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in"
@@ -22,7 +22,6 @@ set(SOURCES
     src/file_downloader.c
     src/device_id.c
     src/ui.c
-    src/updater.c
 )
 
 set(HEADERS
@@ -37,7 +36,6 @@ set(HEADERS
     src/file_downloader.h
     src/device_id.h
     src/ui.h
-    src/updater.h
     src/version.h
     src/resource.h
 )

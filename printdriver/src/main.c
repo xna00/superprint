@@ -28,8 +28,8 @@
 #include "device_id.h"
 #include "websocket.h"
 #include "ui.h"
-#include "updater.h"
 #include "resource.h"
+#include "version.h"
 
 #include <json-c/json.h>
 
@@ -52,6 +52,7 @@ static char g_username[256] = {0};
 char g_computer_id[256] = {0};
 char g_computer_name[256] = {0};
 static NOTIFYICONDATAW g_nid;
+static BOOL g_update_started = FALSE;
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 void check_current_user_thread(void *arg);
@@ -118,7 +119,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             
             {
                 wchar_t version_log[64];
-                swprintf(version_log, 64, L"PrintDriver v%S", CURRENT_VERSION);
+                swprintf(version_log, 64, L"PrintDriver v%S", PROJECT_VERSION);
                 add_log(version_log);
             }
             
@@ -137,7 +138,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                             old_version[len-1] = '\0';
                         }
                         wchar_t log[256];
-                        swprintf(log, 256, L"更新成功：从 v%S 升级到 v%S", old_version, CURRENT_VERSION);
+                        swprintf(log, 256, L"更新成功：从 v%S 升级到 v%S", old_version, PROJECT_VERSION);
                         add_log(log);
                     }
                     fclose(marker_fp);
@@ -470,12 +471,17 @@ void on_websocket_message(const char *message) {
         if (json_object_object_get_ex(root, "version", &version_obj)) {
             const char *server_version = json_object_get_string(version_obj);
             if (server_version) {
-                if (strcmp(server_version, CURRENT_VERSION) != 0) {
+                if (strcmp(server_version, PROJECT_VERSION) != 0 && !g_update_started) {
+                    g_update_started = TRUE;
                     wchar_t log[256];
-                    swprintf(log, 256, L"发现新版本 %S，正在检查更新...", server_version);
+                    swprintf(log, 256, L"发现新版本 %S，正在启动更新...", server_version);
                     add_log(log);
-                    start_update_check(g_http_client, g_hwnd);
-                } else {
+                    
+                    WCHAR setupPath[MAX_PATH];
+                    GetEnvironmentVariableW(L"LOCALAPPDATA", setupPath, MAX_PATH);
+                    wcscat_s(setupPath, MAX_PATH, L"\\SuperPrint\\Setup.exe");
+                    ShellExecuteW(NULL, L"open", setupPath, L"/update", NULL, SW_HIDE);
+                } else if (strcmp(server_version, PROJECT_VERSION) == 0) {
                     add_log(L"心跳正常，版本一致");
                 }
             }

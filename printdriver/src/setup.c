@@ -691,7 +691,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 SetWindowTextW(hLabelStatus, L"安装完成!");
                 if (!g_isUpdateMode) {
                     SetWindowTextW(hLabelDetail, L"正在启动 超人打印 ...");
-                    ShellExecuteW(NULL, L"open", FinalExePath, NULL, NULL, SW_SHOW);
+                    ShellExecuteW(NULL, L"open", FinalExePath, NULL, InstallDir, SW_SHOW);
                 }
                 g_closeCountdown = 5;
                 SetTimer(hWnd, ID_CLOSE_TIMER, 1000, NULL);
