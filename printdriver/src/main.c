@@ -48,7 +48,7 @@ static HWND g_hwnd;
 static HWND g_status_static;
 HttpClient *g_http_client = NULL;
 static WebSocketClient *g_ws_client = NULL;
-static char g_username[256] = {0};
+char g_username[256] = {0};
 char g_computer_id[256] = {0};
 char g_computer_name[256] = {0};
 static NOTIFYICONDATAW g_nid;
@@ -147,6 +147,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             
             init_printer_tab();
+            init_settings_tab();
             
             if (enum_local_printers(&g_local_printers) != 0) {
                 add_log(L"枚举本地打印机失败");

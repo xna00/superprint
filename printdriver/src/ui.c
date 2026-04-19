@@ -31,12 +31,15 @@ HWND g_btn_enable = NULL;
 HWND g_btn_disable = NULL;
 HWND g_static_computer_name = NULL;
 HWND g_static_printer_list = NULL;
+HWND g_static_username = NULL;
+HWND g_btn_logout = NULL;
 
 PrinterList g_local_printers = {NULL, 0};
 ComputerInfo g_computer_info = {0};
 
 extern HttpClient *g_http_client;
 extern char g_computer_name[256];
+extern char g_username[256];
 
 void add_log(const wchar_t *msg) {
     if (g_log_static && msg) {
@@ -67,9 +70,13 @@ void init_ui_controls(HWND hwnd, HINSTANCE hInst) {
     tci.cchTextMax = 3;
     SendMessageW(g_tab_ctrl, TCM_INSERTITEMW, 0, (LPARAM)&tci);
     
-    tci.pszText = L"打印机设置";
-    tci.cchTextMax = 6;
+    tci.pszText = L"打印机";
+    tci.cchTextMax = 4;
     SendMessageW(g_tab_ctrl, TCM_INSERTITEMW, 1, (LPARAM)&tci);
+    
+    tci.pszText = L"设置";
+    tci.cchTextMax = 3;
+    SendMessageW(g_tab_ctrl, TCM_INSERTITEMW, 2, (LPARAM)&tci);
     
     g_log_static = CreateWindowW(L"LISTBOX", L"", 
         WS_CHILD | WS_VSCROLL | WS_BORDER | LBS_DISABLENOSCROLL, 
@@ -82,8 +89,20 @@ void init_ui_controls(HWND hwnd, HINSTANCE hInst) {
 void on_tab_changed(HWND hwnd) {
     int cur_sel = TabCtrl_GetCurSel(g_tab_ctrl);
     
-    if (cur_sel == 1) {
-        ShowWindow(g_log_static, SW_HIDE);
+    ShowWindow(g_log_static, SW_HIDE);
+    ShowWindow(g_static_computer_name, SW_HIDE);
+    ShowWindow(g_printer_name_edit, SW_HIDE);
+    ShowWindow(g_btn_save_name, SW_HIDE);
+    ShowWindow(g_static_printer_list, SW_HIDE);
+    ShowWindow(g_printer_list_view, SW_HIDE);
+    ShowWindow(g_btn_disable, SW_HIDE);
+    ShowWindow(g_btn_enable, SW_HIDE);
+    ShowWindow(g_static_username, SW_HIDE);
+    ShowWindow(g_btn_logout, SW_HIDE);
+    
+    if (cur_sel == 0) {
+        ShowWindow(g_log_static, SW_SHOW);
+    } else if (cur_sel == 1) {
         ShowWindow(g_static_computer_name, SW_SHOW);
         ShowWindow(g_printer_name_edit, SW_SHOW);
         ShowWindow(g_btn_save_name, SW_SHOW);
@@ -94,15 +113,13 @@ void on_tab_changed(HWND hwnd) {
         
         UpdateWindow(hwnd);
         PostMessageW(hwnd, WM_REFRESH_PRINTER_LIST, 0, 0);
-    } else {
-        ShowWindow(g_static_computer_name, SW_HIDE);
-        ShowWindow(g_printer_name_edit, SW_HIDE);
-        ShowWindow(g_btn_save_name, SW_HIDE);
-        ShowWindow(g_static_printer_list, SW_HIDE);
-        ShowWindow(g_printer_list_view, SW_HIDE);
-        ShowWindow(g_btn_disable, SW_HIDE);
-        ShowWindow(g_btn_enable, SW_HIDE);
-        ShowWindow(g_log_static, SW_SHOW);
+    } else if (cur_sel == 2) {
+        ShowWindow(g_static_username, SW_SHOW);
+        ShowWindow(g_btn_logout, SW_SHOW);
+        
+        wchar_t username_text[300];
+        swprintf(username_text, 300, L"当前用户：%S", g_username[0] ? g_username : "未登录");
+        SetWindowTextW(g_static_username, username_text);
     }
 }
 
@@ -153,6 +170,28 @@ void init_printer_tab(void) {
     g_btn_enable = CreateWindowW(L"BUTTON", L"启用",
         WS_CHILD | BS_PUSHBUTTON,
         130, 510, 100, 28, GetParent(g_tab_ctrl), (HMENU)ID_BTN_ENABLE_PRINTER, NULL, NULL);
+}
+
+void init_settings_tab(void) {
+    g_static_username = CreateWindowW(L"STATIC", L"当前用户：",
+        WS_CHILD,
+        20, 55, 300, 24, g_tab_ctrl, NULL, NULL, NULL);
+    
+    g_btn_logout = CreateWindowW(L"BUTTON", L"退出登录",
+        WS_CHILD | BS_PUSHBUTTON,
+        20, 100, 120, 32, GetParent(g_tab_ctrl), (HMENU)ID_BTN_LOGOUT, NULL, NULL);
+}
+
+void on_logout(void) {
+    WCHAR cookiePath[MAX_PATH];
+    GetEnvironmentVariableW(L"LOCALAPPDATA", cookiePath, MAX_PATH);
+    wcscat_s(cookiePath, MAX_PATH, L"\\SuperPrint\\cookie.txt");
+    
+    DeleteFileW(cookiePath);
+    
+    add_log(L"已退出登录");
+    
+    ExitProcess(0);
 }
 
 void refresh_printer_list(void) {
@@ -404,6 +443,9 @@ void handle_button_click(HWND hwnd, int button_id) {
             break;
         case ID_BTN_DISABLE_PRINTER:
             on_disable_printer();
+            break;
+        case ID_BTN_LOGOUT:
+            on_logout();
             break;
     }
 }
