@@ -30,6 +30,24 @@ const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: boolean
   }
 }
 
+const convertImageToPs = (imagePath: string, duplex: boolean = true, tumble: boolean = false): void => {
+  const psPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.ps')
+  try {
+    let cmd = `gs -q -dSAFER -dBATCH -dNOPAUSE -sDEVICE=ps2write -r300 -sOutputFile="${psPath}" -sPAPERSIZE=a4 -dFIXEDMEDIA -dPDFFitPage`
+
+    if (duplex) {
+      const duplexSetting = tumble ? 'Duplex true /Tumble true' : 'Duplex true'
+      cmd += ` -c '<</PSDocOptions (<</${duplexSetting}>> setpagedevice)>> setdistillerparams'`
+    }
+
+    cmd += ` -f "${imagePath}"`
+
+    execSync(cmd, { stdio: 'ignore', shell: true } as any)
+  } catch (error) {
+    console.error('图片转PS失败:', error)
+  }
+}
+
 const isOfficeFile = (ext: string): boolean => {
   const officeExts = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
   return officeExts.includes(ext.toLowerCase())
@@ -157,6 +175,8 @@ export const downloadMedia = async (
       const tumbleForPresentation = isPresentationFile(extLower)
       convertPdfToPs(pdfPath, duplex, tumbleForPresentation)
     }
+  } else if (['.jpg', '.jpeg', '.png', '.gif'].includes(extLower)) {
+    convertImageToPs(filePath, duplex, tumble)
   }
 
   return { fileId: hash, filename }
