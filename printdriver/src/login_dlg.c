@@ -55,7 +55,7 @@ INT_PTR CALLBACK LoginDialogProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
                 
                 /* 验证输入不为空 */
                 if (wcslen(wusername) == 0 || wcslen(wpassword) == 0) {
-                    MessageBoxW(hwnd, L"Please enter username and password", L"Error", MB_OK | MB_ICONERROR);
+                    MessageBoxW(hwnd, L"请输入用户名和密码", L"错误", MB_OK | MB_ICONERROR);
                     return TRUE;
                 }
                 
@@ -90,7 +90,7 @@ INT_PTR CALLBACK LoginDialogProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
                             /* 登录成功 */
                             g_login_result.success = 1;
                             strncpy(g_login_result.username, username, sizeof(g_login_result.username) - 1);
-                            wcscpy(g_login_result.message, L"Login successful");
+                            wcscpy(g_login_result.message, L"登录成功");
                             
                             /* 从响应中提取token，保存到Cookie */
                             const char *token = json_object_get_string(token_obj);
@@ -108,24 +108,24 @@ INT_PTR CALLBACK LoginDialogProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
                                 const char *msg = json_object_get_string(msg_obj);
                                 MultiByteToWideChar(CP_UTF8, 0, msg, -1, g_login_result.message, sizeof(g_login_result.message) / sizeof(wchar_t));
                             } else {
-                                wcscpy(g_login_result.message, L"Login failed");
+                                wcscpy(g_login_result.message, L"登录失败");
                             }
-                            MessageBoxW(hwnd, g_login_result.message, L"Login Failed", MB_OK | MB_ICONERROR);
+                            MessageBoxW(hwnd, g_login_result.message, L"登录失败", MB_OK | MB_ICONERROR);
                         }
                         json_object_put(root);
                     }
                     free(response);
                 } else {
                     /* 网络请求失败 */
-                    wcscpy(g_login_result.message, L"Connection failed");
-                    MessageBoxW(hwnd, L"Login request failed", L"Error", MB_OK | MB_ICONERROR);
+                    wcscpy(g_login_result.message, L"连接失败");
+                    MessageBoxW(hwnd, L"登录请求失败", L"错误", MB_OK | MB_ICONERROR);
                 }
                 
                 return TRUE;
             }
             else if (LOWORD(wParam) == IDCANCEL) {
                 /* 用户点击了"取消"按钮 */
-                wcscpy(g_login_result.message, L"Login cancelled");
+                wcscpy(g_login_result.message, L"登录已取消");
                 EndDialog(hwnd, IDCANCEL);  /* 关闭对话框，返回IDCANCEL */
                 return TRUE;
             }

@@ -95,7 +95,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     g_nid.uCallbackMessage = WM_TRAYICON;
     g_nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-    wcscpy_s(g_nid.szTip, _countof(g_nid.szTip), L"Print Driver");
+    wcscpy_s(g_nid.szTip, _countof(g_nid.szTip), L"超人打印");
     Shell_NotifyIconW(NIM_ADD, &g_nid);
     
     ShowWindow(g_hwnd, SW_SHOW);
@@ -200,8 +200,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 POINT pt;
                 GetCursorPos(&pt);
                 HMENU hMenu = CreatePopupMenu();
-                AppendMenuW(hMenu, MF_STRING, ID_TRAY_SHOW, L"Show");
-                AppendMenuW(hMenu, MF_STRING, ID_TRAY_EXIT, L"Exit");
+                AppendMenuW(hMenu, MF_STRING, ID_TRAY_SHOW, L"显示");
+                AppendMenuW(hMenu, MF_STRING, ID_TRAY_EXIT, L"退出");
                 SetForegroundWindow(hwnd);
                 TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, NULL);
                 DestroyMenu(hMenu);
