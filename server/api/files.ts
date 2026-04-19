@@ -14,25 +14,18 @@ const MIME_TYPES: Record<string, string> = {
     '.pdf': 'application/pdf',
 }
 
-export const getFile = async (fileId: string) => {
+export const getFile = async (fileName: string) => {
     const user = await _currentUser()
     
-    const files = readdirSync(UPLOADS_DIR)
-    const matchedFile = files.find(f => f.startsWith(fileId) && !f.endsWith('.ps'))
-    
-    if (!matchedFile) {
-        throw new ApiError(404, {}, '文件不存在', 'FILE_NOT_FOUND')
-    }
-    
-    const filePath = join(UPLOADS_DIR, matchedFile)
+    const filePath = join(UPLOADS_DIR, fileName)
     const stream = Readable.toWeb(createReadStream(filePath))
-    const ext = extname(matchedFile).toLowerCase()
+    const ext = extname(fileName).toLowerCase()
     const mimeType = MIME_TYPES[ext] || 'application/octet-stream'
     
     return new Response(stream, {
         headers: {
             'Content-Type': mimeType,
-            'Content-Disposition': `inline; filename="${matchedFile}"`,
+            'Content-Disposition': `inline; filename="${fileName}"`,
         },
     })
 }

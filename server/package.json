@@ -17,12 +17,14 @@
   "description": "",
   "devDependencies": {
     "@types/node": "^22",
+    "@types/pdfkit": "^0.17.6",
     "@types/ws": "^8.18.1",
     "@typescript/native-preview": "^7.0.0-dev.20260401.1",
     "@wecom/crypto": "^1.0.1"
   },
   "dependencies": {
     "@types/uzip": "^0.20201231.2",
+    "pdfkit": "^0.18.0",
     "uzip": "^0.20201231.0",
     "ws": "^8.20.0"
   }

@@ -1,8 +1,9 @@
-import { writeFileSync, existsSync, mkdirSync } from "node:fs"
+import { writeFileSync, readFileSync, existsSync, mkdirSync, createWriteStream } from "node:fs"
 import { join, extname } from "node:path"
 import { createHash } from "node:crypto"
 import { execSync } from "node:child_process"
 import { getAccessToken } from './token.ts'
+import PDFDocument from "pdfkit"
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads')
 
@@ -27,6 +28,61 @@ const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: boolean
     execSync(cmd, { stdio: 'ignore', shell: true } as any)
   } catch (error) {
     console.error('PDF转PS失败:', error)
+  }
+}
+
+const convertImageToPs = (imagePath: string, duplex: boolean = true, tumble: boolean = false): void => {
+  const psPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.ps')
+  const pdfPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.pdf')
+  
+  try {
+    const doc = new PDFDocument({ autoFirstPage: false })
+    const chunks: Buffer[] = []
+    
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk))
+    doc.on('end', () => {
+      const pdfBuffer = Buffer.concat(chunks)
+      writeFileSync(pdfPath, pdfBuffer)
+      console.log('PDFKit: PDF 生成完成')
+      
+      let cmd = `gs -q -dSAFER -dBATCH -dNOPAUSE -sDEVICE=ps2write -r300 -sOutputFile="${psPath}" -sPAPERSIZE=a4 -dFIXEDMEDIA`
+
+      if (duplex) {
+        const duplexSetting = tumble ? 'Duplex true /Tumble true' : 'Duplex true'
+        cmd += ` -c '<</PSDocOptions (<</${duplexSetting}>> setpagedevice)>> setdistillerparams'`
+      }
+
+      cmd += ` -f "${pdfPath}"`
+
+      execSync(cmd, { stdio: 'ignore', shell: true } as any)
+    })
+    
+    const imgBuffer = readFileSync(imagePath)
+    
+    // @ts-ignore - openImage 不在类型定义中但运行时可用
+    const img = doc.openImage(imgBuffer)
+    const isLandscape = img.width > img.height
+    
+    const pageWidth = isLandscape ? 841.89 : 595.28
+    const pageHeight = isLandscape ? 595.28 : 841.89
+    
+    doc.addPage({ size: [pageWidth, pageHeight], margin: 0 })
+    
+    const scale = Math.min(pageWidth / img.width, pageHeight / img.height)
+    const imgWidth = img.width * scale
+    const imgHeight = img.height * scale
+    const x = (pageWidth - imgWidth) / 2
+    const y = (pageHeight - imgHeight) / 2
+    
+    doc.image(imgBuffer, x, y, {
+      width: imgWidth,
+      height: imgHeight
+    })
+    
+    doc.end()
+    
+  } catch (error) {
+    console.error('PDFKit 转PDF失败:', error)
   }
 }
 
@@ -157,6 +213,8 @@ export const downloadMedia = async (
       const tumbleForPresentation = isPresentationFile(extLower)
       convertPdfToPs(pdfPath, duplex, tumbleForPresentation)
     }
+  } else if (['.jpg', '.jpeg', '.png', '.gif'].includes(extLower)) {
+    convertImageToPs(filePath, duplex, tumble)
   }
 
   return { fileId: hash, filename }
