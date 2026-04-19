@@ -270,7 +270,11 @@ int http_get_binary(HttpClient *client, const char *url, const char *cookie, cha
     curl_easy_setopt(client->curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(client->curl, CURLOPT_WRITEDATA, &chunk);
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(client->curl, CURLOPT_CONNECTTIMEOUT, 30L);
+    curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 300L);
+    curl_easy_setopt(client->curl, CURLOPT_LOW_SPEED_LIMIT, 100L);
+    curl_easy_setopt(client->curl, CURLOPT_LOW_SPEED_TIME, 60L);
+    curl_easy_setopt(client->curl, CURLOPT_NOSIGNAL, 1L);
     
     /* 设置Cookie */
     if (cookie) {
