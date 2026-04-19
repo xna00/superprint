@@ -379,7 +379,7 @@ static void CreateUpdateTask(void) {
 
     WCHAR cmd[1024];
     swprintf_s(cmd, sizeof(cmd)/sizeof(WCHAR),
-        L"schtasks /create /tn \"%s\" /tr \"\\\"%s\\\" /update\" /sc minute /mo 5 /f",
+        L"schtasks /create /tn \"%s\" /tr \"\\\"%s\\\" /update\" /sc hourly /f",
         TASK_NAME, setupPath);
 
     STARTUPINFOW si = { sizeof(si) };
