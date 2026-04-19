@@ -518,6 +518,27 @@ static void DoInstall(void) {
         RegCloseKey(hKey);
     }
 
+    WCHAR uninstallKey[MAX_PATH];
+    swprintf_s(uninstallKey, MAX_PATH, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\%s", APP_NAME);
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, uninstallKey, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
+        RegSetValueExW(hKey, L"DisplayName", 0, REG_SZ, (const BYTE*)APP_DISPLAY_NAME, (DWORD)(wcslen(APP_DISPLAY_NAME)+1)*sizeof(WCHAR));
+        RegSetValueExW(hKey, L"DisplayVersion", 0, REG_SZ, (const BYTE*)APP_VERSION, (DWORD)(wcslen(APP_VERSION)+1)*sizeof(WCHAR));
+        
+        WCHAR publisher[] = L"SuperPrint";
+        RegSetValueExW(hKey, L"Publisher", 0, REG_SZ, (const BYTE*)publisher, (DWORD)(wcslen(publisher)+1)*sizeof(WCHAR));
+        
+        WCHAR uninstallCmd[MAX_PATH];
+        swprintf_s(uninstallCmd, MAX_PATH, L"\"%s\" /uninstall", setupPath);
+        RegSetValueExW(hKey, L"UninstallString", 0, REG_SZ, (const BYTE*)uninstallCmd, (DWORD)(wcslen(uninstallCmd)+1)*sizeof(WCHAR));
+        RegSetValueExW(hKey, L"InstallLocation", 0, REG_SZ, (const BYTE*)InstallDir, (DWORD)(wcslen(InstallDir)+1)*sizeof(WCHAR));
+        
+        DWORD noModify = 1;
+        RegSetValueExW(hKey, L"NoModify", 0, REG_DWORD, (const BYTE*)&noModify, sizeof(DWORD));
+        RegSetValueExW(hKey, L"NoRepair", 0, REG_DWORD, (const BYTE*)&noModify, sizeof(DWORD));
+        
+        RegCloseKey(hKey);
+    }
+
     CreateUpdateTask();
 
     PostMessage(hMainWnd, WM_INSTALL_PROGRESS, 95, (LPARAM)L"[5/5] 清理临时文件...");
@@ -605,6 +626,10 @@ static void DoUninstall(void) {
         RegDeleteValueW(hKey, APP_NAME);
         RegCloseKey(hKey);
     }
+
+    WCHAR uninstallKey[MAX_PATH];
+    swprintf_s(uninstallKey, MAX_PATH, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\%s", APP_NAME);
+    RegDeleteKeyW(HKEY_CURRENT_USER, uninstallKey);
 
     DeleteUpdateTask();
 
