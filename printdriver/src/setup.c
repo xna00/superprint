@@ -356,6 +356,14 @@ static BOOL CreateShortcutWithArgs(LPCWSTR targetPath, LPCWSTR args, LPCWSTR sho
             pShellLink->lpVtbl->SetArguments(pShellLink, args);
         }
 
+        WCHAR workingDir[MAX_PATH];
+        wcscpy_s(workingDir, MAX_PATH, targetPath);
+        WCHAR* lastSlash = wcsrchr(workingDir, L'\\');
+        if (lastSlash) {
+            *lastSlash = L'\0';
+            pShellLink->lpVtbl->SetWorkingDirectory(pShellLink, workingDir);
+        }
+
         hr = pShellLink->lpVtbl->QueryInterface(pShellLink, &IID_IPersistFile, (void**)&pPersistFile);
         if (SUCCEEDED(hr)) {
             hr = pPersistFile->lpVtbl->Save(pPersistFile, shortcutPath, TRUE);
