@@ -1,12 +1,5 @@
 /*
  * UI 实现
- * 
- * 功能说明:
- * - Tab控件管理
- * - 日志显示
- * - 打印机设置界面
- * 
- * 本文件包含所有UI相关的函数实现
  */
 
 #include "ui.h"
@@ -21,6 +14,8 @@
 #pragma comment(lib, "comctl32.lib")
 
 #define WM_REFRESH_PRINTER_LIST (WM_USER + 100)
+
+static HFONT g_hFont = NULL;
 
 HWND g_log_static = NULL;
 HWND g_tab_ctrl = NULL;
@@ -40,6 +35,9 @@ ComputerInfo g_computer_info = {0};
 extern HttpClient *g_http_client;
 extern char g_computer_name[256];
 extern char g_username[256];
+extern float g_dpi_scale;
+
+#define SCALE(x) ((int)((x) * g_dpi_scale))
 
 void add_log(const wchar_t *msg) {
     if (g_log_static && msg) {
@@ -59,10 +57,15 @@ void add_log(const wchar_t *msg) {
 }
 
 void init_ui_controls(HWND hwnd, HINSTANCE hInst) {
+    NONCLIENTMETRICSW ncm = { sizeof(ncm) };
+    SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
+    g_hFont = CreateFontIndirectW(&ncm.lfMessageFont);
+    
     g_tab_ctrl = CreateWindowW(WC_TABCONTROLW, L"",
         WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | TCS_RAGGEDRIGHT,
-        0, 0, 600, 600,
+        0, 0, SCALE(510), SCALE(480),
         hwnd, NULL, hInst, NULL);
+    SendMessageW(g_tab_ctrl, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     
     TCITEMW tci = {0};
     tci.mask = TCIF_TEXT;
@@ -78,9 +81,16 @@ void init_ui_controls(HWND hwnd, HINSTANCE hInst) {
     tci.cchTextMax = 3;
     SendMessageW(g_tab_ctrl, TCM_INSERTITEMW, 2, (LPARAM)&tci);
     
+    RECT rc;
+    GetClientRect(g_tab_ctrl, &rc);
+    SendMessageW(g_tab_ctrl, TCM_ADJUSTRECT, FALSE, (LPARAM)&rc);
+    
     g_log_static = CreateWindowW(L"LISTBOX", L"", 
         WS_CHILD | WS_VSCROLL | WS_BORDER | LBS_DISABLENOSCROLL, 
-        10, 30, 560, 540, g_tab_ctrl, NULL, hInst, NULL);
+        rc.left + SCALE(5), rc.top + SCALE(5), 
+        rc.right - rc.left - SCALE(10), rc.bottom - rc.top - SCALE(10),
+        g_tab_ctrl, NULL, hInst, NULL);
+    SendMessageW(g_log_static, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     
     ShowWindow(g_log_static, SW_SHOW);
     add_log(L"程序已启动");
@@ -124,25 +134,35 @@ void on_tab_changed(HWND hwnd) {
 }
 
 void init_printer_tab(void) {
+    RECT rc;
+    GetClientRect(g_tab_ctrl, &rc);
+    SendMessageW(g_tab_ctrl, TCM_ADJUSTRECT, FALSE, (LPARAM)&rc);
+    int w = rc.right - rc.left;
+    
     g_static_computer_name = CreateWindowW(L"STATIC", L"计算机名称：",
         WS_CHILD,
-        20, 55, 120, 20, g_tab_ctrl, NULL, NULL, NULL);
+        rc.left + SCALE(12), rc.top + SCALE(12), SCALE(120), SCALE(27), g_tab_ctrl, NULL, NULL, NULL);
+    SendMessageW(g_static_computer_name, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     
     g_printer_name_edit = CreateWindowW(L"EDIT", L"",
         WS_CHILD | WS_BORDER | ES_AUTOHSCROLL,
-        140, 53, 230, 24, g_tab_ctrl, NULL, NULL, NULL);
+        rc.left + SCALE(135), rc.top + SCALE(8), w - SCALE(255), SCALE(27), g_tab_ctrl, NULL, NULL, NULL);
+    SendMessageW(g_printer_name_edit, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     
     g_btn_save_name = CreateWindowW(L"BUTTON", L"保存",
         WS_CHILD | BS_PUSHBUTTON,
-        380, 53, 80, 24, GetParent(g_tab_ctrl), (HMENU)ID_BTN_SAVE_NAME, NULL, NULL);
+        rc.left + w - SCALE(112), rc.top + SCALE(8), SCALE(90), SCALE(27), GetParent(g_tab_ctrl), (HMENU)ID_BTN_SAVE_NAME, NULL, NULL);
+    SendMessageW(g_btn_save_name, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     
     g_static_printer_list = CreateWindowW(L"STATIC", L"打印机列表：",
         WS_CHILD,
-        20, 95, 100, 20, g_tab_ctrl, NULL, NULL, NULL);
+        rc.left + SCALE(12), rc.top + SCALE(45), SCALE(120), SCALE(27), g_tab_ctrl, NULL, NULL, NULL);
+    SendMessageW(g_static_printer_list, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     
     g_printer_list_view = CreateWindowW(WC_LISTVIEWW, L"",
         WS_CHILD | WS_BORDER | LVS_REPORT | LVS_SINGLESEL,
-        20, 120, 500, 380, g_tab_ctrl, NULL, NULL, NULL);
+        rc.left + SCALE(8), rc.top + SCALE(75), w - SCALE(15), rc.bottom - rc.top - SCALE(120), g_tab_ctrl, NULL, NULL, NULL);
+    SendMessageW(g_printer_list_view, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     
     ListView_SetExtendedListViewStyle(g_printer_list_view, LVS_EX_FULLROWSELECT);
     
@@ -150,36 +170,44 @@ void init_printer_tab(void) {
     lvc.mask = LVCF_TEXT | LVCF_WIDTH;
     lvc.pszText = L"打印机名称";
     lvc.cchTextMax = 6;
-    lvc.cx = 240;
+    lvc.cx = (w - SCALE(22)) / 2;
     SendMessageW(g_printer_list_view, LVM_INSERTCOLUMNW, 0, (LPARAM)&lvc);
     
     lvc.pszText = L"状态";
     lvc.cchTextMax = 3;
-    lvc.cx = 120;
+    lvc.cx = (w - SCALE(22)) / 4;
     SendMessageW(g_printer_list_view, LVM_INSERTCOLUMNW, 1, (LPARAM)&lvc);
     
     lvc.pszText = L"操作";
     lvc.cchTextMax = 3;
-    lvc.cx = 120;
+    lvc.cx = (w - SCALE(22)) / 4;
     SendMessageW(g_printer_list_view, LVM_INSERTCOLUMNW, 2, (LPARAM)&lvc);
     
     g_btn_disable = CreateWindowW(L"BUTTON", L"禁用",
         WS_CHILD | BS_PUSHBUTTON,
-        20, 510, 100, 28, GetParent(g_tab_ctrl), (HMENU)ID_BTN_DISABLE_PRINTER, NULL, NULL);
+        rc.left + SCALE(12), rc.bottom - SCALE(38), SCALE(90), SCALE(30), GetParent(g_tab_ctrl), (HMENU)ID_BTN_DISABLE_PRINTER, NULL, NULL);
+    SendMessageW(g_btn_disable, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     
     g_btn_enable = CreateWindowW(L"BUTTON", L"启用",
         WS_CHILD | BS_PUSHBUTTON,
-        130, 510, 100, 28, GetParent(g_tab_ctrl), (HMENU)ID_BTN_ENABLE_PRINTER, NULL, NULL);
+        rc.left + SCALE(112), rc.bottom - SCALE(38), SCALE(90), SCALE(30), GetParent(g_tab_ctrl), (HMENU)ID_BTN_ENABLE_PRINTER, NULL, NULL);
+    SendMessageW(g_btn_enable, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 }
 
 void init_settings_tab(void) {
+    RECT rc;
+    GetClientRect(g_tab_ctrl, &rc);
+    SendMessageW(g_tab_ctrl, TCM_ADJUSTRECT, FALSE, (LPARAM)&rc);
+    
     g_static_username = CreateWindowW(L"STATIC", L"当前用户：",
         WS_CHILD,
-        20, 55, 300, 24, g_tab_ctrl, NULL, NULL, NULL);
+        rc.left + SCALE(12), rc.top + SCALE(15), SCALE(300), SCALE(27), g_tab_ctrl, NULL, NULL, NULL);
+    SendMessageW(g_static_username, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     
     g_btn_logout = CreateWindowW(L"BUTTON", L"退出登录",
         WS_CHILD | BS_PUSHBUTTON,
-        20, 100, 120, 32, GetParent(g_tab_ctrl), (HMENU)ID_BTN_LOGOUT, NULL, NULL);
+        rc.left + SCALE(12), rc.top + SCALE(52), SCALE(135), SCALE(36), GetParent(g_tab_ctrl), (HMENU)ID_BTN_LOGOUT, NULL, NULL);
+    SendMessageW(g_btn_logout, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 }
 
 void on_logout(void) {

@@ -1,10 +1,5 @@
 /*
  * 登录对话框实现
- * 
- * 功能说明:
- * - 显示用户名密码输入对话框
- * - 调用登录API进行身份验证
- * - 解析服务器响应，提取token
  */
 
 #define CURL_STATICLIB
@@ -16,30 +11,29 @@
 #include <string.h>
 #include <winuser.h>
 
-/* 外部变量：HTTP客户端（由main.c提供） */
 extern HttpClient *g_http_client;
 
-/* 登录结果（全局变量，对话框关闭后由main.c读取） */
 static LoginResult g_login_result;
+static HFONT g_login_font = NULL;
 
-/*
- * 获取登录结果
- * 对话框关闭后，main.c调用此函数获取结果
- */
 LoginResult* get_login_result(void) {
     return &g_login_result;
 }
 
-/*
- * 登录对话框窗口回调函数
- * 处理对话框的消息和用户输入
- */
 INT_PTR CALLBACK LoginDialogProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_INITDIALOG:
-            /* 对话框初始化 */
             g_login_result.success = 0;
             memset(&g_login_result, 0, sizeof(g_login_result));
+            
+            NONCLIENTMETRICSW ncm = { sizeof(ncm) };
+            SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
+            g_login_font = CreateFontIndirectW(&ncm.lfMessageFont);
+            
+            SendMessageW(GetDlgItem(hwnd, IDC_USERNAME), WM_SETFONT, (WPARAM)g_login_font, TRUE);
+            SendMessageW(GetDlgItem(hwnd, IDC_PASSWORD), WM_SETFONT, (WPARAM)g_login_font, TRUE);
+            SendMessageW(GetDlgItem(hwnd, IDOK), WM_SETFONT, (WPARAM)g_login_font, TRUE);
+            SendMessageW(GetDlgItem(hwnd, IDCANCEL), WM_SETFONT, (WPARAM)g_login_font, TRUE);
             return TRUE;
             
         case WM_COMMAND:

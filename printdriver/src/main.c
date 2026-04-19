@@ -1,15 +1,10 @@
 /*
  * PrintDriver - 主程序入口
- * 
- * 功能说明:
- * 1. 系统托盘运行，最小化到托盘
- * 2. 登录验证，与服务器通信
- * 3. WebSocket实时接收打印任务
- * 4. 自动下载并打印文件
- * 5. 打印机设置管理
  */
 
 #define CURL_STATICLIB
+
+#pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 #include <windows.h>
 #include <process.h>
@@ -63,8 +58,23 @@ void on_websocket_message(const char *message);
 void handle_print_job(void);
 void register_computer(void);
 
+float g_dpi_scale = 1.0f;
+
+static float get_dpi_scale(void) {
+    HDC hdc = GetDC(NULL);
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+    ReleaseDC(NULL, hdc);
+    return dpi / 96.0f;
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     g_hInst = hInstance;
+    
+    SetProcessDPIAware();
+    g_dpi_scale = get_dpi_scale();
+    
+    INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_STANDARD_CLASSES | ICC_TAB_CLASSES };
+    InitCommonControlsEx(&icc);
     
     WNDCLASSW wc = {0};
     wc.lpfnWndProc = WndProc;
@@ -78,7 +88,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         L"Print Driver",
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, CW_USEDEFAULT,
-        600, 620,
+        (int)(525 * g_dpi_scale), (int)(525 * g_dpi_scale),
         NULL, NULL,
         hInstance, NULL
     );
