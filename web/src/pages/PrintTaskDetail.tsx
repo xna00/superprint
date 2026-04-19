@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api'
+import { PdfPreview } from '../components/PdfPreview'
 
 interface PrinterOption {
   printerId: number
@@ -41,6 +42,7 @@ export function PrintTaskDetail() {
   const [saving, setSaving] = useState(false)
   const [pendingPrinterId, setPendingPrinterId] = useState<number | null>(null)
   const [pendingFiles, setPendingFiles] = useState<Map<number, { duplex: boolean; tumble: boolean }>>(new Map())
+  const [previewFileId, setPreviewFileId] = useState<string | null>(null)
 
   const params = new URLSearchParams(window.location.search)
   const printTaskId = params.get('id')
@@ -212,10 +214,18 @@ export function PrintTaskDetail() {
             return (
             <div key={file.id} className="border-b border-gray-100 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0">
               <div className="flex items-start justify-between gap-2 mb-2">
-                <span className="font-medium text-gray-900 text-sm sm:text-base break-words flex-1 text-left">{file.filename}</span>
-                <span className={`text-sm whitespace-nowrap ${file.state === 'completed' ? 'text-green-600' : 'text-gray-400'}`}>
-                  {file.state === 'completed' ? '已完成' : '等待打印'}
-                </span>
+                <span className="font-medium text-gray-900 text-sm sm:text-base break-all flex-1 text-left">{file.filename}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPreviewFileId(file.fileId)}
+                    className="text-sm text-indigo-600 hover:text-indigo-800"
+                  >
+                    预览
+                  </button>
+                  <span className={`text-sm whitespace-nowrap ${file.state === 'completed' ? 'text-green-600' : 'text-gray-400'}`}>
+                    {file.state === 'completed' ? '已完成' : '等待打印'}
+                  </span>
+                </div>
               </div>
               
               {isEditable && pending && (
@@ -268,6 +278,10 @@ export function PrintTaskDetail() {
 
         {error && (
           <div className="mt-4 text-red-500 text-center">{error}</div>
+        )}
+
+        {previewFileId && (
+          <PdfPreview fileId={previewFileId} onClose={() => setPreviewFileId(null)} />
         )}
       </div>
     </div>
