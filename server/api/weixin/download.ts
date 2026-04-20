@@ -1,4 +1,4 @@
-import { writeFileSync, readFileSync, existsSync, mkdirSync, createWriteStream } from "node:fs"
+import { writeFileSync, readFileSync, existsSync, mkdirSync, createWriteStream, appendFileSync } from "node:fs"
 import { join, extname } from "node:path"
 import { createHash } from "node:crypto"
 import { execSync } from "node:child_process"
@@ -16,16 +16,21 @@ const ensureUploadsDir = (): void => {
 const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: boolean = false): void => {
   const psPath = pdfPath.replace(/\.pdf$/i, '.ps')
   try {
-    let cmd = `gs -q -dSAFER -dBATCH -dNOPAUSE -sDEVICE=ps2write -r300 -sOutputFile="${psPath}" -sPAPERSIZE=a4 -dFIXEDMEDIA -dPDFFitPage`
-
-    if (duplex) {
-      const duplexSetting = tumble ? 'Duplex true /Tumble true' : 'Duplex true'
-      cmd += ` -c '<</PSDocOptions (<</${duplexSetting}>> setpagedevice)>> setdistillerparams'`
-    }
-
-    cmd += ` -f "${pdfPath}"`
+    let cmd = duplex
+      ? `pdftocairo -ps -level3 -r 300 -paper A4 -expand -duplex "${pdfPath}" "${psPath}"`
+      : `pdftocairo -ps -level3 -r 300 -paper A4 -expand "${pdfPath}" "${psPath}"`
 
     execSync(cmd, { stdio: 'ignore', shell: true } as any)
+
+    if (duplex && tumble) {
+      execSync(`sed -i 's/DuplexNoTumble/DuplexTumble/g' "${psPath}"`, { stdio: 'ignore', shell: true } as any)
+    }
+
+    if (duplex) {
+      const psContent = readFileSync(psPath, 'utf-8')
+      const setpagedevice = `<</Duplex true /Tumble ${tumble}>> setpagedevice\n`
+      writeFileSync(psPath, setpagedevice + psContent, 'utf-8')
+    }
   } catch (error) {
     console.error('PDF转PS失败:', error)
   }
@@ -34,53 +39,58 @@ const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: boolean
 const convertImageToPs = (imagePath: string, duplex: boolean = true, tumble: boolean = false): void => {
   const psPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.ps')
   const pdfPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.pdf')
-  
+
   try {
     const doc = new PDFDocument({ autoFirstPage: false })
     const chunks: Buffer[] = []
-    
+
     doc.on('data', (chunk: Buffer) => chunks.push(chunk))
     doc.on('end', () => {
       const pdfBuffer = Buffer.concat(chunks)
       writeFileSync(pdfPath, pdfBuffer)
       console.log('PDFKit: PDF 生成完成')
-      
-      let cmd = `gs -q -dSAFER -dBATCH -dNOPAUSE -sDEVICE=ps2write -r300 -sOutputFile="${psPath}" -sPAPERSIZE=a4 -dFIXEDMEDIA`
 
-      if (duplex) {
-        const duplexSetting = tumble ? 'Duplex true /Tumble true' : 'Duplex true'
-        cmd += ` -c '<</PSDocOptions (<</${duplexSetting}>> setpagedevice)>> setdistillerparams'`
-      }
-
-      cmd += ` -f "${pdfPath}"`
+      let cmd = duplex
+        ? `pdftocairo -ps -level3 -r 300 -paper A4 -expand -duplex "${pdfPath}" "${psPath}"`
+        : `pdftocairo -ps -level3 -r 300 -paper A4 -expand "${pdfPath}" "${psPath}"`
 
       execSync(cmd, { stdio: 'ignore', shell: true } as any)
+
+      if (duplex && tumble) {
+        execSync(`sed -i 's/DuplexNoTumble/DuplexTumble/g' "${psPath}"`, { stdio: 'ignore', shell: true } as any)
+      }
+
+      if (duplex) {
+        const psContent = readFileSync(psPath, 'utf-8')
+        const setpagedevice = `<</Duplex true /Tumble ${tumble}>> setpagedevice\n`
+        writeFileSync(psPath, setpagedevice + psContent, 'utf-8')
+      }
     })
-    
+
     const imgBuffer = readFileSync(imagePath)
-    
+
     // @ts-ignore - openImage 不在类型定义中但运行时可用
     const img = doc.openImage(imgBuffer)
     const isLandscape = img.width > img.height
-    
+
     const pageWidth = isLandscape ? 841.89 : 595.28
     const pageHeight = isLandscape ? 595.28 : 841.89
-    
+
     doc.addPage({ size: [pageWidth, pageHeight], margin: 0 })
-    
+
     const scale = Math.min(pageWidth / img.width, pageHeight / img.height)
     const imgWidth = img.width * scale
     const imgHeight = img.height * scale
     const x = (pageWidth - imgWidth) / 2
     const y = (pageHeight - imgHeight) / 2
-    
+
     doc.image(imgBuffer, x, y, {
       width: imgWidth,
       height: imgHeight
     })
-    
+
     doc.end()
-    
+
   } catch (error) {
     console.error('PDFKit 转PDF失败:', error)
   }
@@ -128,7 +138,7 @@ const getFilenameFromResponse = (response: Response, mediaId: string): string =>
       return decodeURIComponent(filename)
     }
   }
-  
+
   const contentType = response.headers.get('content-type')
   const ext = getExtensionFromContentType(contentType)
   return `${mediaId}${ext}`
@@ -136,7 +146,7 @@ const getFilenameFromResponse = (response: Response, mediaId: string): string =>
 
 const getExtensionFromContentType = (contentType: string | null): string => {
   if (!contentType) return ''
-  
+
   const typeMap: Record<string, string> = {
     'image/jpeg': '.jpg',
     'image/png': '.png',
@@ -151,13 +161,13 @@ const getExtensionFromContentType = (contentType: string | null): string => {
     'application/vnd.ms-powerpoint': '.ppt',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
   }
-  
+
   for (const [type, ext] of Object.entries(typeMap)) {
     if (contentType.includes(type)) {
       return ext
     }
   }
-  
+
   return ''
 }
 
@@ -172,16 +182,16 @@ export const downloadMedia = async (
   tumble: boolean = false
 ): Promise<DownloadResult> => {
   ensureUploadsDir()
-  
+
   const accessToken = await getAccessToken()
   const url = `https://qyapi.weixin.qq.com/cgi-bin/media/get?access_token=${accessToken}&media_id=${mediaId}`
-  
+
   const response = await fetch(url)
-  
+
   if (!response.ok) {
     throw new Error(`下载文件失败: HTTP ${response.status}`)
   }
-  
+
   const contentType = response.headers.get('content-type')
   if (contentType?.includes('application/json')) {
     const errorData = await response.json() as { errcode?: number; errmsg?: string }
@@ -189,18 +199,18 @@ export const downloadMedia = async (
       throw new Error(`下载文件失败: ${errorData.errmsg} (errcode: ${errorData.errcode})`)
     }
   }
-  
+
   const filename = getFilenameFromResponse(response, mediaId)
-  
+
   const arrayBuffer = await response.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
-  
+
   const hash = createHash('sha256').update(buffer).digest('hex').slice(0, 16)
   const ext = extname(filename)
   const fileHash = hash + ext
-  
+
   const filePath = join(UPLOADS_DIR, fileHash)
-  
+
   writeFileSync(filePath, buffer)
 
   const extLower = ext.toLowerCase()
