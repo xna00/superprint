@@ -534,17 +534,17 @@ void handle_print_job(void) {
         char local_path[MAX_PATH];
         if (download_file_to_local(g_http_client, files[i].file_id, files[i].filename, local_path, sizeof(local_path)) != 0) {
             add_log(L"下载文件失败");
-            report_file_succeeded(g_http_client, files[i].id);
+            report_file_succeeded(g_http_client, files[i].file_id);
             continue;
         }
-        
+
         if (print_file(local_path, files[i].printer_name) != 0) {
             add_log(L"打印失败");
-            report_file_succeeded(g_http_client, files[i].id);
+            report_file_succeeded(g_http_client, files[i].file_id);
             continue;
         }
-        
-        if (report_file_succeeded(g_http_client, files[i].id) == 0) {
+
+        if (report_file_succeeded(g_http_client, files[i].file_id) == 0) {
             add_log(L"任务完成");
         } else {
             add_log(L"上报任务状态失败");
