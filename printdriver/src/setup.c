@@ -245,7 +245,7 @@ static BOOL HttpPostJsonSingle(LPCWSTR url, LPCSTR jsonBody, char* response, DWO
         return FALSE;
     }
 
-    LPCSTR headers = "Content-Type: application/json\r\nAccept-Encoding: gzip, deflate\r\n";
+    LPCSTR headers = "Content-Type: application/json\r\n";
     BOOL success = HttpSendRequestA(hRequest, headers, (DWORD)strlen(headers), (LPVOID)jsonBody, (DWORD)strlen(jsonBody));
     
     if (success) {
