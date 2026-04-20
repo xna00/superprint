@@ -70,6 +70,14 @@ static float get_dpi_scale(void) {
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    WCHAR exePath[MAX_PATH];
+    GetModuleFileNameW(NULL, exePath, MAX_PATH);
+    WCHAR* lastSlash = wcsrchr(exePath, L'\\');
+    if (lastSlash) {
+        *lastSlash = L'\0';
+        SetCurrentDirectoryW(exePath);
+    }
+    
     srand((unsigned int)time(NULL));
     
     g_hInst = hInstance;
