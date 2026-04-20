@@ -114,8 +114,9 @@ int http_get(HttpClient *client, const char *url, char **response, long *status_
     curl_easy_setopt(client->curl, CURLOPT_URL, url);
     curl_easy_setopt(client->curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(client->curl, CURLOPT_WRITEDATA, &chunk);
-    curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);  /* 自动跟随重定向 */
-    curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);  /* 30秒超时 */
+    curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
+    curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
     
     CURLcode res = curl_easy_perform(client->curl);
     
@@ -149,6 +150,7 @@ int http_post(HttpClient *client, const char *url, const char *post_data, char *
     curl_easy_setopt(client->curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(client->curl, CURLOPT_WRITEDATA, &chunk);
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(client->curl, CURLOPT_HEADERFUNCTION, header_callback);
     curl_easy_setopt(client->curl, CURLOPT_HEADERDATA, &cookie_header);
@@ -199,6 +201,7 @@ int http_post_with_body(HttpClient *client, const char *url, const char *post_da
     curl_easy_setopt(client->curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(client->curl, CURLOPT_WRITEDATA, &chunk);
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
     
     struct curl_slist *headers = NULL;
@@ -234,6 +237,7 @@ int http_get_with_cookie(HttpClient *client, const char *url, const char *cookie
     curl_easy_setopt(client->curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(client->curl, CURLOPT_WRITEDATA, &chunk);
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
     
     /* 设置Cookie */
@@ -270,6 +274,7 @@ int http_get_binary(HttpClient *client, const char *url, const char *cookie, cha
     curl_easy_setopt(client->curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(client->curl, CURLOPT_WRITEDATA, &chunk);
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
     curl_easy_setopt(client->curl, CURLOPT_CONNECTTIMEOUT, 30L);
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 300L);
     curl_easy_setopt(client->curl, CURLOPT_LOW_SPEED_LIMIT, 100L);
@@ -369,6 +374,7 @@ int http_post_with_client_cookie(HttpClient *client, const char *url, const char
     curl_easy_setopt(client->curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(client->curl, CURLOPT_WRITEDATA, &chunk);
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
     
     /* 使用已保存的Cookie进行身份验证 */
