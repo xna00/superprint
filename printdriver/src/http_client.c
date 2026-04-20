@@ -8,6 +8,7 @@
 #define CURL_STATICLIB
 #include "http_client.h"
 #include "config.h"
+#include "version.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -117,7 +118,11 @@ int http_get(HttpClient *client, const char *url, char **response, long *status_
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
-    
+
+    char user_agent[64];
+    snprintf(user_agent, sizeof(user_agent), "SuperPrint-Printdriver/%s", PROJECT_VERSION);
+    curl_easy_setopt(client->curl, CURLOPT_USERAGENT, user_agent);
+
     CURLcode res = curl_easy_perform(client->curl);
     
     if (res != CURLE_OK) {

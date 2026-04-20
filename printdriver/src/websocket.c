@@ -8,6 +8,7 @@
 #define CURL_STATICLIB
 #include "websocket.h"
 #include "config.h"
+#include "version.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,7 +79,11 @@ int ws_connect(WebSocketClient *ws, const char *url) {
     curl_easy_setopt(ws->curl, CURLOPT_WRITEFUNCTION, ws_write_callback);
     curl_easy_setopt(ws->curl, CURLOPT_WRITEDATA, &response);
     curl_easy_setopt(ws->curl, CURLOPT_TIMEOUT, 30L);
-    
+
+    char user_agent[64];
+    snprintf(user_agent, sizeof(user_agent), "SuperPrint-Printdriver/%s", PROJECT_VERSION);
+    curl_easy_setopt(ws->curl, CURLOPT_USERAGENT, user_agent);
+
     /* 设置认证Cookie */
     if (ws->cookie) {
         curl_easy_setopt(ws->curl, CURLOPT_COOKIE, ws->cookie);
