@@ -119,9 +119,9 @@ int get_waiting_print_files(HttpClient *client, const char *computer_id, PrintFi
         if (json_object_object_get_ex(task, "id", &task_id_obj) &&
             json_object_object_get_ex(task, "printFiles", &print_files_obj)) {
             
-            int task_id_int = json_object_get_int(task_id_obj);
+            const char *task_id_str = json_object_get_string(task_id_obj);
             char print_task_id[32];
-            snprintf(print_task_id, sizeof(print_task_id), "%d", task_id_int);
+            strncpy_s(print_task_id, sizeof(print_task_id), task_id_str ? task_id_str : "", _TRUNCATE);
             
             int file_count = json_object_array_length(print_files_obj);
             
