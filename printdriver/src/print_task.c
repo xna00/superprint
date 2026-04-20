@@ -119,9 +119,9 @@ int get_waiting_print_files(HttpClient *client, const char *computer_id, PrintFi
         if (json_object_object_get_ex(task, "id", &task_id_obj) &&
             json_object_object_get_ex(task, "printFiles", &print_files_obj)) {
             
-            const char *task_id_str = json_object_get_string(task_id_obj);
+            int task_id_int = json_object_get_int(task_id_obj);
             char print_task_id[32];
-            strncpy_s(print_task_id, sizeof(print_task_id), task_id_str ? task_id_str : "", _TRUNCATE);
+            snprintf(print_task_id, sizeof(print_task_id), "%d", task_id_int);
             
             int file_count = json_object_array_length(print_files_obj);
             
@@ -135,12 +135,14 @@ int get_waiting_print_files(HttpClient *client, const char *computer_id, PrintFi
             for (int j = 0; j < file_count; j++) {
                 json_object *file = json_object_array_get_idx(print_files_obj, j);
                 
-                json_object *file_id_obj, *filename_obj;
-                if (json_object_object_get_ex(file, "fileId", &file_id_obj)) {
-
-                    strncpy_s((*files)[*count].print_task_id, sizeof((*files)[*count].print_task_id), task_id_str ? task_id_str : "", _TRUNCATE);
-
+                json_object *id_obj, *file_id_obj, *filename_obj;
+                if (json_object_object_get_ex(file, "id", &id_obj) &&
+                    json_object_object_get_ex(file, "fileId", &file_id_obj)) {
+                    
+                    (*files)[*count].id = json_object_get_int(id_obj);
+                    
                     const char *file_id_str = json_object_get_string(file_id_obj);
+                    snprintf((*files)[*count].print_task_id, sizeof((*files)[*count].print_task_id), "%s", print_task_id);
                     strncpy_s((*files)[*count].file_id, sizeof((*files)[*count].file_id), file_id_str ? file_id_str : "", _TRUNCATE);
                     strncpy_s((*files)[*count].printer_name, sizeof((*files)[*count].printer_name), printer_name, _TRUNCATE);
                     
@@ -171,10 +173,10 @@ int get_waiting_print_files(HttpClient *client, const char *computer_id, PrintFi
  * 通知服务器某个文件已打印完成
  * 使用POST请求，body格式: [id]
  */
-int report_file_succeeded(HttpClient *client, const char *file_id) {
+int report_file_succeeded(HttpClient *client, int id) {
     /* 构建请求body，格式为JSON数组 */
     char json_body[256];
-    snprintf(json_body, sizeof(json_body), "[%s]", file_id);
+    snprintf(json_body, sizeof(json_body), "[%d]", id);
     
     char *response = NULL;
     long status_code = 0;
@@ -182,16 +184,13 @@ int report_file_succeeded(HttpClient *client, const char *file_id) {
     /* 发送POST请求 */
     int ret = http_post_with_client_cookie(client, API_FILE_SUCCEED, json_body, &response, &status_code);
     
-    wchar_t wide_file_id[256];
-    MultiByteToWideChar(CP_UTF8, 0, file_id, -1, wide_file_id, 256);
-
     if (ret == 0 && status_code == 200) {
         wchar_t log[256];
-        swprintf(log, 256, L"文件 %s 已上报成功", wide_file_id);
+        swprintf(log, 256, L"文件 %d 已上报成功", id);
         add_log(log);
     } else {
         wchar_t log[256];
-        swprintf(log, 256, L"上报文件状态失败 %s (状态码: %ld)", wide_file_id, status_code);
+        swprintf(log, 256, L"上报文件状态失败 %d (状态码: %ld)", id, status_code);
         add_log(log);
     }
     
