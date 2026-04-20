@@ -13,9 +13,9 @@
 #include <curl/curl.h>
 
 /* ==================== 配置常量 ==================== */
-#define WS_RECONNECT_DELAY 5000      /* 重连延迟（毫秒） */
-#define WS_MAX_RECONNECT_ATTEMPTS 10 /* 最大重连尝试次数 */
-#define WS_TIMEOUT 60000             /* 连接超时（毫秒）- 超过此时间没收到消息则认为断开 */
+#define WS_RECONNECT_DELAY_MIN 10000  /* 重连最小延迟（毫秒） */
+#define WS_RECONNECT_DELAY_MAX 30000  /* 重连最大延迟（毫秒） */
+#define WS_TIMEOUT 60000              /* 连接超时（毫秒）- 超过此时间没收到消息则认为断开 */
 
 /* ==================== 类型定义 ==================== */
 /*

@@ -13,6 +13,8 @@
 #include <commctrl.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <time.h>
 
 #include "config.h"
 #include "http_client.h"
@@ -68,6 +70,8 @@ static float get_dpi_scale(void) {
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    srand((unsigned int)time(NULL));
+    
     g_hInst = hInstance;
     
     SetProcessDPIAware();
@@ -400,17 +404,14 @@ void connect_websocket(void) {
     }
     
     while (g_ws_client->should_reconnect) {
-        if (g_ws_client->reconnect_attempts >= WS_MAX_RECONNECT_ATTEMPTS) {
-            add_log(L"已达到最大重连次数，停止重连");
-            break;
-        }
-        
         if (g_ws_client->reconnect_attempts > 0) {
+            int delay_sec = WS_RECONNECT_DELAY_MIN / 1000 + 
+                            rand() % ((WS_RECONNECT_DELAY_MAX - WS_RECONNECT_DELAY_MIN) / 1000 + 1);
             wchar_t log[128];
             swprintf(log, 128, L"第 %d 次重连，等待 %d 秒...", 
-                     g_ws_client->reconnect_attempts, WS_RECONNECT_DELAY / 1000);
+                     g_ws_client->reconnect_attempts, delay_sec);
             add_log(log);
-            Sleep(WS_RECONNECT_DELAY);
+            Sleep(delay_sec * 1000);
         }
         
         if (ws_connect(g_ws_client, API_WEBSOCKET_URL) == 0) {
@@ -443,8 +444,8 @@ void connect_websocket(void) {
         } else {
             g_ws_client->reconnect_attempts++;
             wchar_t log[128];
-            swprintf(log, 128, L"连接服务器失败 (尝试 %d/%d)", 
-                     g_ws_client->reconnect_attempts, WS_MAX_RECONNECT_ATTEMPTS);
+            swprintf(log, 128, L"连接服务器失败，第 %d 次尝试", 
+                     g_ws_client->reconnect_attempts);
             add_log(log);
         }
     }
