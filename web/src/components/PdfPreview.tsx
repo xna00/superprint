@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
 
 interface PdfPreviewProps {
   fileId: string
@@ -25,37 +25,60 @@ export function PdfPreview({ fileId, onClose }: PdfPreviewProps) {
       setLoading(true)
       setError('')
 
+      console.log('[PDF] 开始加载, fileId:', fileId, 'page:', currentPage, 'scale:', scale)
+
       const response = await fetch(`/api/files/getFile?data=["${fileId}.pdf"]`)
+      console.log('[PDF] fetch完成, status:', response.status, 'ok:', response.ok)
+
       if (!response.ok) {
-        throw new Error('文件加载失败')
+        throw new Error('文件加载失败, status: ' + response.status)
       }
 
       const arrayBuffer = await response.arrayBuffer()
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      console.log('[PDF] 文件大小:', arrayBuffer.byteLength)
 
-      if (!canvasRef.current) return
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      console.log('[PDF] 解析完成, 页数:', pdf.numPages)
+
+      if (!canvasRef.current) {
+        console.log('[PDF] canvasRef.current 为空')
+        return
+      }
 
       const page = await pdf.getPage(currentPage)
+      console.log('[PDF] 获取页面完成, pageNum:', page.pageNumber)
+
       const viewport = page.getViewport({ scale })
+      console.log('[PDF] viewport尺寸:', viewport.width, 'x', viewport.height)
 
       const canvas = canvasRef.current
       const context = canvas.getContext('2d')
-      if (!context) return
+      console.log('[PDF] canvas context:', context)
+
+      if (!context) {
+        console.log('[PDF] context获取失败')
+        return
+      }
 
       canvas.height = viewport.height
       canvas.width = viewport.width
+      console.log('[PDF] canvas尺寸设置:', canvas.width, 'x', canvas.height)
 
       await page.render({
         canvasContext: context,
         viewport,
-        canvas,
       }).promise
+      console.log('[PDF] 渲染完成')
 
       setNumPages(pdf.numPages)
+      console.log('[PDF] 设置页数:', pdf.numPages)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
+      const errMsg = err instanceof Error ? err.message : String(err)
+      console.error('[PDF] 错误:', errMsg)
+      setError(errMsg)
     } finally {
       setLoading(false)
+      console.log('[PDF] 加载结束')
     }
   }
 

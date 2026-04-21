@@ -9,10 +9,10 @@ const initDebugMode = async () => {
 
   try {
     // @ts-expect-error - dynamic import from CDN
-    const VC = await import('https://esm.sh/vconsole@latest')
-    new VC.default()
+    const eruda = await import('https://esm.sh/eruda@latest')
+    eruda.default.init()
   } catch (e) {
-    console.error('Failed to load vConsole:', e)
+    console.error('Failed to load eruda:', e)
   }
 }
 
