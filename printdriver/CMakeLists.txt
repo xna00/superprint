@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(PrintDriver VERSION 1.2.11 LANGUAGES C)
+project(PrintDriver VERSION 1.2.14 LANGUAGES C)
 
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/version.h.in"

@@ -8,6 +8,7 @@
 #define CURL_STATICLIB
 #include "http_client.h"
 #include "config.h"
+#include "version.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -117,7 +118,11 @@ int http_get(HttpClient *client, const char *url, char **response, long *status_
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
-    
+
+    char user_agent[64];
+    snprintf(user_agent, sizeof(user_agent), "SuperPrint-Printdriver/%s", PROJECT_VERSION);
+    curl_easy_setopt(client->curl, CURLOPT_USERAGENT, user_agent);
+
     CURLcode res = curl_easy_perform(client->curl);
     
     if (res != CURLE_OK) {
@@ -152,6 +157,11 @@ int http_post(HttpClient *client, const char *url, const char *post_data, char *
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
+
+    char user_agent[64];
+    snprintf(user_agent, sizeof(user_agent), "SuperPrint-Printdriver/%s", PROJECT_VERSION);
+    curl_easy_setopt(client->curl, CURLOPT_USERAGENT, user_agent);
+
     curl_easy_setopt(client->curl, CURLOPT_HEADERFUNCTION, header_callback);
     curl_easy_setopt(client->curl, CURLOPT_HEADERDATA, &cookie_header);
     curl_easy_setopt(client->curl, CURLOPT_POSTFIELDSIZE, strlen(post_data));
@@ -203,7 +213,11 @@ int http_post_with_body(HttpClient *client, const char *url, const char *post_da
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
-    
+
+    char user_agent[64];
+    snprintf(user_agent, sizeof(user_agent), "SuperPrint-Printdriver/%s", PROJECT_VERSION);
+    curl_easy_setopt(client->curl, CURLOPT_USERAGENT, user_agent);
+
     struct curl_slist *headers = NULL;
     headers = curl_slist_append(headers, "Content-Type: application/json");
     curl_easy_setopt(client->curl, CURLOPT_HTTPHEADER, headers);
@@ -239,7 +253,11 @@ int http_get_with_cookie(HttpClient *client, const char *url, const char *cookie
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
-    
+
+    char user_agent[64];
+    snprintf(user_agent, sizeof(user_agent), "SuperPrint-Printdriver/%s", PROJECT_VERSION);
+    curl_easy_setopt(client->curl, CURLOPT_USERAGENT, user_agent);
+
     /* 设置Cookie */
     if (cookie) {
         curl_easy_setopt(client->curl, CURLOPT_COOKIE, cookie);
@@ -280,7 +298,11 @@ int http_get_binary(HttpClient *client, const char *url, const char *cookie, cha
     curl_easy_setopt(client->curl, CURLOPT_LOW_SPEED_LIMIT, 100L);
     curl_easy_setopt(client->curl, CURLOPT_LOW_SPEED_TIME, 60L);
     curl_easy_setopt(client->curl, CURLOPT_NOSIGNAL, 1L);
-    
+
+    char user_agent[64];
+    snprintf(user_agent, sizeof(user_agent), "SuperPrint-Printdriver/%s", PROJECT_VERSION);
+    curl_easy_setopt(client->curl, CURLOPT_USERAGENT, user_agent);
+
     /* 设置Cookie */
     if (cookie) {
         curl_easy_setopt(client->curl, CURLOPT_COOKIE, cookie);
@@ -376,7 +398,11 @@ int http_post_with_client_cookie(HttpClient *client, const char *url, const char
     curl_easy_setopt(client->curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(client->curl, CURLOPT_ACCEPT_ENCODING, "gzip, deflate");
     curl_easy_setopt(client->curl, CURLOPT_TIMEOUT, 30L);
-    
+
+    char user_agent[64];
+    snprintf(user_agent, sizeof(user_agent), "SuperPrint-Printdriver/%s", PROJECT_VERSION);
+    curl_easy_setopt(client->curl, CURLOPT_USERAGENT, user_agent);
+
     /* 使用已保存的Cookie进行身份验证 */
     if (client->cookie) {
         curl_easy_setopt(client->curl, CURLOPT_COOKIE, client->cookie);

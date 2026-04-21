@@ -101,7 +101,9 @@ static BOOL DeleteFileAndDirectory(LPCWSTR path) {
 }
 
 static BOOL DownloadFileSingle(LPCWSTR url, LPCWSTR localPath) {
-    HINTERNET hInternet = InternetOpenW(L"SuperPrint-Setup", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    WCHAR user_agent[64];
+    swprintf_s(user_agent, 64, L"SuperPrint-Setup/%s", APP_VERSION);
+    HINTERNET hInternet = InternetOpenW(user_agent, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     if (!hInternet) return FALSE;
 
     WCHAR urlWithTs[512];
@@ -165,7 +167,9 @@ static BOOL DownloadFile(const WCHAR** urls, LPCWSTR localPath) {
 }
 
 static BOOL DownloadFileSilentSingle(LPCWSTR url, LPCWSTR localPath) {
-    HINTERNET hInternet = InternetOpenW(L"SuperPrint-Setup", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    WCHAR user_agent[64];
+    swprintf_s(user_agent, 64, L"SuperPrint-Setup/%s", APP_VERSION);
+    HINTERNET hInternet = InternetOpenW(user_agent, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     if (!hInternet) return FALSE;
 
     WCHAR urlWithTs[512];
@@ -218,7 +222,9 @@ static BOOL DownloadFileSilent(const WCHAR** urls, LPCWSTR localPath) {
 }
 
 static BOOL HttpPostJsonSingle(LPCWSTR url, LPCSTR jsonBody, char* response, DWORD responseSize) {
-    HINTERNET hInternet = InternetOpenW(L"SuperPrint-Setup", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    WCHAR user_agent[64];
+    swprintf_s(user_agent, 64, L"SuperPrint-Setup/%s", APP_VERSION);
+    HINTERNET hInternet = InternetOpenW(user_agent, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
     if (!hInternet) return FALSE;
 
     URL_COMPONENTSW uc = {0};
