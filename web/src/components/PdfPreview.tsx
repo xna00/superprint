@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
@@ -8,154 +8,191 @@ interface PdfPreviewProps {
   onClose: () => void
 }
 
+interface PDFDocument {
+  numPages: number
+  getPage: (pageNumber: number) => Promise<PDFPage>
+}
+
+interface PDFPage {
+  getViewport: (options: { scale: number }) => { width: number; height: number }
+  render: (options: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }) => { promise: Promise<void> }
+}
+
+interface PageInfo {
+  pageNum: number
+  width: number
+  height: number
+}
+
+let pdfCache: { fileId: string; pdf: PDFDocument } | null = null
+
 export function PdfPreview({ fileId, onClose }: PdfPreviewProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [numPages, setNumPages] = useState(0)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [scale, setScale] = useState(1.2)
+  const [pages, setPages] = useState<PageInfo[]>([])
+  const [containerWidth, setContainerWidth] = useState(0)
+  const [renderKey] = useState(0)
 
-  useEffect(() => {
-    loadPdf()
-  }, [fileId, currentPage, scale])
-
-  const loadPdf = async () => {
+  const loadPdf = useCallback(async () => {
     try {
       setLoading(true)
       setError('')
 
-      console.log('[PDF] 开始加载, fileId:', fileId, 'page:', currentPage, 'scale:', scale)
+      if (pdfCache && pdfCache.fileId === fileId) {
+        const pageInfos: PageInfo[] = []
+        for (let i = 1; i <= pdfCache.pdf.numPages; i++) {
+          const page = await pdfCache.pdf.getPage(i)
+          const viewport = page.getViewport({ scale: 1 })
+          pageInfos.push({
+            pageNum: i,
+            width: viewport.width,
+            height: viewport.height,
+          })
+        }
+        setPages(pageInfos)
+        setLoading(false)
+        return
+      }
 
       const response = await fetch(`/api/files/getFile?data=["${fileId}.pdf"]`)
-      console.log('[PDF] fetch完成, status:', response.status, 'ok:', response.ok)
-
       if (!response.ok) {
         throw new Error('文件加载失败, status: ' + response.status)
       }
 
       const arrayBuffer = await response.arrayBuffer()
-      console.log('[PDF] 文件大小:', arrayBuffer.byteLength)
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise as unknown as PDFDocument
 
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-      console.log('[PDF] 解析完成, 页数:', pdf.numPages)
+      pdfCache = { fileId, pdf }
 
-      if (!canvasRef.current) {
-        console.log('[PDF] canvasRef.current 为空')
-        return
+      const pageInfos: PageInfo[] = []
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const viewport = page.getViewport({ scale: 1 })
+        pageInfos.push({
+          pageNum: i,
+          width: viewport.width,
+          height: viewport.height,
+        })
       }
 
-      const page = await pdf.getPage(currentPage)
-      console.log('[PDF] 获取页面完成, pageNum:', page.pageNumber)
-
-      const viewport = page.getViewport({ scale })
-      console.log('[PDF] viewport尺寸:', viewport.width, 'x', viewport.height)
-
-      const canvas = canvasRef.current
-      const context = canvas.getContext('2d')
-      console.log('[PDF] canvas context:', context)
-
-      if (!context) {
-        console.log('[PDF] context获取失败')
-        return
-      }
-
-      canvas.height = viewport.height
-      canvas.width = viewport.width
-      console.log('[PDF] canvas尺寸设置:', canvas.width, 'x', canvas.height)
-
-      await page.render({
-        canvasContext: context,
-        viewport,
-      }).promise
-      console.log('[PDF] 渲染完成')
-
-      setNumPages(pdf.numPages)
-      console.log('[PDF] 设置页数:', pdf.numPages)
+      setPages(pageInfos)
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       console.error('[PDF] 错误:', errMsg)
       setError(errMsg)
     } finally {
       setLoading(false)
-      console.log('[PDF] 加载结束')
     }
-  }
+  }, [fileId])
 
-  const handlePrev = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1)
-  }
+  useEffect(() => {
+    loadPdf()
+  }, [loadPdf])
 
-  const handleNext = () => {
-    if (currentPage < numPages) setCurrentPage(currentPage + 1)
-  }
+  useEffect(() => {
+    if (containerRef.current) {
+      setContainerWidth(containerRef.current.clientWidth)
+      const observer = new ResizeObserver((entries) => {
+        setContainerWidth(entries[0].contentRect.width)
+      })
+      observer.observe(containerRef.current)
+      return () => observer.disconnect()
+    }
+  }, [])
 
-  const handleZoomIn = () => {
-    setScale(Math.min(scale + 0.2, 3))
-  }
+  const renderPage = useCallback(async (canvas: HTMLCanvasElement, pageNum: number) => {
+    if (!pdfCache || pdfCache.fileId !== fileId) return
 
-  const handleZoomOut = () => {
-    setScale(Math.max(scale - 0.2, 0.5))
-  }
+    try {
+      const page = await pdfCache.pdf.getPage(pageNum)
+      const baseViewport = page.getViewport({ scale: 1 })
+      const calculatedScale = containerWidth / baseViewport.width
+      const viewport = page.getViewport({ scale: calculatedScale })
+
+      const context = canvas.getContext('2d')
+      if (!context) return
+
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = viewport.width * dpr
+      canvas.height = viewport.height * dpr
+      canvas.style.width = `${viewport.width}px`
+      canvas.style.height = `${viewport.height}px`
+      context.scale(dpr, dpr)
+
+      await page.render({
+        canvasContext: context,
+        viewport,
+      }).promise
+    } catch (err) {
+      console.error('[PDF] 渲染页面失败:', pageNum, err)
+    }
+  }, [fileId, containerWidth])
 
   return (
-    <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg w-full max-w-4xl h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-3 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePrev}
-              disabled={currentPage <= 1}
-              className="px-3 py-1 bg-gray-100 rounded disabled:opacity-50"
-            >
-              上一页
-            </button>
-            <span className="text-sm">
-              {currentPage} / {numPages}
-            </span>
-            <button
-              onClick={handleNext}
-              disabled={currentPage >= numPages}
-              className="px-3 py-1 bg-gray-100 rounded disabled:opacity-50"
-            >
-              下一页
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleZoomOut}
-              className="px-3 py-1 bg-gray-100 rounded"
-            >
-              缩小
-            </button>
-            <span className="text-sm">{Math.round(scale * 100)}%</span>
-            <button
-              onClick={handleZoomIn}
-              className="px-3 py-1 bg-gray-100 rounded"
-            >
-              放大
-            </button>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="px-4 py-1 bg-gray-100 rounded hover:bg-gray-200"
-          >
-            关闭
-          </button>
+    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      <div className="flex items-center justify-between p-3 bg-gray-800 text-white shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">{pages.length} 页</span>
         </div>
 
-        <div className="flex-1 overflow-auto bg-gray-100 p-4 flex justify-center">
-          {loading && (
-            <div className="text-gray-500">加载中...</div>
-          )}
-          {error && (
-            <div className="text-red-500">{error}</div>
-          )}
-          <canvas ref={canvasRef} className="shadow-lg bg-white" />
+        <div className="flex items-center gap-2">
+          <span className="text-sm">
+            {containerWidth > 0 && pages[0] ? Math.round((containerWidth / pages[0].width) * 100) : 100}%
+          </span>
         </div>
+
+        <button
+          onClick={onClose}
+          className="px-4 py-1 bg-gray-700 rounded hover:bg-gray-600"
+        >
+          关闭
+        </button>
       </div>
+
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-auto bg-gray-900 p-4 flex flex-col gap-4 items-center"
+      >
+        {loading && <div className="text-white">加载中...</div>}
+        {error && <div className="text-red-500">{error}</div>}
+        {!loading && pages.map((page) => (
+          <PageCanvas
+            key={page.pageNum}
+            pageNum={page.pageNum}
+            containerWidth={containerWidth}
+            renderKey={renderKey}
+            onRender={renderPage}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+interface PageCanvasProps {
+  pageNum: number
+  containerWidth: number
+  renderKey: number
+  onRender: (canvas: HTMLCanvasElement, pageNum: number) => void
+}
+
+function PageCanvas({ pageNum, containerWidth, renderKey, onRender }: PageCanvasProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    if (canvasRef.current && containerWidth > 0) {
+      onRender(canvasRef.current, pageNum)
+    }
+  }, [pageNum, containerWidth, renderKey])
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <canvas
+        ref={canvasRef}
+        className="bg-white shadow-lg max-w-full"
+      />
+      <span className="text-gray-500 text-sm">{pageNum}</span>
     </div>
   )
 }
