@@ -209,6 +209,54 @@ const handleDeleteById = async (openKfId: string, externalUserId: string, printT
   }
 }
 
+const handleRetryById = async (openKfId: string, externalUserId: string, printTaskId: number) => {
+  const kfUser = WeixinKfUser.findOne({ externalUserId })
+  if (!kfUser) {
+    await sendTextMessage('用户未关联。', openKfId, externalUserId)
+    return
+  }
+
+  const printTask = PrintTask.findOne({ id: printTaskId })
+
+  if (!printTask) {
+    await sendTextMessage('未找到对应的打印任务。', openKfId, externalUserId)
+    return
+  }
+
+  if (printTask.userId !== kfUser.userId) {
+    await sendTextMessage('无权操作此任务。', openKfId, externalUserId)
+    return
+  }
+
+  const failedFiles = PrintFile.findBy({ printTaskId: printTaskId, state: 'failed' })
+  
+  if (failedFiles.length === 0) {
+    await sendTextMessage('没有失败的文件需要重试。', openKfId, externalUserId)
+    return
+  }
+
+  try {
+    for (const file of failedFiles) {
+      PrintFile.update({ id: file.id }, { state: 'waiting_print' })
+    }
+    PrintTask.update({ id: printTaskId }, { state: 'waiting_print' })
+
+    const printer = Printer.findOne({ id: printTask.printerId })
+    if (printer) {
+      const computer = Computer.findOne({ id: printer.computerId })
+      if (computer) {
+        notifyCheckJobs(kfUser.userId, computer.id)
+      }
+    }
+
+    await sendTextMessage(`✅ 已重新提交 ${failedFiles.length} 个失败文件进行打印。`, openKfId, externalUserId)
+    console.log(`✅ 已重试打印任务 ID: ${printTaskId}, 文件数: ${failedFiles.length}`)
+  } catch (error) {
+    await sendTextMessage('重试失败，请稍后再试。', openKfId, externalUserId)
+    console.error('重试打印失败:', error)
+  }
+}
+
 const isPresentationFile = (filename: string): boolean => {
   const presentationExts = ['.ppt', '.pptx']
   const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase()
@@ -287,6 +335,9 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         } else if (menuId?.startsWith('delete_')) {
           const printTaskId = parseInt(menuId.replace('delete_', ''))
           await handleDeleteById(kfid, externalUserId, printTaskId)
+        } else if (menuId?.startsWith('retry_')) {
+          const printTaskId = parseInt(menuId.replace('retry_', ''))
+          await handleRetryById(kfid, externalUserId, printTaskId)
         }
       }
     }
