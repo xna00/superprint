@@ -12,7 +12,26 @@
 
 /* ==================== 服务器配置 ==================== */
 /*
- * 服务器基础URL
+ * 服务器基础URL数组
+ * 按优先级排列，失败时自动切换到下一个
+ */
+static const char* API_BASE_URLS[] = {
+    "https://superprint6.xna00.top",
+    "https://superprint.xna00.top",
+    NULL
+};
+
+/*
+ * WebSocket URL数组
+ */
+static const char* WS_URLS[] = {
+    "wss://superprint6.xna00.top/ws/print",
+    "wss://superprint.xna00.top/ws/print",
+    NULL
+};
+
+/*
+ * 服务器基础URL（兼容现有代码）
  * 所有API都基于此URL构建
  */
 #define API_BASE_URL "https://superprint.xna00.top"

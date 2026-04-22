@@ -13,6 +13,27 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* ==================== 内部辅助函数 ==================== */
+/*
+ * 替换URL中的域名
+ * 例如: https://superprint.xna00.top/api/user -> https://superprint6.xna00.top/api/user
+ */
+static void replace_url_host(const char* orig_url, const char* new_host, char* new_url, size_t new_url_size) {
+    const char* path_start = strstr(orig_url, "://");
+    if (!path_start) {
+        strncpy(new_url, orig_url, new_url_size - 1);
+        new_url[new_url_size - 1] = '\0';
+        return;
+    }
+    path_start += 3;
+    const char* slash = strchr(path_start, '/');
+    if (!slash) {
+        snprintf(new_url, new_url_size, "%s", new_host);
+        return;
+    }
+    snprintf(new_url, new_url_size, "%s%s", new_host, slash);
+}
+
 /* ==================== 内部数据结构 ==================== */
 /*
  * 内存缓冲区结构体
@@ -193,10 +214,10 @@ int http_post(HttpClient *client, const char *url, const char *post_data, char *
 }
 
 /*
- * 发送POST请求（application/json）
+ * 发送POST请求（application/json）（内部实现）
  * 不自动处理Cookie
  */
-int http_post_with_body(HttpClient *client, const char *url, const char *post_data, char **response, long *status_code) {
+static int http_post_with_body_internal(HttpClient *client, const char *url, const char *post_data, char **response, long *status_code) {
     if (!client || !client->curl) return -1;
     
     struct MemoryBuffer chunk;
@@ -234,6 +255,31 @@ int http_post_with_body(HttpClient *client, const char *url, const char *post_da
     *response = chunk.data;
     
     return 0;
+}
+
+/*
+ * 发送POST请求（application/json）
+ * 不自动处理Cookie
+ * 支持多域名自动切换重试
+ */
+int http_post_with_body(HttpClient *client, const char *url, const char *post_data, char **response, long *status_code) {
+    char current_url[512];
+    
+    for (int i = 0; API_BASE_URLS[i] != NULL; i++) {
+        replace_url_host(url, API_BASE_URLS[i], current_url, sizeof(current_url));
+        
+        int ret = http_post_with_body_internal(client, current_url, post_data, response, status_code);
+        if (ret == 0 && *status_code > 0 && *status_code < 500) {
+            return 0;
+        }
+        
+        if (*response) {
+            free(*response);
+            *response = NULL;
+        }
+    }
+    
+    return -1;
 }
 
 /*
@@ -277,10 +323,9 @@ int http_get_with_cookie(HttpClient *client, const char *url, const char *cookie
 }
 
 /*
- * 发送GET请求，带指定Cookie，返回二进制数据
- * 响应大小保存在size中，不依赖\0终止符
+ * 发送GET请求，带指定Cookie，返回二进制数据（内部实现）
  */
-int http_get_binary(HttpClient *client, const char *url, const char *cookie, char **response, size_t *size, long *status_code) {
+static int http_get_binary_internal(HttpClient *client, const char *url, const char *cookie, char **response, size_t *size, long *status_code) {
     if (!client || !client->curl) return -1;
     
     struct MemoryBuffer chunk;
@@ -303,7 +348,6 @@ int http_get_binary(HttpClient *client, const char *url, const char *cookie, cha
     snprintf(user_agent, sizeof(user_agent), "SuperPrint-Printdriver/%s", PROJECT_VERSION);
     curl_easy_setopt(client->curl, CURLOPT_USERAGENT, user_agent);
 
-    /* 设置Cookie */
     if (cookie) {
         curl_easy_setopt(client->curl, CURLOPT_COOKIE, cookie);
     }
@@ -317,9 +361,34 @@ int http_get_binary(HttpClient *client, const char *url, const char *cookie, cha
     
     curl_easy_getinfo(client->curl, CURLINFO_RESPONSE_CODE, status_code);
     *response = chunk.data;
-    *size = chunk.size;  /* 返回实际大小 */
+    *size = chunk.size;
     
     return 0;
+}
+
+/*
+ * 发送GET请求，带指定Cookie，返回二进制数据
+ * 响应大小保存在size中，不依赖\0终止符
+ * 支持多域名自动切换重试
+ */
+int http_get_binary(HttpClient *client, const char *url, const char *cookie, char **response, size_t *size, long *status_code) {
+    char current_url[512];
+    
+    for (int i = 0; API_BASE_URLS[i] != NULL; i++) {
+        replace_url_host(url, API_BASE_URLS[i], current_url, sizeof(current_url));
+        
+        int ret = http_get_binary_internal(client, current_url, cookie, response, size, status_code);
+        if (ret == 0 && *status_code > 0 && *status_code < 500) {
+            return 0;
+        }
+        
+        if (*response) {
+            free(*response);
+            *response = NULL;
+        }
+    }
+    
+    return -1;
 }
 
 /* ==================== Cookie管理函数 ==================== */
@@ -377,11 +446,9 @@ void http_client_load_cookie(HttpClient *client, const char *filepath) {
 }
 
 /*
- * 发送POST请求，使用已保存的Cookie
- * Content-Type: text/plain;charset=UTF-8
- * 用于需要身份验证的API调用（如currentUser）
+ * 发送POST请求，使用已保存的Cookie（内部实现）
  */
-int http_post_with_client_cookie(HttpClient *client, const char *url, const char *post_data, char **response, long *status_code) {
+static int http_post_with_client_cookie_internal(HttpClient *client, const char *url, const char *post_data, char **response, long *status_code) {
     if (!client || !client->curl) return -1;
     
     struct MemoryBuffer chunk;
@@ -403,7 +470,6 @@ int http_post_with_client_cookie(HttpClient *client, const char *url, const char
     snprintf(user_agent, sizeof(user_agent), "SuperPrint-Printdriver/%s", PROJECT_VERSION);
     curl_easy_setopt(client->curl, CURLOPT_USERAGENT, user_agent);
 
-    /* 使用已保存的Cookie进行身份验证 */
     if (client->cookie) {
         curl_easy_setopt(client->curl, CURLOPT_COOKIE, client->cookie);
     }
@@ -424,6 +490,32 @@ int http_post_with_client_cookie(HttpClient *client, const char *url, const char
     *response = chunk.data;
     
     return 0;
+}
+
+/*
+ * 发送POST请求，使用已保存的Cookie
+ * Content-Type: text/plain;charset=UTF-8
+ * 用于需要身份验证的API调用（如currentUser）
+ * 支持多域名自动切换重试
+ */
+int http_post_with_client_cookie(HttpClient *client, const char *url, const char *post_data, char **response, long *status_code) {
+    char current_url[512];
+    
+    for (int i = 0; API_BASE_URLS[i] != NULL; i++) {
+        replace_url_host(url, API_BASE_URLS[i], current_url, sizeof(current_url));
+        
+        int ret = http_post_with_client_cookie_internal(client, current_url, post_data, response, status_code);
+        if (ret == 0 && *status_code > 0 && *status_code < 500) {
+            return 0;
+        }
+        
+        if (*response) {
+            free(*response);
+            *response = NULL;
+        }
+    }
+    
+    return -1;
 }
 
 /* ==================== JSON解析函数 ==================== */

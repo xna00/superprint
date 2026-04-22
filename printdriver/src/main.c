@@ -422,7 +422,15 @@ void connect_websocket(void) {
             Sleep(delay_sec * 1000);
         }
         
-        if (ws_connect(g_ws_client, API_WEBSOCKET_URL) == 0) {
+        int ws_connected = 0;
+        for (int i = 0; WS_URLS[i] != NULL; i++) {
+            if (ws_connect(g_ws_client, WS_URLS[i]) == 0) {
+                ws_connected = 1;
+                break;
+            }
+        }
+        
+        if (ws_connected) {
             add_log(L"WebSocket已连接");
             ws_reset_reconnect_attempts(g_ws_client);
             ws_update_message_time(g_ws_client);
