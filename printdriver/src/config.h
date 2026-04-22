@@ -74,6 +74,12 @@ static const char* WS_URLS[] = {
  */
 #define API_FILE_SUCCEED API_BASE_URL "/api/printTask/fileSucceed"
 
+/*
+ * 报告打印文件失败
+ * 使用POST请求，body格式: [id]
+ */
+#define API_FILE_FAILED API_BASE_URL "/api/printTask/fileFailed"
+
 /* ==================== 计算机接口 ==================== */
 /*
  * 获取计算机信息

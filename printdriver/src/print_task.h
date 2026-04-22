@@ -14,5 +14,6 @@ typedef struct _PrintFileInfo {
 
 int get_waiting_print_files(HttpClient *client, const char *computer_id, PrintFileInfo **files, int *count);
 int report_file_succeeded(HttpClient *client, int id);
+int report_file_failed(HttpClient *client, int id);
 
 #endif

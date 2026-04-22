@@ -198,3 +198,32 @@ int report_file_succeeded(HttpClient *client, int id) {
     
     return ret;
 }
+
+/*
+ * 报告文件打印失败
+ * 通知服务器某个文件打印失败
+ * 使用POST请求，body格式: [id]
+ */
+int report_file_failed(HttpClient *client, int id) {
+    char json_body[256];
+    snprintf(json_body, sizeof(json_body), "[%d]", id);
+    
+    char *response = NULL;
+    long status_code = 0;
+    
+    int ret = http_post_with_client_cookie(client, API_FILE_FAILED, json_body, &response, &status_code);
+    
+    if (ret == 0 && status_code == 200) {
+        wchar_t log[256];
+        swprintf(log, 256, L"文件 %d 已上报失败", id);
+        add_log(log);
+    } else {
+        wchar_t log[256];
+        swprintf(log, 256, L"上报文件失败状态失败 %d (状态码: %ld)", id, status_code);
+        add_log(log);
+    }
+    
+    if (response) free(response);
+    
+    return ret;
+}
