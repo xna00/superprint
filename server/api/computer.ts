@@ -61,5 +61,7 @@ export const computerInfo = async (computerId: string) => {
   if (!computer || computer.userId !== user.id) {
     throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
   }
+  // 手动过滤掉禁用的打印机
+  computer.printers = computer.printers.filter((p: any) => !p.disabled);
   return computer;
 };
