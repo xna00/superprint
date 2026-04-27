@@ -303,7 +303,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     if (!kfUser) {
       console.log(`\n用户 ${externalUserId} 未关联，发送登录链接`)
       if (kfid) {
-        const loginUrl = `http://superprint.xna00.top/?external_userid=${externalUserId}&open_kfid=${kfid}`
+        const loginUrl = `https://superprint.xna00.top/?external_userid=${externalUserId}&open_kfid=${kfid}`
         await sendTextMessage(
           `请先登录以使用完整功能：${loginUrl}`,
           kfid,
