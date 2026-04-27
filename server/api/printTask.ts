@@ -3,6 +3,9 @@ import { _currentUser } from "./user.ts"
 import { ApiError } from "./utils.ts"
 import { notifyCheckJobs } from "../ws/index.ts"
 import { sendMsgMenuMessage } from "./weixin/send.ts"
+import { existsSync } from "node:fs"
+import { join } from "node:path"
+import { convertPdfToPs, getUploadsDir } from "./weixin/download.ts"
 
 const WEIXIN_KF_ID = 'wkHnU4FQAAnkssZ2Y0t7gAKpQxcw7gjQ'
 
@@ -84,6 +87,11 @@ export const updatePrintFile = async (fileId: number, duplex: boolean, tumble: b
 
     if (task.state !== 'waiting_confirmation') {
         throw new ApiError(400, {}, '只能修改待确认状态的任务', 'INVALID_STATE')
+    }
+
+    const pdfPath = join(getUploadsDir(), file.fileId + '.pdf')
+    if (existsSync(pdfPath)) {
+        convertPdfToPs(pdfPath, duplex, tumble)
     }
 
     PrintFile.update({ id: fileId }, { duplex, tumble })

@@ -13,7 +13,7 @@ const ensureUploadsDir = (): void => {
   }
 }
 
-const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: boolean = false): void => {
+export const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: boolean = false): void => {
   const psPath = pdfPath.replace(/\.pdf$/i, '.ps')
   try {
     let cmd = duplex
