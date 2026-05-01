@@ -98,7 +98,7 @@ export const processDocument = async (
     console.warn('PDF 预览文件生成失败')
   }
 
-  const existingTask = PrintTask.findOne({ userId, state: "waiting_confirmation" })
+  const existingTask = PrintTask.findOne({ userId, weixinKfId: kfid, state: "waiting_confirmation" })
   let printTaskId: number
 
   if (existingTask) {
@@ -110,7 +110,7 @@ export const processDocument = async (
     if (!printer) {
       throw new Error('未绑定打印机')
     }
-    PrintTask.insert([{ id: printTaskId, state: "waiting_confirmation", userId, printerId: printer.id }])
+    PrintTask.insert([{ id: printTaskId, state: "waiting_confirmation", userId, weixinKfId: kfid, printerId: printer.id }])
   }
 
   const printFileResult = PrintFile.insert([{

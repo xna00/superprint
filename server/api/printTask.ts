@@ -162,7 +162,7 @@ const sendPrintFailureNotification = async (userId: number, task: PrintTaskBase,
         await sendMsgMenuMessage(
             message,
             [{ id: `retry_${task.id}`, content: '重试失败文件' }],
-            WEIXIN_KF_ID,
+            task.weixinKfId,
             kfUser.externalUserId
         )
         console.log(`已向用户 ${userId} 发送打印失败通知`)
@@ -298,7 +298,7 @@ export const _outUploadPrintFile = async (req: Request): Promise<Response> => {
         if (!printer) {
             return Response.json({ error: "未绑定打印机" }, { status: 400 })
         }
-        PrintTask.insert([{ id: printTaskId, state: "waiting_confirmation", userId: user.id, printerId: printer.id }])
+        PrintTask.insert([{ id: printTaskId, state: "waiting_confirmation", userId: user.id, weixinKfId: WEIXIN_KF_ID, printerId: printer.id }])
     }
 
     const printFileResult = PrintFile.insert([{

@@ -113,7 +113,7 @@ id: string,
 messageCursor: string
 }
 export type WeixinKfRel = {
-
+printTasks: "PrintTask[]"
 }
 export type WeixinKf = WeixinKfBase & WeixinKfRel
 
@@ -152,10 +152,12 @@ export type Printer = PrinterBase & PrinterRel
 export type PrintTaskBase = {
 id: number,
 state: string,
+weixinKfId: string,
 userId: number,
 printerId: number
 }
 export type PrintTaskRel = {
+weixinKf: "WeixinKf",
 printFiles: "PrintFile[]",
 user: "User",
 printer: "Printer"
@@ -228,8 +230,10 @@ FOREIGN KEY (computerId) REFERENCES Computer (id))`)
 db.exec(`CREATE TABLE IF NOT EXISTS PrintTask
 (id INTEGER NOT NULL  PRIMARY KEY,
 state TEXT NOT NULL  ,
+weixinKfId TEXT NOT NULL  ,
 userId INTEGER NOT NULL  ,
 printerId INTEGER NOT NULL  ,
+FOREIGN KEY (weixinKfId) REFERENCES WeixinKf (id),
 FOREIGN KEY (userId) REFERENCES User (id),
 FOREIGN KEY (printerId) REFERENCES Printer (id))`)
 db.exec(`CREATE TABLE IF NOT EXISTS PrintFile
@@ -315,7 +319,7 @@ export const Printer = {
 };
 export type PrintTaskCriteria = Partial<Criteria<PrintTaskBase>>
 export type PrintTaskInsert = CreateModel<PrintTaskBase, "id">
-const PrintTaskBaseFields = ["id", "state", "userId", "printerId"]
+const PrintTaskBaseFields = ["id", "state", "weixinKfId", "userId", "printerId"]
 export const PrintTask = {
   findBy: <T extends Cas<"PrintTask"> = {}>(criteria: PrintTaskCriteria, relation?: T extends Cas<"PrintTask"> ? T : never) => {
     return [] as unknown as (PrintTaskBase & DeepPick<"PrintTaskRel", T>)[]
@@ -371,7 +375,9 @@ row.computers = Computer.findBy({userId: row.id}, typeof relation!["computers"] 
 
 
   WeixinKf.findBy = <T extends Cas<"WeixinKf">>(criteria: WeixinKfCriteria, relation?: T extends Cas<"WeixinKf"> ? T : never) => {
-    const rels: Record<string, (row: any) => void> = {  }
+    const rels: Record<string, (row: any) => void> = { printTasks: (row) => {
+row.printTasks = PrintTask.findBy({weixinKfId: row.id}, typeof relation!["printTasks"] === "object" ? relation!["printTasks"] : undefined)
+} }
     let ret = db.prepare("SELECT * FROM WeixinKf " + makeWhere(criteria)).all()
     ret = ret.map(row => {
       Object.entries(rels).forEach(([k, v]) => {
@@ -485,7 +491,12 @@ row.printTasks = PrintTask.findBy({printerId: row.id}, typeof relation!["printTa
 
 
   PrintTask.findBy = <T extends Cas<"PrintTask">>(criteria: PrintTaskCriteria, relation?: T extends Cas<"PrintTask"> ? T : never) => {
-    const rels: Record<string, (row: any) => void> = { printFiles: (row) => {
+    const rels: Record<string, (row: any) => void> = { weixinKf: (row) => {
+const t = WeixinKf.findBy({id: row.weixinKfId}).at(0)
+assert(t)
+row.weixinKf = t
+},
+printFiles: (row) => {
 row.printFiles = PrintFile.findBy({printTaskId: row.id}, typeof relation!["printFiles"] === "object" ? relation!["printFiles"] : undefined)
 },
 user: (row) => {
@@ -513,9 +524,9 @@ row.printer = t
   }
 
   PrintTask.insert = (data: CreateModel<PrintTaskBase, "id">[]) => {
-    const values_str = ",(?, ?, ?, ?)".repeat(data.length).slice(1)
-    const stmt = db.prepare('INSERT INTO PrintTask (id, state, userId, printerId) VALUES ' + values_str)
-    const values = data.map(row => [row["id"] ?? null, row["state"], row["userId"], row["printerId"]]).flat()
+    const values_str = ",(?, ?, ?, ?, ?)".repeat(data.length).slice(1)
+    const stmt = db.prepare('INSERT INTO PrintTask (id, state, weixinKfId, userId, printerId) VALUES ' + values_str)
+    const values = data.map(row => [row["id"] ?? null, row["state"], row["weixinKfId"], row["userId"], row["printerId"]]).flat()
     return stmt.run(...values)
   }
 
