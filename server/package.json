@@ -5,10 +5,9 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "npx tsgo && npx esbuild main.ts --bundle --sourcemap --platform=node --format=esm --outfile=bundle.js",
-    "buildtype": "npx tsgo --emitDeclarationOnly",
-    "buildtype:watch": "npx tsgo --emitDeclarationOnly --watch",
-    "start": "node main.ts",
+    "build": "npx tsgo --emitDeclarationOnly",
+    "bundle": "npx tsgo && npx esbuild main.ts --bundle --sourcemap --platform=node --format=esm --outfile=bundle.js",
+    "start": "node --experimental-strip-types main.ts",
     "gen_model_type": "node scripts/gen_model_types.cjs models/models.prisma -o models/index.ts"
   },
   "keywords": [],

@@ -454,12 +454,42 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
 }
 
 
+const handleEchoMessages = async (_messages: NonEventMessage[]): Promise<void> => {
+  const grouped = Object.groupBy(_messages, m => m.external_userid)
+
+  await Promise.all(Object.entries(grouped).map(async ([externalUserId, userMessages = []]) => {
+    const kfUser = WeixinKfUser.findOne({ externalUserId }, { user: true })
+    const kfid = userMessages[0].open_kfid
+    const textMessages = userMessages.filter(m => m.msgtype === 'text')
+
+    for (const message of textMessages) {
+      const content = message.text.content
+      if (kfUser) {
+        await sendTextMessage(
+          `你好${kfUser.user.username}，${content}`,
+          kfid,
+          externalUserId
+        )
+      } else {
+        const loginUrl = `https://superprint.xna00.top/?external_userid=${externalUserId}&open_kfid=${kfid}`
+        await sendTextMessage(
+          `请先登录以使用完整功能：${loginUrl}`,
+          kfid,
+          externalUserId
+        )
+      }
+    }
+  }))
+}
+
 /**
  * open_kfid 处理函数映射表
  */
 const messageHandlerMap: Partial<Record<string, (messages: NonEventMessage[]) => Promise<void>>> = {
   // kfc980d7a665f29536a
   'wkHnU4FQAAnkssZ2Y0t7gAKpQxcw7gjQ': handleMessagesByPrintMan,
+  // 新客服 - 原样回复文本
+  'wkHnU4FQAAIMj9uECzdKwOI_kRP_IGDQ': handleEchoMessages,
 }
 
 export const handleMessages = async (_messages: Message[]) => {
