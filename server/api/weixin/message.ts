@@ -4,6 +4,7 @@ import { WeixinKfUser, PrintTask, PrintFile, Printer, Computer } from '../../mod
 import { notifyCheckJobs } from '../../ws/index.ts'
 import { addTokenToUrl } from '../utils.ts'
 import { processDocument } from '../docProcess.ts'
+import { handlePdfConvertMessages } from '../pdfConvert.ts'
 
 export const generateTaskId = (): number => {
   const timestamp = Date.now()
@@ -528,10 +529,9 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
  * open_kfid 处理函数映射表
  */
 const messageHandlerMap: Partial<Record<string, (messages: NonEventMessage[]) => Promise<void>>> = {
-  // kfc980d7a665f29536a
   'wkHnU4FQAAnkssZ2Y0t7gAKpQxcw7gjQ': handleMessagesByPrintMan,
-  // 公文处理客服
   'wkHnU4FQAAIMj9uECzdKwOI_kRP_IGDQ': handleDocProcessMessages,
+  'wkHnU4FQAAAO-EtO4HBU2vWdk213Gwjg': handlePdfConvertMessages,
 }
 
 export const handleMessages = async (_messages: Message[]) => {

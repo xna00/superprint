@@ -36,61 +36,67 @@ export const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: 
   }
 }
 
-const convertImageToPs = (imagePath: string, duplex: boolean = true, tumble: boolean = false): void => {
-  const psPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.ps')
+export const convertImageToPdf = (imagePath: string): string => {
   const pdfPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.pdf')
 
+  const doc = new PDFDocument({ autoFirstPage: false })
+  const chunks: Buffer[] = []
+
+  doc.on('data', (chunk: Buffer) => chunks.push(chunk))
+  doc.on('end', () => {
+    const pdfBuffer = Buffer.concat(chunks)
+    writeFileSync(pdfPath, pdfBuffer)
+    console.log('PDFKit: PDF 生成完成', pdfPath)
+  })
+
+  const imgBuffer = readFileSync(imagePath)
+
+  // @ts-ignore - openImage 不在类型定义中但运行时可用
+  const img = doc.openImage(imgBuffer)
+  const isLandscape = img.width > img.height
+
+  const pageWidth = isLandscape ? 841.89 : 595.28
+  const pageHeight = isLandscape ? 595.28 : 841.89
+
+  doc.addPage({ size: [pageWidth, pageHeight], margin: 0 })
+
+  const scale = Math.min(pageWidth / img.width, pageHeight / img.height)
+  const imgWidth = img.width * scale
+  const imgHeight = img.height * scale
+  const x = (pageWidth - imgWidth) / 2
+  const y = (pageHeight - imgHeight) / 2
+
+  doc.image(imgBuffer, x, y, {
+    width: imgWidth,
+    height: imgHeight
+  })
+
+  doc.end()
+
+  return pdfPath
+}
+
+const convertImageToPs = (imagePath: string, duplex: boolean = true, tumble: boolean = false): void => {
+  const psPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.ps')
+
   try {
-    const doc = new PDFDocument({ autoFirstPage: false })
-    const chunks: Buffer[] = []
+    const pdfPath = convertImageToPdf(imagePath)
 
-    doc.on('data', (chunk: Buffer) => chunks.push(chunk))
-    doc.on('end', () => {
-      const pdfBuffer = Buffer.concat(chunks)
-      writeFileSync(pdfPath, pdfBuffer)
-      console.log('PDFKit: PDF 生成完成')
+    let cmd = duplex
+      ? `pdftocairo -ps -level3 -r 300 -paper A4 -expand -duplex "${pdfPath}" "${psPath}"`
+      : `pdftocairo -ps -level3 -r 300 -paper A4 -expand "${pdfPath}" "${psPath}"`
 
-      let cmd = duplex
-        ? `pdftocairo -ps -level3 -r 300 -paper A4 -expand -duplex "${pdfPath}" "${psPath}"`
-        : `pdftocairo -ps -level3 -r 300 -paper A4 -expand "${pdfPath}" "${psPath}"`
+    execSync(cmd, { stdio: 'ignore', shell: true } as any)
 
-      execSync(cmd, { stdio: 'ignore', shell: true } as any)
+    if (duplex && tumble) {
+      execSync(`sed -i 's/DuplexNoTumble/DuplexTumble/g' "${psPath}"`, { stdio: 'ignore', shell: true } as any)
+    }
 
-      if (duplex && tumble) {
-        execSync(`sed -i 's/DuplexNoTumble/DuplexTumble/g' "${psPath}"`, { stdio: 'ignore', shell: true } as any)
-      }
-
-      if (duplex) {
-        const psContent = readFileSync(psPath, 'utf-8')
-        const setpagedevice = `<</Duplex true /Tumble ${tumble}>> setpagedevice\n`
-        writeFileSync(psPath, setpagedevice + psContent, 'utf-8')
-      }
-    })
-
-    const imgBuffer = readFileSync(imagePath)
-
-    // @ts-ignore - openImage 不在类型定义中但运行时可用
-    const img = doc.openImage(imgBuffer)
-    const isLandscape = img.width > img.height
-
-    const pageWidth = isLandscape ? 841.89 : 595.28
-    const pageHeight = isLandscape ? 595.28 : 841.89
-
-    doc.addPage({ size: [pageWidth, pageHeight], margin: 0 })
-
-    const scale = Math.min(pageWidth / img.width, pageHeight / img.height)
-    const imgWidth = img.width * scale
-    const imgHeight = img.height * scale
-    const x = (pageWidth - imgWidth) / 2
-    const y = (pageHeight - imgHeight) / 2
-
-    doc.image(imgBuffer, x, y, {
-      width: imgWidth,
-      height: imgHeight
-    })
-
-    doc.end()
-
+    if (duplex) {
+      const psContent = readFileSync(psPath, 'utf-8')
+      const setpagedevice = `<</Duplex true /Tumble ${tumble}>> setpagedevice\n`
+      writeFileSync(psPath, setpagedevice + psContent, 'utf-8')
+    }
   } catch (error) {
     console.error('PDFKit 转PDF失败:', error)
   }
