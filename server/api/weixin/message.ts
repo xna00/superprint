@@ -497,14 +497,27 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
       }
     }
 
-    // 处理文本消息（保持原样回复）
+    // 处理文本消息
     for (const message of textMessages) {
-      const content = message.text.content
-      await sendTextMessage(
-        `你好${user.username}，${content}`,
-        kfid,
-        externalUserId
-      )
+      const content = message.text.content.trim()
+      const menuId = message.text.menu_id
+
+      if (menuId?.startsWith('confirm_')) {
+        const printTaskId = parseInt(menuId.replace('confirm_', ''))
+        await handleConfirmById(kfid, externalUserId, printTaskId)
+      } else if (menuId?.startsWith('delete_')) {
+        const printTaskId = parseInt(menuId.replace('delete_', ''))
+        await handleDeleteById(kfid, externalUserId, printTaskId)
+      } else if (menuId?.startsWith('retry_')) {
+        const printTaskId = parseInt(menuId.replace('retry_', ''))
+        await handleRetryById(kfid, externalUserId, printTaskId)
+      } else {
+        await sendTextMessage(
+          `你好${user.username}，${content}`,
+          kfid,
+          externalUserId
+        )
+      }
     }
   }))
 }
