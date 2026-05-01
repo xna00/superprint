@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs"
 import { join, extname } from "node:path"
 import UZIP from "uzip"
 import { recognizeDocument, type RecognizedDocument } from "./ai.ts"
-import { downloadMedia, convertOfficeToPdf } from "./weixin/download.ts"
+import { downloadMedia, convertOfficeToPdf, convertPdfToPs } from "./weixin/download.ts"
 import { generateTaskId } from "./weixin/message.ts"
 import { PrintTask, PrintFile, Computer, Printer, WeixinKfUser } from "../models/index.ts"
 import { sendMsgMenuMessage } from "./weixin/send.ts"
@@ -94,6 +94,7 @@ export const processDocument = async (
   const pdfPath = convertOfficeToPdf(docxPath)
   if (pdfPath) {
     console.log(`PDF 预览文件已生成: ${pdfPath}`)
+    convertPdfToPs(pdfPath, true, false)
   } else {
     console.warn('PDF 预览文件生成失败')
   }
