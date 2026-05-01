@@ -96,17 +96,17 @@ const convertImageToPs = (imagePath: string, duplex: boolean = true, tumble: boo
   }
 }
 
-const isOfficeFile = (ext: string): boolean => {
+export const isOfficeFile = (ext: string): boolean => {
   const officeExts = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
   return officeExts.includes(ext.toLowerCase())
 }
 
-const isPresentationFile = (ext: string): boolean => {
+export const isPresentationFile = (ext: string): boolean => {
   const presentationExts = ['.ppt', '.pptx']
   return presentationExts.includes(ext.toLowerCase())
 }
 
-const convertOfficeToPdf = (filePath: string): string | null => {
+export const convertOfficeToPdf = (filePath: string): string | null => {
   const ext = extname(filePath)
   if (!isOfficeFile(ext)) return null
 

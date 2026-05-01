@@ -1,11 +1,14 @@
 import { Computer, Printer, PrintTask, PrintFile, User, WeixinKfUser, type PrintTaskBase, type PrintFileBase, type PrinterRel } from "../models/index.ts"
 import { _currentUser } from "./user.ts"
-import { ApiError } from "./utils.ts"
+import { ApiError, addTokenToUrl } from "./utils.ts"
 import { notifyCheckJobs } from "../ws/index.ts"
 import { sendMsgMenuMessage } from "./weixin/send.ts"
-import { existsSync } from "node:fs"
-import { join } from "node:path"
-import { convertPdfToPs, getUploadsDir } from "./weixin/download.ts"
+import { existsSync, writeFileSync } from "node:fs"
+import { join, extname } from "node:path"
+import { convertPdfToPs, convertOfficeToPdf, isOfficeFile, isPresentationFile, getUploadsDir } from "./weixin/download.ts"
+import { generateTaskId } from "./weixin/message.ts"
+import { getInfo } from "./global.ts"
+import { createHash } from "node:crypto"
 
 const WEIXIN_KF_ID = 'wkHnU4FQAAnkssZ2Y0t7gAKpQxcw7gjQ'
 
@@ -245,4 +248,95 @@ export const deletePrintTask = async (printTaskId: number) => {
     PrintTask.remove({ id: printTaskId })
 
     return { success: true }
+}
+
+export const _outUploadPrintFile = async (req: Request): Promise<Response> => {
+    const info = getInfo()
+    const user = await _currentUser(info)
+
+    const url = new URL(req.url)
+    const duplex = url.searchParams.get("duplex") !== "false"
+    const tumble = url.searchParams.get("tumble") === "true"
+
+    const formData = await req.formData()
+    const file = formData.get("file") as File | null
+    if (!file) {
+        return Response.json({ error: "缺少file字段" }, { status: 400 })
+    }
+
+    const ext = extname(file.name).toLowerCase()
+    const allowedExts = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"]
+    if (!allowedExts.includes(ext)) {
+        return Response.json({ error: "不支持的文件类型" }, { status: 400 })
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const hash = createHash("sha256").update(buffer).digest("hex").slice(0, 16)
+    const fileId = hash
+    const filePath = join(getUploadsDir(), fileId + ext)
+    writeFileSync(filePath, buffer)
+
+    if (ext === ".pdf") {
+        convertPdfToPs(filePath, duplex, tumble)
+    } else if (isOfficeFile(ext)) {
+        const pdfPath = convertOfficeToPdf(filePath)
+        if (pdfPath) {
+            const officeTumble = isPresentationFile(ext) ? true : tumble
+            convertPdfToPs(pdfPath, duplex, officeTumble)
+        }
+    }
+
+    const existingTask = PrintTask.findOne({ userId: user.id, state: "waiting_confirmation" })
+    let printTaskId: number
+
+    if (existingTask) {
+        printTaskId = existingTask.id
+    } else {
+        printTaskId = generateTaskId()
+        const computers = Computer.findBy({ userId: user.id }, { printers: true })
+        const printer = computers[0]?.printers?.find(p => !p.disabled)
+        if (!printer) {
+            return Response.json({ error: "未绑定打印机" }, { status: 400 })
+        }
+        PrintTask.insert([{ id: printTaskId, state: "waiting_confirmation", userId: user.id, printerId: printer.id }])
+    }
+
+    const printFileResult = PrintFile.insert([{
+        state: "waiting_print",
+        printTaskId,
+        fileId,
+        filename: file.name,
+        duplex,
+        tumble: tumble || isPresentationFile(ext)
+    }])
+
+    // 发送微信通知（失败不影响主流程）
+    try {
+        const task = PrintTask.findOne({ id: printTaskId }, { printer: true })
+        const kfUser = WeixinKfUser.findOne({ userId: user.id })
+        if (task?.printer && kfUser) {
+            const printer = Printer.findOne({ id: task.printer.id }, { computer: true })
+            const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, user.id)
+            await sendMsgMenuMessage(
+                `📄 打印任务已创建\n\n计算机: ${printer?.computer.name}\n打印机: ${printer?.name}\n文件: ${file.name}\n\n💡 点击"查看详情"可修改打印设置`,
+                [
+                    { id: `confirm_${printTaskId}`, content: "确认打印" },
+                    { id: `delete_${printTaskId}`, content: "删除任务" },
+                    { content: "查看详情", url: printTaskUrl }
+                ],
+                WEIXIN_KF_ID,
+                kfUser.externalUserId
+            )
+        }
+    } catch (error) {
+        console.error("发送微信通知失败:", error)
+    }
+
+    return Response.json({
+        success: true,
+        printTaskId,
+        printFileId: printFileResult.lastInsertRowid,
+        fileId,
+        filename: file.name
+    })
 }

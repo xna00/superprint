@@ -4,7 +4,7 @@ import { WeixinKfUser, PrintTask, PrintFile, Printer, Computer } from '../../mod
 import { notifyCheckJobs } from '../../ws/index.ts'
 import { addTokenToUrl } from '../utils.ts'
 
-const generateTaskId = (): number => {
+export const generateTaskId = (): number => {
   const timestamp = Date.now()
   const random = Math.floor(Math.random() * 1000)
   return timestamp * 1000 + random
