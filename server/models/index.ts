@@ -153,6 +153,7 @@ export type PrintTaskBase = {
 id: number,
 state: string,
 weixinKfId: string,
+externalUserId: string,
 userId: number,
 printerId: number
 }
@@ -231,6 +232,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS PrintTask
 (id INTEGER NOT NULL  PRIMARY KEY,
 state TEXT NOT NULL  ,
 weixinKfId TEXT NOT NULL  ,
+externalUserId TEXT NOT NULL  ,
 userId INTEGER NOT NULL  ,
 printerId INTEGER NOT NULL  ,
 FOREIGN KEY (weixinKfId) REFERENCES WeixinKf (id),
@@ -319,7 +321,7 @@ export const Printer = {
 };
 export type PrintTaskCriteria = Partial<Criteria<PrintTaskBase>>
 export type PrintTaskInsert = CreateModel<PrintTaskBase, "id">
-const PrintTaskBaseFields = ["id", "state", "weixinKfId", "userId", "printerId"]
+const PrintTaskBaseFields = ["id", "state", "weixinKfId", "externalUserId", "userId", "printerId"]
 export const PrintTask = {
   findBy: <T extends Cas<"PrintTask"> = {}>(criteria: PrintTaskCriteria, relation?: T extends Cas<"PrintTask"> ? T : never) => {
     return [] as unknown as (PrintTaskBase & DeepPick<"PrintTaskRel", T>)[]
@@ -524,9 +526,9 @@ row.printer = t
   }
 
   PrintTask.insert = (data: CreateModel<PrintTaskBase, "id">[]) => {
-    const values_str = ",(?, ?, ?, ?, ?)".repeat(data.length).slice(1)
-    const stmt = db.prepare('INSERT INTO PrintTask (id, state, weixinKfId, userId, printerId) VALUES ' + values_str)
-    const values = data.map(row => [row["id"] ?? null, row["state"], row["weixinKfId"], row["userId"], row["printerId"]]).flat()
+    const values_str = ",(?, ?, ?, ?, ?, ?)".repeat(data.length).slice(1)
+    const stmt = db.prepare('INSERT INTO PrintTask (id, state, weixinKfId, externalUserId, userId, printerId) VALUES ' + values_str)
+    const values = data.map(row => [row["id"] ?? null, row["state"], row["weixinKfId"], row["externalUserId"], row["userId"], row["printerId"]]).flat()
     return stmt.run(...values)
   }
 

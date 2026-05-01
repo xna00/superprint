@@ -4,7 +4,7 @@ import UZIP from "uzip"
 import { recognizeDocument, type RecognizedDocument } from "./ai.ts"
 import { downloadMedia, convertOfficeToPdf, convertPdfToPs } from "./weixin/download.ts"
 import { generateTaskId } from "./weixin/message.ts"
-import { PrintTask, PrintFile, Computer, Printer, WeixinKfUser } from "../models/index.ts"
+import { PrintTask, PrintFile, Computer, Printer } from "../models/index.ts"
 import { sendMsgMenuMessage } from "./weixin/send.ts"
 import { addTokenToUrl } from "./utils.ts"
 
@@ -99,7 +99,7 @@ export const processDocument = async (
     console.warn('PDF 预览文件生成失败')
   }
 
-  const existingTask = PrintTask.findOne({ userId, weixinKfId: kfid, state: "waiting_confirmation" })
+  const existingTask = PrintTask.findOne({ userId: userId, weixinKfId: kfid, externalUserId: externalUserId, state: "waiting_confirmation" })
   let printTaskId: number
 
   if (existingTask) {
@@ -111,7 +111,7 @@ export const processDocument = async (
     if (!printer) {
       throw new Error('未绑定打印机')
     }
-    PrintTask.insert([{ id: printTaskId, state: "waiting_confirmation", userId, weixinKfId: kfid, printerId: printer.id }])
+    PrintTask.insert([{ id: printTaskId, state: "waiting_confirmation", userId, weixinKfId: kfid, externalUserId: externalUserId, printerId: printer.id }])
   }
 
   const printFileResult = PrintFile.insert([{
@@ -125,8 +125,7 @@ export const processDocument = async (
 
   try {
     const task = PrintTask.findOne({ id: printTaskId }, { printer: true })
-    const kfUser = WeixinKfUser.findOne({ userId })
-    if (task?.printer && kfUser) {
+    if (task?.printer) {
       const printer = Printer.findOne({ id: (task.printer as any).id }, { computer: true })
       const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, userId)
       await sendMsgMenuMessage(
@@ -137,7 +136,7 @@ export const processDocument = async (
           { content: "查看详情", url: printTaskUrl }
         ],
         WEIXIN_KF_ID,
-        kfUser.externalUserId
+        externalUserId
       )
     }
   } catch (error) {

@@ -367,6 +367,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     let existingPrintTask = PrintTask.findBy({
       userId: kfUser.userId,
       weixinKfId: kfid,
+      externalUserId: externalUserId,
       state: 'waiting_confirmation'
     }).pop()
 
@@ -387,6 +388,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         state: 'waiting_confirmation',
         userId: kfUser.userId,
         weixinKfId: kfid,
+        externalUserId: externalUserId,
         printerId: printerId
       }])
       isNewJob = true

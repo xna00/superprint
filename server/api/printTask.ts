@@ -1,4 +1,4 @@
-import { Computer, Printer, PrintTask, PrintFile, User, WeixinKfUser, type PrintTaskBase, type PrintFileBase, type PrinterRel } from "../models/index.ts"
+import { Computer, Printer, PrintTask, PrintFile, WeixinKfUser, type PrintTaskBase, type PrintFileBase } from "../models/index.ts"
 import { _currentUser } from "./user.ts"
 import { ApiError, addTokenToUrl } from "./utils.ts"
 import { notifyCheckJobs } from "../ws/index.ts"
@@ -148,10 +148,9 @@ export const fileSucceed = async (id: number) => {
     return { success: true }
 }
 
-const sendPrintFailureNotification = async (userId: number, task: PrintTaskBase, failedFiles: PrintFileBase[]) => {
-    const kfUser = WeixinKfUser.findOne({ userId }, { user: true })
-    if (!kfUser) {
-        console.log(`用户 ${userId} 未关联微信客服，跳过通知`)
+const sendPrintFailureNotification = async (task: PrintTaskBase, failedFiles: PrintFileBase[]) => {
+    if (!task.externalUserId) {
+        console.log(`任务 ${task.id} 没有 externalUserId，跳过通知`)
         return
     }
 
@@ -163,9 +162,9 @@ const sendPrintFailureNotification = async (userId: number, task: PrintTaskBase,
             message,
             [{ id: `retry_${task.id}`, content: '重试失败文件' }],
             task.weixinKfId,
-            kfUser.externalUserId
+            task.externalUserId
         )
-        console.log(`已向用户 ${userId} 发送打印失败通知`)
+        console.log(`已向 ${task.externalUserId} 发送打印失败通知`)
     } catch (error) {
         console.error(`发送打印失败通知失败:`, error)
     }
@@ -198,7 +197,7 @@ export const fileFailed = async (id: number) => {
         } else if (hasFailed) {
             PrintTask.update({ id: task.id }, { state: 'failed' })
             const failedFiles = allFiles.filter(f => f.state === 'failed')
-            await sendPrintFailureNotification(user.id, task, failedFiles)
+            await sendPrintFailureNotification(task, failedFiles)
         }
     }
 
@@ -286,7 +285,10 @@ export const _outUploadPrintFile = async (req: Request): Promise<Response> => {
         }
     }
 
-    const existingTask = PrintTask.findOne({ userId: user.id, state: "waiting_confirmation" })
+    const kfUser = WeixinKfUser.findOne({ userId: user.id })
+    const externalUserId = kfUser?.externalUserId ?? ""
+
+    const existingTask = PrintTask.findOne({ userId: user.id, weixinKfId: WEIXIN_KF_ID, externalUserId: externalUserId, state: "waiting_confirmation" })
     let printTaskId: number
 
     if (existingTask) {
@@ -298,7 +300,7 @@ export const _outUploadPrintFile = async (req: Request): Promise<Response> => {
         if (!printer) {
             return Response.json({ error: "未绑定打印机" }, { status: 400 })
         }
-        PrintTask.insert([{ id: printTaskId, state: "waiting_confirmation", userId: user.id, weixinKfId: WEIXIN_KF_ID, printerId: printer.id }])
+        PrintTask.insert([{ id: printTaskId, state: "waiting_confirmation", userId: user.id, weixinKfId: WEIXIN_KF_ID, externalUserId: externalUserId, printerId: printer.id }])
     }
 
     const printFileResult = PrintFile.insert([{
@@ -310,26 +312,26 @@ export const _outUploadPrintFile = async (req: Request): Promise<Response> => {
         tumble: tumble || isPresentationFile(ext)
     }])
 
-    // 发送微信通知（失败不影响主流程）
-    try {
-        const task = PrintTask.findOne({ id: printTaskId }, { printer: true })
-        const kfUser = WeixinKfUser.findOne({ userId: user.id })
-        if (task?.printer && kfUser) {
-            const printer = Printer.findOne({ id: task.printer.id }, { computer: true })
-            const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, user.id)
-            await sendMsgMenuMessage(
-                `📄 打印任务已创建\n\n计算机: ${printer?.computer.name}\n打印机: ${printer?.name}\n文件: ${file.name}\n\n💡 点击"查看详情"可修改打印设置`,
-                [
-                    { id: `confirm_${printTaskId}`, content: "确认打印" },
-                    { id: `delete_${printTaskId}`, content: "删除任务" },
-                    { content: "查看详情", url: printTaskUrl }
-                ],
-                WEIXIN_KF_ID,
-                kfUser.externalUserId
-            )
+    if (externalUserId) {
+        try {
+            const task = PrintTask.findOne({ id: printTaskId }, { printer: true })
+            if (task?.printer) {
+                const printer = Printer.findOne({ id: task.printer.id }, { computer: true })
+                const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, user.id)
+                await sendMsgMenuMessage(
+                    `📄 打印任务已创建\n\n计算机: ${printer?.computer.name}\n打印机: ${printer?.name}\n文件: ${file.name}\n\n💡 点击"查看详情"可修改打印设置`,
+                    [
+                        { id: `confirm_${printTaskId}`, content: "确认打印" },
+                        { id: `delete_${printTaskId}`, content: "删除任务" },
+                        { content: "查看详情", url: printTaskUrl }
+                    ],
+                    WEIXIN_KF_ID,
+                    externalUserId
+                )
+            }
+        } catch (error) {
+            console.error("发送微信通知失败:", error)
         }
-    } catch (error) {
-        console.error("发送微信通知失败:", error)
     }
 
     return Response.json({
