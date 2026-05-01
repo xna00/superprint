@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@types/uzip": "^0.20201231.2",
+    "jsonrepair": "^3.14.0",
     "pdfkit": "^0.18.0",
     "uzip": "^0.20201231.0",
     "ws": "^8.20.0"

@@ -3,6 +3,7 @@ import { downloadMedia } from './download.ts'
 import { WeixinKfUser, PrintTask, PrintFile, Printer, Computer } from '../../models/index.ts'
 import { notifyCheckJobs } from '../../ws/index.ts'
 import { addTokenToUrl } from '../utils.ts'
+import { processDocument } from '../docProcess.ts'
 
 export const generateTaskId = (): number => {
   const timestamp = Date.now()
@@ -454,30 +455,54 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
 }
 
 
-const handleEchoMessages = async (_messages: NonEventMessage[]): Promise<void> => {
+const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<void> => {
   const grouped = Object.groupBy(_messages, m => m.external_userid)
 
   await Promise.all(Object.entries(grouped).map(async ([externalUserId, userMessages = []]) => {
     const kfUser = WeixinKfUser.findOne({ externalUserId }, { user: true })
     const kfid = userMessages[0].open_kfid
-    const textMessages = userMessages.filter(m => m.msgtype === 'text')
 
+    if (!kfUser) {
+      const loginUrl = `https://superprint.xna00.top/?external_userid=${externalUserId}&open_kfid=${kfid}`
+      await sendTextMessage(
+        `请先登录以使用完整功能：${loginUrl}`,
+        kfid,
+        externalUserId
+      )
+      return
+    }
+
+    const user = kfUser.user
+    const textMessages = userMessages.filter(m => m.msgtype === 'text')
+    const mediaMessages = userMessages.filter(m => m.msgtype === 'image' || m.msgtype === 'file')
+
+    // 处理媒体消息（图片/文件）
+    for (const message of mediaMessages) {
+      const mediaId = message.msgtype === 'image' ? message.image?.media_id : message.file?.media_id
+      if (!mediaId) continue
+
+      try {
+        await sendTextMessage('🔍 正在识别公文，请稍候...', kfid, externalUserId)
+        const result = await processDocument(mediaId, kfid, externalUserId, kfUser.userId, kfUser.user.username)
+        await sendTextMessage(
+          `✅ 公文处理完成\n\n文号: ${result.recognized.document_number}\n单位: ${result.recognized.issuing_unit}\n标题: ${result.recognized.title}\n\n已自动创建打印任务，请在微信中确认打印`,
+          kfid,
+          externalUserId
+        )
+      } catch (error: any) {
+        console.error('公文处理失败:', error)
+        await sendTextMessage(`❌ 公文处理失败: ${error.message}`, kfid, externalUserId)
+      }
+    }
+
+    // 处理文本消息（保持原样回复）
     for (const message of textMessages) {
       const content = message.text.content
-      if (kfUser) {
-        await sendTextMessage(
-          `你好${kfUser.user.username}，${content}`,
-          kfid,
-          externalUserId
-        )
-      } else {
-        const loginUrl = `https://superprint.xna00.top/?external_userid=${externalUserId}&open_kfid=${kfid}`
-        await sendTextMessage(
-          `请先登录以使用完整功能：${loginUrl}`,
-          kfid,
-          externalUserId
-        )
-      }
+      await sendTextMessage(
+        `你好${user.username}，${content}`,
+        kfid,
+        externalUserId
+      )
     }
   }))
 }
@@ -488,8 +513,8 @@ const handleEchoMessages = async (_messages: NonEventMessage[]): Promise<void> =
 const messageHandlerMap: Partial<Record<string, (messages: NonEventMessage[]) => Promise<void>>> = {
   // kfc980d7a665f29536a
   'wkHnU4FQAAnkssZ2Y0t7gAKpQxcw7gjQ': handleMessagesByPrintMan,
-  // 新客服 - 原样回复文本
-  'wkHnU4FQAAIMj9uECzdKwOI_kRP_IGDQ': handleEchoMessages,
+  // 公文处理客服
+  'wkHnU4FQAAIMj9uECzdKwOI_kRP_IGDQ': handleDocProcessMessages,
 }
 
 export const handleMessages = async (_messages: Message[]) => {
