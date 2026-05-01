@@ -9,5 +9,7 @@ node_modules/
 dist
 server/static/
 server/static.backup
+server/bundle.js
+server/bundle.js.map
 printdriver/output/
 vcpkg/
