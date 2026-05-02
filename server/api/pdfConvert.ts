@@ -72,7 +72,7 @@ const convertToPdf = async (fileId: string, filename: string): Promise<string | 
   if (SUPPORTED_IMAGE_EXTS.includes(ext)) {
     const imagePath = join(uploadsDir, fileId + ext)
     if (!existsSync(imagePath)) return null
-    const pdfPath = convertImageToPdf(imagePath)
+    const pdfPath = await convertImageToPdf(imagePath)
     return pdfPath
   }
 

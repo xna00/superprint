@@ -36,51 +36,53 @@ export const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: 
   }
 }
 
-export const convertImageToPdf = (imagePath: string): string => {
-  const pdfPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.pdf')
+export const convertImageToPdf = (imagePath: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const pdfPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.pdf')
 
-  const doc = new PDFDocument({ autoFirstPage: false })
-  const chunks: Buffer[] = []
+    const doc = new PDFDocument({ autoFirstPage: false })
+    const chunks: Buffer[] = []
 
-  doc.on('data', (chunk: Buffer) => chunks.push(chunk))
-  doc.on('end', () => {
-    const pdfBuffer = Buffer.concat(chunks)
-    writeFileSync(pdfPath, pdfBuffer)
-    console.log('PDFKit: PDF 生成完成', pdfPath)
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk))
+    doc.on('end', () => {
+      const pdfBuffer = Buffer.concat(chunks)
+      writeFileSync(pdfPath, pdfBuffer)
+      console.log('PDFKit: PDF 生成完成', pdfPath)
+      resolve(pdfPath)
+    })
+    doc.on('error', reject)
+
+    const imgBuffer = readFileSync(imagePath)
+
+    // @ts-ignore - openImage 不在类型定义中但运行时可用
+    const img = doc.openImage(imgBuffer)
+    const isLandscape = img.width > img.height
+
+    const pageWidth = isLandscape ? 841.89 : 595.28
+    const pageHeight = isLandscape ? 595.28 : 841.89
+
+    doc.addPage({ size: [pageWidth, pageHeight], margin: 0 })
+
+    const scale = Math.min(pageWidth / img.width, pageHeight / img.height)
+    const imgWidth = img.width * scale
+    const imgHeight = img.height * scale
+    const x = (pageWidth - imgWidth) / 2
+    const y = (pageHeight - imgHeight) / 2
+
+    doc.image(imgBuffer, x, y, {
+      width: imgWidth,
+      height: imgHeight
+    })
+
+    doc.end()
   })
-
-  const imgBuffer = readFileSync(imagePath)
-
-  // @ts-ignore - openImage 不在类型定义中但运行时可用
-  const img = doc.openImage(imgBuffer)
-  const isLandscape = img.width > img.height
-
-  const pageWidth = isLandscape ? 841.89 : 595.28
-  const pageHeight = isLandscape ? 595.28 : 841.89
-
-  doc.addPage({ size: [pageWidth, pageHeight], margin: 0 })
-
-  const scale = Math.min(pageWidth / img.width, pageHeight / img.height)
-  const imgWidth = img.width * scale
-  const imgHeight = img.height * scale
-  const x = (pageWidth - imgWidth) / 2
-  const y = (pageHeight - imgHeight) / 2
-
-  doc.image(imgBuffer, x, y, {
-    width: imgWidth,
-    height: imgHeight
-  })
-
-  doc.end()
-
-  return pdfPath
 }
 
-const convertImageToPs = (imagePath: string, duplex: boolean = true, tumble: boolean = false): void => {
+const convertImageToPs = async (imagePath: string, duplex: boolean = true, tumble: boolean = false): Promise<void> => {
   const psPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.ps')
 
   try {
-    const pdfPath = convertImageToPdf(imagePath)
+    const pdfPath = await convertImageToPdf(imagePath)
 
     let cmd = duplex
       ? `pdftocairo -ps -level3 -r 300 -paper A4 -expand -duplex "${pdfPath}" "${psPath}"`
@@ -230,7 +232,7 @@ export const downloadMedia = async (
       convertPdfToPs(pdfPath, duplex, tumbleForPresentation)
     }
   } else if (['.jpg', '.jpeg', '.png', '.gif'].includes(extLower)) {
-    convertImageToPs(filePath, duplex, tumble)
+    await convertImageToPs(filePath, duplex, tumble)
   }
 
   return { fileId: hash, filename }
