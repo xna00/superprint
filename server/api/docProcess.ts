@@ -58,9 +58,46 @@ export const generateDocx = (data: RecognizedDocument): Buffer => {
 
 export type ProcessDocumentResult = {
   recognized: RecognizedDocument
-  printTaskId: number
-  printFileId: number
+  printTaskId?: number
+  printFileId?: number
   fileId: string
+  pdfPath: string
+}
+
+export const processDocumentSimple = async (
+  mediaId: string
+): Promise<ProcessDocumentResult> => {
+  ensureUploadsDir()
+
+  const downloadResult = await downloadMedia(mediaId, true, false)
+  console.log(`文件下载完成: ${downloadResult.filename}`)
+
+  const ext = extname(downloadResult.filename).toLowerCase()
+  const filePath = join(UPLOADS_DIR, downloadResult.fileId + ext)
+  const fileUrl = `file://${filePath}`
+
+  console.log('开始识别公文...')
+  const recognized = await recognizeDocument(fileUrl)
+  console.log('识别结果:', recognized)
+
+  console.log('生成 docx 文件...')
+  const docxBuffer = generateDocx(recognized)
+  const docxFileId = downloadResult.fileId + '_docx'
+  const docxPath = join(UPLOADS_DIR, docxFileId + '.docx')
+  writeFileSync(docxPath, docxBuffer)
+  console.log(`docx 文件已保存: ${docxPath}`)
+
+  const pdfPath = convertOfficeToPdf(docxPath)
+  if (!pdfPath) {
+    throw new Error('PDF 生成失败')
+  }
+  console.log(`PDF 预览文件已生成: ${pdfPath}`)
+
+  return {
+    recognized,
+    fileId: docxFileId,
+    pdfPath
+  }
 }
 
 export const processDocument = async (
@@ -147,6 +184,7 @@ export const processDocument = async (
     recognized,
     printTaskId,
     printFileId: printFileResult.lastInsertRowid as number,
-    fileId: docxFileId
+    fileId: docxFileId,
+    pdfPath: pdfPath || ''
   }
 }

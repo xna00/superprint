@@ -1,9 +1,9 @@
-import { sendTextMessage, sendMsgMenuMessage } from './send.ts'
+import { sendTextMessage, sendMsgMenuMessage, uploadMedia, sendFileMessage } from './send.ts'
 import { downloadMedia } from './download.ts'
 import { WeixinKfUser, PrintTask, PrintFile, Printer, Computer } from '../../models/index.ts'
 import { notifyCheckJobs } from '../../ws/index.ts'
 import { addTokenToUrl } from '../utils.ts'
-import { processDocument } from '../docProcess.ts'
+import { processDocument, processDocumentSimple } from '../docProcess.ts'
 import { handlePdfConvertMessages } from '../pdfConvert.ts'
 
 export const generateTaskId = (): number => {
@@ -467,40 +467,38 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
     const kfUser = WeixinKfUser.findOne({ externalUserId }, { user: true })
     const kfid = userMessages[0].open_kfid
 
-    if (!kfUser) {
-      const loginUrl = `https://superprint.xna00.top/?external_userid=${externalUserId}&open_kfid=${kfid}`
-      await sendTextMessage(
-        `请先登录以使用完整功能：${loginUrl}`,
-        kfid,
-        externalUserId
-      )
-      return
-    }
-
-    const user = kfUser.user
     const textMessages = userMessages.filter(m => m.msgtype === 'text')
     const mediaMessages = userMessages.filter(m => m.msgtype === 'image' || m.msgtype === 'file')
 
-    // 处理媒体消息（图片/文件）
     for (const message of mediaMessages) {
       const mediaId = message.msgtype === 'image' ? message.image?.media_id : message.file?.media_id
       if (!mediaId) continue
 
       try {
         await sendTextMessage('🔍 正在识别公文，请稍候...', kfid, externalUserId)
-        const result = await processDocument(mediaId, kfid, externalUserId, kfUser.userId, kfUser.user.username)
-        await sendTextMessage(
-          `✅ 公文处理完成\n\n文号: ${result.recognized.document_number}\n单位: ${result.recognized.issuing_unit}\n标题: ${result.recognized.title}\n\n已自动创建打印任务，请在微信中确认打印`,
-          kfid,
-          externalUserId
-        )
+
+        if (kfUser) {
+          const result = await processDocument(mediaId, kfid, externalUserId, kfUser.userId, kfUser.user.username)
+          const pdfMediaId = await uploadMedia(result.pdfPath, 'file')
+          await sendFileMessage(pdfMediaId, kfid, externalUserId)
+        } else {
+          const result = await processDocumentSimple(mediaId)
+          
+          await sendTextMessage(
+            `✅ 公文识别完成\n\n文号: ${result.recognized.document_number}\n单位: ${result.recognized.issuing_unit}\n标题: ${result.recognized.title}`,
+            kfid,
+            externalUserId
+          )
+
+          const pdfMediaId = await uploadMedia(result.pdfPath, 'file')
+          await sendFileMessage(pdfMediaId, kfid, externalUserId)
+        }
       } catch (error: any) {
         console.error('公文处理失败:', error)
         await sendTextMessage(`❌ 公文处理失败: ${error.message}`, kfid, externalUserId)
       }
     }
 
-    // 处理文本消息
     for (const message of textMessages) {
       const content = message.text.content.trim()
       const menuId = message.text.menu_id
@@ -514,12 +512,11 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
       } else if (menuId?.startsWith('retry_')) {
         const printTaskId = parseInt(menuId.replace('retry_', ''))
         await handleRetryById(kfid, externalUserId, printTaskId)
+      } else if (kfUser) {
+        await sendTextMessage(`你好${kfUser.user.username}，${content}`, kfid, externalUserId)
       } else {
-        await sendTextMessage(
-          `你好${user.username}，${content}`,
-          kfid,
-          externalUserId
-        )
+        const loginUrl = `https://superprint.xna00.top/?external_userid=${externalUserId}&open_kfid=${kfid}`
+        await sendTextMessage(`请先登录以使用完整功能：${loginUrl}`, kfid, externalUserId)
       }
     }
   }))
