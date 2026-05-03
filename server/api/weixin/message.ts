@@ -5,6 +5,7 @@ import { notifyCheckJobs } from '../../ws/index.ts'
 import { addTokenToUrl } from '../utils.ts'
 import { processDocument, processDocumentSimple } from '../docProcess.ts'
 import { handlePdfConvertMessages } from '../pdfConvert.ts'
+import { handlePdfToWordMessages } from '../pdfToWord.ts'
 
 export const generateTaskId = (): number => {
   const timestamp = Date.now()
@@ -529,6 +530,7 @@ const messageHandlerMap: Partial<Record<string, (messages: NonEventMessage[]) =>
   'wkHnU4FQAAnkssZ2Y0t7gAKpQxcw7gjQ': handleMessagesByPrintMan,
   'wkHnU4FQAAIMj9uECzdKwOI_kRP_IGDQ': handleDocProcessMessages,
   'wkHnU4FQAAAO-EtO4HBU2vWdk213Gwjg': handlePdfConvertMessages,
+  'wkHnU4FQAAgFJKiO2JHdsWVrKIM3157Q': handlePdfToWordMessages,
 }
 
 export const handleMessages = async (_messages: Message[]) => {
