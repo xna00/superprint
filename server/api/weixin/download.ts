@@ -13,11 +13,48 @@ const ensureUploadsDir = (): void => {
   }
 }
 
+const embedPrintTicket = (xpsPath: string, duplex: boolean, tumble: boolean): void => {
+  let duplexOption = 'OneSided'
+  if (duplex) {
+    duplexOption = tumble ? 'TwoSidedShortEdge' : 'TwoSidedLongEdge'
+  }
+  
+  const printTicket = `<?xml version="1.0" encoding="UTF-8"?>
+<psf:PrintTicket xmlns:psf="http://schemas.microsoft.com/windows/2003/08/printing/printschemaframework"
+                 xmlns:psk="http://schemas.microsoft.com/windows/2003/08/printing/printschemakeywords">
+  <psf:Feature name="psk:JobDuplexAllDocumentsContiguously">
+    <psf:Option name="psk:${duplexOption}"/>
+  </psf:Feature>
+</psf:PrintTicket>`
+  
+  try {
+    const xpsData = readFileSync(xpsPath)
+    const zip = UZIP.parse(xpsData)
+    
+    zip['Job_PT.xml'] = Buffer.from(printTicket, 'utf-8')
+    
+    let contentTypes = zip['[Content_Types].xml'].toString('utf-8')
+    if (!contentTypes.includes('Job_PT.xml')) {
+      contentTypes = contentTypes.replace(
+        '</Types>',
+        '  <Override PartName="/Job_PT.xml" ContentType="application/vnd.ms-printing.printticket+xml"/>\n</Types>'
+      )
+      zip['[Content_Types].xml'] = Buffer.from(contentTypes, 'utf-8')
+    }
+    
+    const newXpsData = UZIP.encode(zip)
+    writeFileSync(xpsPath, newXpsData)
+  } catch (error) {
+    console.error('嵌入PrintTicket失败:', error)
+  }
+}
+
 export const convertPdfToXps = (pdfPath: string, duplex: boolean = true, tumble: boolean = false): void => {
   const xpsPath = pdfPath.replace(/\.pdf$/i, '.xps')
   try {
     const cmd = `gs -q -sDEVICE=xpswrite -dNOPAUSE -dBATCH -sOutputFile="${xpsPath}" "${pdfPath}"`
     execSync(cmd, { stdio: 'ignore', shell: true } as any)
+    embedPrintTicket(xpsPath, duplex, tumble)
   } catch (error) {
     console.error('PDF转XPS失败:', error)
   }

@@ -4,6 +4,7 @@
  * 功能说明:
  * - 使用XPS Print API打印XPS文档
  * - 兼容GDI和XPSDrv打印机驱动
+ * - XPS文件内嵌PrintTicket支持双面打印
  */
 
 #include "print_core.h"
@@ -15,20 +16,7 @@
 #include <objbase.h>
 #include <xpsprint.h>
 
-/* IXpsPrintJobStream IID 修复（微软头文件中的IID有误） */
-MIDL_INTERFACE("7a77dc5f-45d6-4dff-9307-d8cb846347ca") IXpsPrintJobStreamFixed : IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE Read(
-        void *pv,
-        ULONG cb,
-        ULONG *pcbRead) = 0;
-    
-    virtual HRESULT STDMETHODCALLTYPE Write(
-        const void *pv,
-        ULONG cb,
-        ULONG *pcbWritten) = 0;
-    
-    virtual HRESULT STDMETHODCALLTYPE Close(void) = 0;
-};
+#pragma comment(lib, "xpsprint.lib")
 
 /*
  * 打印XPS文件到指定打印机
@@ -41,15 +29,13 @@ int print_file(const char *file_path, const char *printer_name) {
     HRESULT hr = S_OK;
     HANDLE completionEvent = NULL;
     IXpsPrintJob *job = NULL;
-    IStream *jobStream = NULL;
-    IXpsOMObjectFactory *xpsFactory = NULL;
-    IXpsOMPackage *package = NULL;
+    IXpsPrintJobStream *jobStream = NULL;
     wchar_t w_printer_name[256];
     wchar_t w_file_path[MAX_PATH];
     DWORD buf_size = sizeof(w_printer_name);
     int result = -1;
+    FILE *fp = NULL;
     
-    /* 获取打印机名称 */
     if (printer_name && printer_name[0] != '\0') {
         MultiByteToWideChar(CP_UTF8, 0, printer_name, -1, w_printer_name, 256);
     } else {
@@ -59,10 +45,8 @@ int print_file(const char *file_path, const char *printer_name) {
         }
     }
     
-    /* 转换文件路径 */
     MultiByteToWideChar(CP_UTF8, 0, file_path, -1, w_file_path, MAX_PATH);
     
-    /* 1. COM 初始化 */
     hr = CoInitialize(NULL);
     if (FAILED(hr)) {
         wchar_t log[128];
@@ -71,14 +55,12 @@ int print_file(const char *file_path, const char *printer_name) {
         return -1;
     }
     
-    /* 2. 创建完成事件 */
     completionEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!completionEvent) {
         add_log(L"创建完成事件失败");
         goto cleanup;
     }
     
-    /* 3. 启动XPS打印任务 */
     hr = StartXpsPrintJob(
         w_printer_name,
         L"PrintJob",
@@ -98,39 +80,39 @@ int print_file(const char *file_path, const char *printer_name) {
         goto cleanup;
     }
     
-    /* 4. 创建XPS OM工厂并加载文件 */
-    hr = CoCreateInstance(
-        &CLSID_XpsOMObjectFactory,
-        NULL,
-        CLSCTX_INPROC_SERVER,
-        &IID_IXpsOMObjectFactory,
-        (void **)&xpsFactory
-    );
-    if (FAILED(hr)) {
-        wchar_t log[128];
-        swprintf(log, 128, L"创建XPS OM工厂失败: 0x%08X", hr);
-        add_log(log);
+    fp = _wfopen(w_file_path, L"rb");
+    if (!fp) {
+        add_log(L"打开XPS文件失败");
         goto cleanup;
     }
     
-    hr = xpsFactory->lpVtbl->CreatePackageFromFile(xpsFactory, w_file_path, FALSE, &package);
-    if (FAILED(hr)) {
-        wchar_t log[128];
-        swprintf(log, 128, L"加载XPS文件失败: 0x%08X", hr);
-        add_log(log);
-        goto cleanup;
+    fseek(fp, 0, SEEK_END);
+    long file_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    
+    BYTE buffer[8192];
+    ULONG bytesRead, bytesWritten;
+    long remaining = file_size;
+    
+    while (remaining > 0) {
+        ULONG toRead = (remaining > (long)sizeof(buffer)) ? sizeof(buffer) : (ULONG)remaining;
+        bytesRead = (ULONG)fread(buffer, 1, toRead, fp);
+        if (bytesRead == 0) break;
+        
+        hr = jobStream->lpVtbl->Write(jobStream, buffer, bytesRead, &bytesWritten);
+        if (FAILED(hr)) {
+            wchar_t log[128];
+            swprintf(log, 128, L"写入打印流失败: 0x%08X", hr);
+            add_log(log);
+            goto cleanup;
+        }
+        
+        remaining -= bytesRead;
     }
     
-    /* 5. 将XPS文档写入打印流 */
-    hr = package->lpVtbl->WriteToStream(package, jobStream, FALSE);
-    if (FAILED(hr)) {
-        wchar_t log[128];
-        swprintf(log, 128, L"写入XPS打印流失败: 0x%08X", hr);
-        add_log(log);
-        goto cleanup;
-    }
+    fclose(fp);
+    fp = NULL;
     
-    /* 6. 关闭打印流 */
     hr = jobStream->lpVtbl->Close(jobStream);
     if (FAILED(hr)) {
         wchar_t log[128];
@@ -139,13 +121,11 @@ int print_file(const char *file_path, const char *printer_name) {
         goto cleanup;
     }
     
-    /* 7. 等待打印完成 */
     if (WaitForSingleObject(completionEvent, INFINITE) != WAIT_OBJECT_0) {
         add_log(L"等待打印完成超时");
         goto cleanup;
     }
     
-    /* 8. 检查打印状态 */
     XPS_JOB_STATUS jobStatus;
     hr = job->lpVtbl->GetJobStatus(job, &jobStatus);
     if (FAILED(hr)) {
@@ -176,9 +156,7 @@ int print_file(const char *file_path, const char *printer_name) {
     }
 
 cleanup:
-    /* 9. 清理资源 */
-    if (package) package->lpVtbl->Release(package);
-    if (xpsFactory) xpsFactory->lpVtbl->Release(xpsFactory);
+    if (fp) fclose(fp);
     if (jobStream) jobStream->lpVtbl->Release(jobStream);
     if (job) job->lpVtbl->Release(job);
     if (completionEvent) CloseHandle(completionEvent);
