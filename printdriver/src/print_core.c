@@ -17,9 +17,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wincodec.h>
+#include <olectl.h>
 #include <miniz/miniz.h>
 
 #pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "oleaut32.lib")
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "shlwapi.lib")
 
@@ -29,13 +31,14 @@ static BOOL g_com_initialized = FALSE;
 static int init_wic_factory(void) {
     if (g_wic_factory) return 0;
     
-    HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
-        hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE && hr != S_FALSE) {
+        wchar_t log[128];
+        swprintf(log, 128, L"COM初始化失败: 0x%08X", hr);
+        add_log(log);
+        return -1;
     }
-    if (SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE || hr == S_FALSE) {
-        g_com_initialized = TRUE;
-    }
+    g_com_initialized = TRUE;
     
     hr = CoCreateInstance(&CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
                           &IID_IWICImagingFactory, (void**)&g_wic_factory);
@@ -172,6 +175,93 @@ static int compare_jpeg_names(const void *a, const void *b) {
     return wcscmp(name_a, name_b);
 }
 
+static HBITMAP load_jpeg_with_ole(const wchar_t *jpeg_path, int *width, int *height) {
+    HANDLE hFile = CreateFileW(jpeg_path, GENERIC_READ, FILE_SHARE_READ, NULL, 
+                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return NULL;
+    }
+    
+    DWORD fileSize = GetFileSize(hFile, NULL);
+    if (fileSize == 0 || fileSize > 100 * 1024 * 1024) {
+        CloseHandle(hFile);
+        return NULL;
+    }
+    
+    HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, fileSize);
+    if (!hGlobal) {
+        CloseHandle(hFile);
+        return NULL;
+    }
+    
+    void *pData = GlobalLock(hGlobal);
+    if (!pData) {
+        GlobalFree(hGlobal);
+        CloseHandle(hFile);
+        return NULL;
+    }
+    
+    DWORD bytesRead;
+    if (!ReadFile(hFile, pData, fileSize, &bytesRead, NULL) || bytesRead != fileSize) {
+        GlobalUnlock(hGlobal);
+        GlobalFree(hGlobal);
+        CloseHandle(hFile);
+        return NULL;
+    }
+    
+    CloseHandle(hFile);
+    GlobalUnlock(hGlobal);
+    
+    IStream *pStream = NULL;
+    HRESULT hr = CreateStreamOnHGlobal(hGlobal, TRUE, &pStream);
+    if (FAILED(hr)) {
+        GlobalFree(hGlobal);
+        return NULL;
+    }
+    
+    IPicture *pPicture = NULL;
+    hr = OleLoadPicture(pStream, fileSize, TRUE, &IID_IPicture, (void**)&pPicture);
+    pStream->lpVtbl->Release(pStream);
+    
+    if (FAILED(hr) || !pPicture) {
+        return NULL;
+    }
+    
+    OLE_XSIZE_HIMETRIC picWidth;
+    OLE_YSIZE_HIMETRIC picHeight;
+    pPicture->lpVtbl->get_Width(pPicture, &picWidth);
+    pPicture->lpVtbl->get_Height(pPicture, &picHeight);
+    
+    HDC hdcScreen = GetDC(NULL);
+    int pxWidth = MulDiv(picWidth, GetDeviceCaps(hdcScreen, LOGPIXELSX), 2540);
+    int pxHeight = MulDiv(picHeight, GetDeviceCaps(hdcScreen, LOGPIXELSY), 2540);
+    
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, pxWidth, pxHeight);
+    HBITMAP hOldBitmap = SelectObject(hdcMem, hBitmap);
+    
+    RECT rc = {0, 0, pxWidth, pxHeight};
+    FillRect(hdcMem, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+    
+    hr = pPicture->lpVtbl->Render(pPicture, hdcMem, 0, 0, pxWidth, pxHeight,
+                                   0, picHeight, picWidth, -picHeight, NULL);
+    
+    SelectObject(hdcMem, hOldBitmap);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+    
+    pPicture->lpVtbl->Release(pPicture);
+    
+    if (FAILED(hr)) {
+        DeleteObject(hBitmap);
+        return NULL;
+    }
+    
+    *width = pxWidth;
+    *height = pxHeight;
+    return hBitmap;
+}
+
 static HBITMAP load_jpeg_with_wic(const wchar_t *jpeg_path, int *width, int *height) {
     if (!g_wic_factory) return NULL;
     
@@ -274,6 +364,9 @@ static int print_jpeg_page(HDC hdc_printer, const wchar_t *jpeg_path, int page_n
     int final_w, final_h;
     
     hBitmap = load_jpeg_with_wic(jpeg_path, &img_width, &img_height);
+    if (!hBitmap) {
+        hBitmap = load_jpeg_with_ole(jpeg_path, &img_width, &img_height);
+    }
     if (!hBitmap) {
         wchar_t log[512];
         swprintf(log, 512, L"第%d页：加载JPEG失败", page_num);
