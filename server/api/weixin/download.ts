@@ -18,9 +18,13 @@ const renderPdfToJpegs = (pdfPath: string, dpi: number = 300): string[] => {
   const tempDir = join(UPLOADS_DIR, `_xps_tmp_${Date.now()}`)
   mkdirSync(tempDir, { recursive: true })
   
+  const a4PdfPath = join(tempDir, 'a4.pdf')
+  const cmd1 = `pdftocairo -pdf -paper A4 -expand "${pdfPath}" "${a4PdfPath}"`
+  execSync(cmd1, { stdio: 'ignore', shell: true } as any)
+  
   const prefix = join(tempDir, 'page')
-  const cmd = `pdftocairo -jpeg -r ${dpi} -paper A4 -jpegopt quality=85 "${pdfPath}" "${prefix}"`
-  execSync(cmd, { stdio: 'ignore', shell: true } as any)
+  const cmd2 = `pdftocairo -jpeg -r ${dpi} -jpegopt quality=85 "${a4PdfPath}" "${prefix}"`
+  execSync(cmd2, { stdio: 'ignore', shell: true } as any)
   
   const files = readdirSync(tempDir)
     .filter(f => f.endsWith('.jpg'))
