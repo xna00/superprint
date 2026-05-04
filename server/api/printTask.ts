@@ -5,7 +5,7 @@ import { notifyCheckJobs } from "../ws/index.ts"
 import { sendMsgMenuMessage } from "./weixin/send.ts"
 import { existsSync, writeFileSync } from "node:fs"
 import { join, extname } from "node:path"
-import { convertPdfToPs, convertOfficeToPdf, isOfficeFile, isPresentationFile, getUploadsDir } from "./weixin/download.ts"
+import { convertPdfToXps, convertOfficeToPdf, isOfficeFile, isPresentationFile, getUploadsDir } from "./weixin/download.ts"
 import { generateTaskId } from "./weixin/message.ts"
 import { getInfo } from "./global.ts"
 import { createHash } from "node:crypto"
@@ -94,7 +94,7 @@ export const updatePrintFile = async (fileId: number, duplex: boolean, tumble: b
 
     const pdfPath = join(getUploadsDir(), file.fileId + '.pdf')
     if (existsSync(pdfPath)) {
-        convertPdfToPs(pdfPath, duplex, tumble)
+        convertPdfToXps(pdfPath, duplex, tumble)
     }
 
     PrintFile.update({ id: fileId }, { duplex, tumble })
@@ -276,12 +276,12 @@ export const _outUploadPrintFile = async (req: Request): Promise<Response> => {
     writeFileSync(filePath, buffer)
 
     if (ext === ".pdf") {
-        convertPdfToPs(filePath, duplex, tumble)
+        convertPdfToXps(filePath, duplex, tumble)
     } else if (isOfficeFile(ext)) {
         const pdfPath = convertOfficeToPdf(filePath)
         if (pdfPath) {
             const officeTumble = isPresentationFile(ext) ? true : tumble
-            convertPdfToPs(pdfPath, duplex, officeTumble)
+            convertPdfToXps(pdfPath, duplex, officeTumble)
         }
     }
 

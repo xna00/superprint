@@ -30,10 +30,10 @@ export const getFile = async (fileName: string) => {
     })
 }
 
-export const getPsFile = async (fileId: string) => {
+export const getZipFile = async (fileId: string) => {
     const user = await _currentUser()
     
-    const filePath = join(UPLOADS_DIR, fileId + '.ps')
+    const filePath = join(UPLOADS_DIR, fileId + '.zip')
     try {
         accessSync(filePath, constants.R_OK)
     } catch {
@@ -44,8 +44,16 @@ export const getPsFile = async (fileId: string) => {
     
     return new Response(stream, {
         headers: {
-            'Content-Type': 'application/postscript',
-            'Content-Disposition': `inline; filename="${fileId}.ps"`,
+            'Content-Type': 'application/zip',
+            'Content-Disposition': `attachment; filename="${fileId}.zip"`,
         },
     })
+}
+
+export const getXpsFile = async (fileId: string) => {
+    return getZipFile(fileId)
+}
+
+export const getPsFile = async (fileId: string) => {
+    return getXpsFile(fileId)
 }

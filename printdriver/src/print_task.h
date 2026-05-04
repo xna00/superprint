@@ -10,6 +10,8 @@ typedef struct _PrintFileInfo {
     char file_id[256];
     char filename[256];
     char printer_name[256];
+    int duplex;
+    int tumble;
 } PrintFileInfo;
 
 int get_waiting_print_files(HttpClient *client, const char *computer_id, PrintFileInfo **files, int *count);

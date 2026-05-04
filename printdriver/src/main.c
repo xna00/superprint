@@ -554,7 +554,7 @@ void handle_print_job(void) {
             continue;
         }
         
-        if (print_file(local_path, files[i].printer_name) != 0) {
+        if (print_file(local_path, files[i].printer_name, files[i].duplex, files[i].tumble) != 0) {
             add_log(L"打印失败");
             report_file_failed(g_http_client, files[i].id);
             continue;

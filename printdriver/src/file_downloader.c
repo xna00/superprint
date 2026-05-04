@@ -62,17 +62,17 @@ int download_file_to_local(HttpClient *client, const char *file_id, const char *
         return -1;
     }
     
-    /* 构建本地文件路径（使用.ps后缀） */
+    /* 构建本地文件路径（使用.zip后缀） */
     char safe_filename[512];
     strncpy_s(safe_filename, sizeof(safe_filename), filename, _TRUNCATE);
     sanitize_filename(safe_filename);
     
-    /* 移除原始后缀，添加.ps后缀 */
+    /* 移除原始后缀，添加.zip后缀 */
     char *dot = strrchr(safe_filename, '.');
     if (dot) {
         *dot = '\0';
     }
-    snprintf(local_path, path_size, DOWNLOAD_FOLDER "/%s.ps", safe_filename);
+    snprintf(local_path, path_size, DOWNLOAD_FOLDER "/%s.zip", safe_filename);
     
     /* 构建文件下载URL（使用PS文件API） */
     char url[512];
@@ -170,5 +170,5 @@ int download_and_print_file(HttpClient *client, const char *file_id) {
     }
     
     /* 打印文件 */
-    return print_file(local_path, NULL);
+    return print_file(local_path, NULL, 1, 0);
 }

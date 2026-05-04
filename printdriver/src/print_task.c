@@ -105,6 +105,8 @@ int get_waiting_print_files(HttpClient *client, const char *computer_id, PrintFi
         json_object *printer_obj;
         
         char printer_name[256] = "";
+        int duplex = 1;
+        int tumble = 0;
         
         if (json_object_object_get_ex(task, "printer", &printer_obj)) {
             json_object *printer_name_obj;
@@ -114,6 +116,14 @@ int get_waiting_print_files(HttpClient *client, const char *computer_id, PrintFi
                     strncpy_s(printer_name, sizeof(printer_name), pname, _TRUNCATE);
                 }
             }
+        }
+        
+        json_object *duplex_obj, *tumble_obj;
+        if (json_object_object_get_ex(task, "duplex", &duplex_obj)) {
+            duplex = json_object_get_boolean(duplex_obj);
+        }
+        if (json_object_object_get_ex(task, "tumble", &tumble_obj)) {
+            tumble = json_object_get_boolean(tumble_obj);
         }
         
         if (json_object_object_get_ex(task, "id", &task_id_obj) &&
@@ -145,6 +155,8 @@ int get_waiting_print_files(HttpClient *client, const char *computer_id, PrintFi
                     snprintf((*files)[*count].print_task_id, sizeof((*files)[*count].print_task_id), "%s", print_task_id);
                     strncpy_s((*files)[*count].file_id, sizeof((*files)[*count].file_id), file_id_str ? file_id_str : "", _TRUNCATE);
                     strncpy_s((*files)[*count].printer_name, sizeof((*files)[*count].printer_name), printer_name, _TRUNCATE);
+                    (*files)[*count].duplex = duplex;
+                    (*files)[*count].tumble = tumble;
                     
                     if (json_object_object_get_ex(file, "filename", &filename_obj)) {
                         const char *fname = json_object_get_string(filename_obj);

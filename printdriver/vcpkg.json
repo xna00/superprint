@@ -1,6 +1,6 @@
 {
   "name": "myapp",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "builtin-baseline": "123648765f656cb111a4cb9aef20e50536446840",
   "dependencies": [
     "vcpkg-cmake",
@@ -10,6 +10,7 @@
       "features": ["websockets"]
     },
     "zlib",
-    "json-c"
+    "json-c",
+    "miniz"
   ]
 }
