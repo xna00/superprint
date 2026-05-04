@@ -24,18 +24,25 @@
 #pragma comment(lib, "shlwapi.lib")
 
 static IWICImagingFactory *g_wic_factory = NULL;
+static BOOL g_com_initialized = FALSE;
 
 static int init_wic_factory(void) {
     if (g_wic_factory) return 0;
     
-    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
-        return -1;
+        hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    }
+    if (SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE || hr == S_FALSE) {
+        g_com_initialized = TRUE;
     }
     
     hr = CoCreateInstance(&CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
                           &IID_IWICImagingFactory, (void**)&g_wic_factory);
     if (FAILED(hr)) {
+        wchar_t log[128];
+        swprintf(log, 128, L"创建WIC工厂失败: 0x%08X", hr);
+        add_log(log);
         g_wic_factory = NULL;
         return -1;
     }
@@ -171,7 +178,6 @@ static HBITMAP load_jpeg_with_wic(const wchar_t *jpeg_path, int *width, int *hei
     IWICBitmapDecoder *decoder = NULL;
     IWICBitmapFrameDecode *frame = NULL;
     IWICFormatConverter *converter = NULL;
-    IWICBitmapSource *source = NULL;
     HBITMAP hBitmap = NULL;
     void *bits = NULL;
     
@@ -215,7 +221,6 @@ static HBITMAP load_jpeg_with_wic(const wchar_t *jpeg_path, int *width, int *hei
     }
     
     HDC hdcScreen = GetDC(NULL);
-    HDC hdcMem = CreateCompatibleDC(hdcScreen);
     
     BITMAPINFO bmi = {0};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -228,7 +233,6 @@ static HBITMAP load_jpeg_with_wic(const wchar_t *jpeg_path, int *width, int *hei
     hBitmap = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
     if (!hBitmap || !bits) {
         ReleaseDC(NULL, hdcScreen);
-        DeleteDC(hdcMem);
         converter->lpVtbl->Release(converter);
         frame->lpVtbl->Release(frame);
         decoder->lpVtbl->Release(decoder);
@@ -242,7 +246,6 @@ static HBITMAP load_jpeg_with_wic(const wchar_t *jpeg_path, int *width, int *hei
     if (FAILED(hr)) {
         DeleteObject(hBitmap);
         ReleaseDC(NULL, hdcScreen);
-        DeleteDC(hdcMem);
         converter->lpVtbl->Release(converter);
         frame->lpVtbl->Release(frame);
         decoder->lpVtbl->Release(decoder);
@@ -250,7 +253,6 @@ static HBITMAP load_jpeg_with_wic(const wchar_t *jpeg_path, int *width, int *hei
     }
     
     ReleaseDC(NULL, hdcScreen);
-    DeleteDC(hdcMem);
     
     converter->lpVtbl->Release(converter);
     frame->lpVtbl->Release(frame);
@@ -267,9 +269,9 @@ static int print_jpeg_page(HDC hdc_printer, const wchar_t *jpeg_path, int page_n
     HGDIOBJ h_old_bitmap = NULL;
     int img_width, img_height;
     int paper_width, paper_height;
-    double scale_x, scale_y, scale;
-    int draw_w, draw_h, draw_x, draw_y;
     int result = -1;
+    BOOL need_rotate = FALSE;
+    int final_w, final_h;
     
     hBitmap = load_jpeg_with_wic(jpeg_path, &img_width, &img_height);
     if (!hBitmap) {
@@ -279,17 +281,27 @@ static int print_jpeg_page(HDC hdc_printer, const wchar_t *jpeg_path, int page_n
         return -1;
     }
     
+    need_rotate = (img_width > img_height);
+    
     paper_width = GetDeviceCaps(hdc_printer, HORZRES);
     paper_height = GetDeviceCaps(hdc_printer, VERTRES);
     
-    scale_x = (double)paper_width / img_width;
-    scale_y = (double)paper_height / img_height;
-    scale = (scale_x < scale_y) ? scale_x : scale_y;
+    if (need_rotate) {
+        final_w = img_height;
+        final_h = img_width;
+    } else {
+        final_w = img_width;
+        final_h = img_height;
+    }
     
-    draw_w = (int)(img_width * scale);
-    draw_h = (int)(img_height * scale);
-    draw_x = (paper_width - draw_w) / 2;
-    draw_y = (paper_height - draw_h) / 2;
+    double scale_x = (double)paper_width / final_w;
+    double scale_y = (double)paper_height / final_h;
+    double scale = (scale_x < scale_y) ? scale_x : scale_y;
+    
+    int draw_w = (int)(final_w * scale);
+    int draw_h = (int)(final_h * scale);
+    int draw_x = (paper_width - draw_w) / 2;
+    int draw_y = (paper_height - draw_h) / 2;
     
     hdc_mem = CreateCompatibleDC(hdc_printer);
     if (!hdc_mem) {
@@ -302,10 +314,25 @@ static int print_jpeg_page(HDC hdc_printer, const wchar_t *jpeg_path, int page_n
     SetStretchBltMode(hdc_printer, HALFTONE);
     SetBrushOrgEx(hdc_printer, 0, 0, NULL);
     
-    if (!StretchBlt(hdc_printer, draw_x, draw_y, draw_w, draw_h,
-                    hdc_mem, 0, 0, img_width, img_height, SRCCOPY)) {
-        add_log(L"StretchBlt失败");
-        goto cleanup;
+    if (need_rotate) {
+        POINT pts[3];
+        pts[0].x = draw_x;
+        pts[0].y = draw_y + draw_h;
+        pts[1].x = draw_x;
+        pts[1].y = draw_y;
+        pts[2].x = draw_x + draw_w;
+        pts[2].y = draw_y + draw_h;
+        
+        if (!PlgBlt(hdc_printer, pts, hdc_mem, 0, 0, img_width, img_height, NULL, 0, 0)) {
+            add_log(L"PlgBlt失败");
+            goto cleanup;
+        }
+    } else {
+        if (!StretchBlt(hdc_printer, draw_x, draw_y, draw_w, draw_h,
+                        hdc_mem, 0, 0, img_width, img_height, SRCCOPY)) {
+            add_log(L"StretchBlt失败");
+            goto cleanup;
+        }
     }
     
     result = 0;
