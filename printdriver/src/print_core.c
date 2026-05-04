@@ -2,8 +2,8 @@
  * 核心打印功能实现
  * 
  * 功能说明:
- * - 使用Windows打印API (Winspool) 打印文件
- * - 调用API获取和处理打印任务
+ * - 使用XPS Print API打印XPS文档
+ * - 兼容GDI和XPSDrv打印机驱动
  */
 
 #include "print_core.h"
@@ -12,18 +12,44 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <objbase.h>
+#include <xpsprint.h>
+
+/* IXpsPrintJobStream IID 修复（微软头文件中的IID有误） */
+MIDL_INTERFACE("7a77dc5f-45d6-4dff-9307-d8cb846347ca") IXpsPrintJobStreamFixed : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE Read(
+        void *pv,
+        ULONG cb,
+        ULONG *pcbRead) = 0;
+    
+    virtual HRESULT STDMETHODCALLTYPE Write(
+        const void *pv,
+        ULONG cb,
+        ULONG *pcbWritten) = 0;
+    
+    virtual HRESULT STDMETHODCALLTYPE Close(void) = 0;
+};
 
 /*
- * 打印文件到指定打印机
- * 使用Windows Winspool API进行RAW模式打印
- * @param file_path 文件路径
+ * 打印XPS文件到指定打印机
+ * 使用XPS Print API (IXpsPrintJob)
+ * @param file_path XPS文件路径
  * @param printer_name 打印机名称，如果为NULL或空则使用默认打印机
  * @return 0成功，-1失败
  */
 int print_file(const char *file_path, const char *printer_name) {
+    HRESULT hr = S_OK;
+    HANDLE completionEvent = NULL;
+    IXpsPrintJob *job = NULL;
+    IStream *jobStream = NULL;
+    IXpsOMObjectFactory *xpsFactory = NULL;
+    IXpsOMPackage *package = NULL;
     wchar_t w_printer_name[256];
+    wchar_t w_file_path[MAX_PATH];
     DWORD buf_size = sizeof(w_printer_name);
+    int result = -1;
     
+    /* 获取打印机名称 */
     if (printer_name && printer_name[0] != '\0') {
         MultiByteToWideChar(CP_UTF8, 0, printer_name, -1, w_printer_name, 256);
     } else {
@@ -33,140 +59,131 @@ int print_file(const char *file_path, const char *printer_name) {
         }
     }
     
-    HANDLE hPrinter;
-    if (!OpenPrinterW(w_printer_name, &hPrinter, NULL)) {
-        add_log(L"打开打印机失败");
+    /* 转换文件路径 */
+    MultiByteToWideChar(CP_UTF8, 0, file_path, -1, w_file_path, MAX_PATH);
+    
+    /* 1. COM 初始化 */
+    hr = CoInitialize(NULL);
+    if (FAILED(hr)) {
+        wchar_t log[128];
+        swprintf(log, 128, L"COM初始化失败: 0x%08X", hr);
+        add_log(log);
         return -1;
     }
     
-    /* 设置文档信息 */
-    DOC_INFO_1W doc_info;
-    memset(&doc_info, 0, sizeof(doc_info));
-    doc_info.pDocName = L"PrintJob";
-    doc_info.pOutputFile = NULL;
-    doc_info.pDatatype = L"RAW";
-    
-    /* 开始打印文档
-     * StartDocPrinterW - 开始一个打印作业
-     * 参数1: 打印机句柄
-     * 参数2: 文档信息结构的级别
-     * 参数3: 指向文档信息结构的指针
-     * 返回值: 如果函数成功，返回作业ID；如果失败，返回零
-     */
-    DWORD job_id = StartDocPrinterW(hPrinter, 1, (LPBYTE)&doc_info);
-    if (job_id == 0) {
-        add_log(L"开始打印文档失败");
-        ClosePrinter(hPrinter);
-        return -1;
+    /* 2. 创建完成事件 */
+    completionEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!completionEvent) {
+        add_log(L"创建完成事件失败");
+        goto cleanup;
     }
     
-    /* 开始一页
-     * StartPagePrinter - 开始打印一页
-     * 参数: 打印机句柄
-     * 返回值: 如果函数成功，返回非零值；如果失败，返回零
-     */
-    if (!StartPagePrinter(hPrinter)) {
-        add_log(L"开始打印页失败");
-        EndDocPrinter(hPrinter);
-        ClosePrinter(hPrinter);
-        return -1;
+    /* 3. 启动XPS打印任务 */
+    hr = StartXpsPrintJob(
+        w_printer_name,
+        L"PrintJob",
+        NULL,
+        NULL,
+        completionEvent,
+        NULL,
+        0,
+        &job,
+        &jobStream,
+        NULL
+    );
+    if (FAILED(hr)) {
+        wchar_t log[128];
+        swprintf(log, 128, L"启动XPS打印任务失败: 0x%08X", hr);
+        add_log(log);
+        goto cleanup;
     }
     
-    /* 将UTF-8路径转换为宽字符串
-     * MultiByteToWideChar - 将多字节字符串转换为宽字符字符串
-     * 参数1: 代码页，CP_UTF8表示使用UTF-8编码
-     * 参数2: 转换标志，0表示默认行为
-     * 参数3: 要转换的多字节字符串
-     * 参数4: 多字节字符串的长度，-1表示自动计算
-     * 参数5: 接收宽字符字符串的缓冲区
-     * 参数6: 缓冲区大小
-     * 返回值: 如果函数成功，返回写入缓冲区的字符数；如果失败，返回零
-     */
-    wchar_t wide_file_path[MAX_PATH];
-    MultiByteToWideChar(CP_UTF8, 0, file_path, -1, wide_file_path, MAX_PATH);
-    
-    /* 读取文件内容并打印 */
-    FILE *fp = _wfopen(wide_file_path, L"rb");
-    if (!fp) {
-        add_log(L"打开文件失败");
-        EndPagePrinter(hPrinter);
-        EndDocPrinter(hPrinter);
-        ClosePrinter(hPrinter);
-        return -1;
+    /* 4. 创建XPS OM工厂并加载文件 */
+    hr = CoCreateInstance(
+        &CLSID_XpsOMObjectFactory,
+        NULL,
+        CLSCTX_INPROC_SERVER,
+        &IID_IXpsOMObjectFactory,
+        (void **)&xpsFactory
+    );
+    if (FAILED(hr)) {
+        wchar_t log[128];
+        swprintf(log, 128, L"创建XPS OM工厂失败: 0x%08X", hr);
+        add_log(log);
+        goto cleanup;
     }
     
-    /* 获取文件大小 */
-    fseek(fp, 0, SEEK_END);
-    long file_size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-    
-    /* 分配缓冲区 */
-    char *buffer = (char *)malloc(file_size);
-    if (!buffer) {
-        add_log(L"内存分配失败");
-        fclose(fp);
-        EndPagePrinter(hPrinter);
-        EndDocPrinter(hPrinter);
-        ClosePrinter(hPrinter);
-        return -1;
+    hr = xpsFactory->lpVtbl->CreatePackageFromFile(xpsFactory, w_file_path, FALSE, &package);
+    if (FAILED(hr)) {
+        wchar_t log[128];
+        swprintf(log, 128, L"加载XPS文件失败: 0x%08X", hr);
+        add_log(log);
+        goto cleanup;
     }
     
-    /* 读取文件 */
-    size_t read_size = fread(buffer, 1, file_size, fp);
-    fclose(fp);
-    
-    if (read_size != (size_t)file_size) {
-        add_log(L"读取文件不完整");
-        free(buffer);
-        EndPagePrinter(hPrinter);
-        EndDocPrinter(hPrinter);
-        ClosePrinter(hPrinter);
-        return -1;
+    /* 5. 将XPS文档写入打印流 */
+    hr = package->lpVtbl->WriteToStream(package, jobStream, FALSE);
+    if (FAILED(hr)) {
+        wchar_t log[128];
+        swprintf(log, 128, L"写入XPS打印流失败: 0x%08X", hr);
+        add_log(log);
+        goto cleanup;
     }
     
-    /* 发送打印数据
-     * WritePrinter - 向打印机写入数据
-     * 参数1: 打印机句柄
-     * 参数2: 指向要写入的数据的指针
-     * 参数3: 要写入的字节数
-     * 参数4: 指向接收实际写入字节数的变量的指针
-     * 返回值: 如果函数成功，返回非零值；如果失败，返回零
-     */
-    DWORD written;
-    if (!WritePrinter(hPrinter, (LPVOID)buffer, (DWORD)file_size, &written)) {
-        add_log(L"写入打印机失败");
-        free(buffer);
-        EndPagePrinter(hPrinter);
-        EndDocPrinter(hPrinter);
-        ClosePrinter(hPrinter);
-        return -1;
+    /* 6. 关闭打印流 */
+    hr = jobStream->lpVtbl->Close(jobStream);
+    if (FAILED(hr)) {
+        wchar_t log[128];
+        swprintf(log, 128, L"关闭打印流失败: 0x%08X", hr);
+        add_log(log);
+        goto cleanup;
     }
     
-    free(buffer);
+    /* 7. 等待打印完成 */
+    if (WaitForSingleObject(completionEvent, INFINITE) != WAIT_OBJECT_0) {
+        add_log(L"等待打印完成超时");
+        goto cleanup;
+    }
     
-    /* 结束一页
-     * EndPagePrinter - 结束当前打印页
-     * 参数: 打印机句柄
-     * 返回值: 如果函数成功，返回非零值；如果失败，返回零
-     */
-    EndPagePrinter(hPrinter);
+    /* 8. 检查打印状态 */
+    XPS_JOB_STATUS jobStatus;
+    hr = job->lpVtbl->GetJobStatus(job, &jobStatus);
+    if (FAILED(hr)) {
+        wchar_t log[128];
+        swprintf(log, 128, L"获取打印状态失败: 0x%08X", hr);
+        add_log(log);
+        goto cleanup;
+    }
     
-    /* 结束打印文档
-     * EndDocPrinter - 结束打印作业
-     * 参数: 打印机句柄
-     * 返回值: 如果函数成功，返回非零值；如果失败，返回零
-     */
-    EndDocPrinter(hPrinter);
+    switch (jobStatus.completion) {
+        case XPS_JOB_COMPLETED:
+            add_log(L"XPS打印任务已完成");
+            result = 0;
+            break;
+        case XPS_JOB_CANCELLED:
+            add_log(L"XPS打印任务已取消");
+            break;
+        case XPS_JOB_FAILED:
+            {
+                wchar_t log[128];
+                swprintf(log, 128, L"XPS打印任务失败: 0x%08X", jobStatus.jobStatus);
+                add_log(log);
+            }
+            break;
+        default:
+            add_log(L"XPS打印任务意外状态");
+            break;
+    }
+
+cleanup:
+    /* 9. 清理资源 */
+    if (package) package->lpVtbl->Release(package);
+    if (xpsFactory) xpsFactory->lpVtbl->Release(xpsFactory);
+    if (jobStream) jobStream->lpVtbl->Release(jobStream);
+    if (job) job->lpVtbl->Release(job);
+    if (completionEvent) CloseHandle(completionEvent);
     
-    /* 关闭打印机
-     * ClosePrinter - 关闭打印机句柄
-     * 参数: 打印机句柄
-     * 返回值: 如果函数成功，返回非零值；如果失败，返回零
-     */
-    ClosePrinter(hPrinter);
+    CoUninitialize();
     
-    wchar_t log[128];
-    swprintf(log, 128, L"打印任务已提交 (%ld 字节)", file_size);
-    add_log(log);
-    return 0;
+    return result;
 }

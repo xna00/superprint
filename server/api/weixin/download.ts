@@ -13,26 +13,13 @@ const ensureUploadsDir = (): void => {
   }
 }
 
-export const convertPdfToPs = (pdfPath: string, duplex: boolean = true, tumble: boolean = false): void => {
-  const psPath = pdfPath.replace(/\.pdf$/i, '.ps')
+export const convertPdfToXps = (pdfPath: string, duplex: boolean = true, tumble: boolean = false): void => {
+  const xpsPath = pdfPath.replace(/\.pdf$/i, '.xps')
   try {
-    let cmd = duplex
-      ? `pdftocairo -ps -level3 -r 300 -paper A4 -expand -duplex "${pdfPath}" "${psPath}"`
-      : `pdftocairo -ps -level3 -r 300 -paper A4 -expand "${pdfPath}" "${psPath}"`
-
+    const cmd = `gs -q -sDEVICE=xpswrite -dNOPAUSE -dBATCH -sOutputFile="${xpsPath}" "${pdfPath}"`
     execSync(cmd, { stdio: 'ignore', shell: true } as any)
-
-    if (duplex && tumble) {
-      execSync(`sed -i 's/DuplexNoTumble/DuplexTumble/g' "${psPath}"`, { stdio: 'ignore', shell: true } as any)
-    }
-
-    if (duplex) {
-      const psContent = readFileSync(psPath, 'utf-8')
-      const setpagedevice = `<</Duplex true /Tumble ${tumble}>> setpagedevice\n`
-      writeFileSync(psPath, setpagedevice + psContent, 'utf-8')
-    }
   } catch (error) {
-    console.error('PDF转PS失败:', error)
+    console.error('PDF转XPS失败:', error)
   }
 }
 
@@ -78,27 +65,14 @@ export const convertImageToPdf = (imagePath: string): Promise<string> => {
   })
 }
 
-const convertImageToPs = async (imagePath: string, duplex: boolean = true, tumble: boolean = false): Promise<void> => {
-  const psPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.ps')
+const convertImageToXps = async (imagePath: string, duplex: boolean = true, tumble: boolean = false): Promise<void> => {
+  const xpsPath = imagePath.replace(/\.(jpg|jpeg|png|gif)$/i, '.xps')
 
   try {
     const pdfPath = await convertImageToPdf(imagePath)
 
-    let cmd = duplex
-      ? `pdftocairo -ps -level3 -r 300 -paper A4 -expand -duplex "${pdfPath}" "${psPath}"`
-      : `pdftocairo -ps -level3 -r 300 -paper A4 -expand "${pdfPath}" "${psPath}"`
-
+    const cmd = `gs -q -sDEVICE=xpswrite -dNOPAUSE -dBATCH -sOutputFile="${xpsPath}" "${pdfPath}"`
     execSync(cmd, { stdio: 'ignore', shell: true } as any)
-
-    if (duplex && tumble) {
-      execSync(`sed -i 's/DuplexNoTumble/DuplexTumble/g' "${psPath}"`, { stdio: 'ignore', shell: true } as any)
-    }
-
-    if (duplex) {
-      const psContent = readFileSync(psPath, 'utf-8')
-      const setpagedevice = `<</Duplex true /Tumble ${tumble}>> setpagedevice\n`
-      writeFileSync(psPath, setpagedevice + psContent, 'utf-8')
-    }
   } catch (error) {
     console.error('PDFKit 转PDF失败:', error)
   }
@@ -224,22 +198,22 @@ export const downloadMedia = async (
   const extLower = ext.toLowerCase()
 
   if (extLower === '.pdf') {
-    convertPdfToPs(filePath, duplex, tumble)
+    convertPdfToXps(filePath, duplex, tumble)
   } else if (isOfficeFile(extLower)) {
     const pdfPath = convertOfficeToPdf(filePath)
     if (pdfPath) {
       const tumbleForPresentation = isPresentationFile(extLower)
-      convertPdfToPs(pdfPath, duplex, tumbleForPresentation)
+      convertPdfToXps(pdfPath, duplex, tumbleForPresentation)
     }
   } else if (['.jpg', '.jpeg', '.png', '.gif'].includes(extLower)) {
-    await convertImageToPs(filePath, duplex, tumble)
+    await convertImageToXps(filePath, duplex, tumble)
   }
 
   return { fileId: hash, filename }
 }
 
 export const getFilePath = (fileId: string): string | null => {
-  const exts = ['.pdf', '.ps', '.jpg', '.png', '.gif', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
+  const exts = ['.pdf', '.xps', '.ps', '.jpg', '.png', '.gif', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
   for (const ext of exts) {
     const filePath = join(UPLOADS_DIR, fileId + ext)
     if (existsSync(filePath)) {
@@ -249,12 +223,12 @@ export const getFilePath = (fileId: string): string | null => {
   return null
 }
 
-export const reconvertPdfToPs = (fileId: string, duplex: boolean, tumble: boolean): boolean => {
+export const reconvertPdfToXps = (fileId: string, duplex: boolean, tumble: boolean): boolean => {
   const filePath = getFilePath(fileId)
   if (!filePath || !filePath.toLowerCase().endsWith('.pdf')) {
     return false
   }
-  convertPdfToPs(filePath, duplex, tumble)
+  convertPdfToXps(filePath, duplex, tumble)
   return true
 }
 

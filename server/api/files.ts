@@ -30,10 +30,10 @@ export const getFile = async (fileName: string) => {
     })
 }
 
-export const getPsFile = async (fileId: string) => {
+export const getXpsFile = async (fileId: string) => {
     const user = await _currentUser()
     
-    const filePath = join(UPLOADS_DIR, fileId + '.ps')
+    const filePath = join(UPLOADS_DIR, fileId + '.xps')
     try {
         accessSync(filePath, constants.R_OK)
     } catch {
@@ -44,8 +44,12 @@ export const getPsFile = async (fileId: string) => {
     
     return new Response(stream, {
         headers: {
-            'Content-Type': 'application/postscript',
-            'Content-Disposition': `inline; filename="${fileId}.ps"`,
+            'Content-Type': 'application/vnd.ms-xpsdocument',
+            'Content-Disposition': `inline; filename="${fileId}.xps"`,
         },
     })
+}
+
+export const getPsFile = async (fileId: string) => {
+    return getXpsFile(fileId)
 }
