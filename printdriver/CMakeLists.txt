@@ -46,7 +46,7 @@ target_compile_definitions(PrintDriver PRIVATE CURL_STATICLIB)
 
 target_compile_options(PrintDriver PRIVATE /MT /utf-8)
 
-target_link_libraries(PrintDriver PRIVATE CURL::libcurl ZLIB::ZLIB json-c::json-c comctl32.lib XpsPrint.lib ole32.lib)
+target_link_libraries(PrintDriver PRIVATE CURL::libcurl ZLIB::ZLIB json-c::json-c comctl32.lib gdiplus.lib ole32.lib shell32.lib)
 
 add_executable(Setup WIN32 src/setup.c)
 target_compile_options(Setup PRIVATE /MT /utf-8)

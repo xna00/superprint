@@ -30,10 +30,10 @@ export const getFile = async (fileName: string) => {
     })
 }
 
-export const getXpsFile = async (fileId: string) => {
+export const getZipFile = async (fileId: string) => {
     const user = await _currentUser()
     
-    const filePath = join(UPLOADS_DIR, fileId + '.xps')
+    const filePath = join(UPLOADS_DIR, fileId + '.zip')
     try {
         accessSync(filePath, constants.R_OK)
     } catch {
@@ -44,10 +44,14 @@ export const getXpsFile = async (fileId: string) => {
     
     return new Response(stream, {
         headers: {
-            'Content-Type': 'application/vnd.ms-xpsdocument',
-            'Content-Disposition': `inline; filename="${fileId}.xps"`,
+            'Content-Type': 'application/zip',
+            'Content-Disposition': `attachment; filename="${fileId}.zip"`,
         },
     })
+}
+
+export const getXpsFile = async (fileId: string) => {
+    return getZipFile(fileId)
 }
 
 export const getPsFile = async (fileId: string) => {

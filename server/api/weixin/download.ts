@@ -14,61 +14,12 @@ const ensureUploadsDir = (): void => {
   }
 }
 
-const embedPrintTicket = (xpsPath: string, duplex: boolean, tumble: boolean): void => {
-  let duplexOption = 'OneSided'
-  if (duplex) {
-    duplexOption = tumble ? 'TwoSidedShortEdge' : 'TwoSidedLongEdge'
-  }
-  
-  const printTicket = `<?xml version="1.0" encoding="UTF-8"?>
-<psf:PrintTicket xmlns:psf="http://schemas.microsoft.com/windows/2003/08/printing/printschemaframework"
-                 xmlns:psk="http://schemas.microsoft.com/windows/2003/08/printing/printschemakeywords">
-  <psf:Feature name="psk:JobDuplexAllDocumentsContiguously">
-    <psf:Option name="psk:${duplexOption}"/>
-  </psf:Feature>
-</psf:PrintTicket>`
-  
-  try {
-    const xpsData = readFileSync(xpsPath)
-    const zip = UZIP.parse(xpsData.buffer as ArrayBuffer) as Record<string, Uint8Array>
-    
-    const ptPath = 'PrintTickets/Job_PT.xml'
-    zip[ptPath] = new TextEncoder().encode(printTicket)
-    
-    let contentTypes = new TextDecoder().decode(zip['[Content_Types].xml'])
-    if (!contentTypes.includes('Job_PT.xml')) {
-      contentTypes = contentTypes.replace(
-        '</Types>',
-        `  <Override PartName="/${ptPath}" ContentType="application/vnd.ms-printing.printticket+xml"/>\n</Types>`
-      )
-      zip['[Content_Types].xml'] = new TextEncoder().encode(contentTypes)
-    }
-    
-    let fdseq = new TextDecoder().decode(zip['FixedDocumentSequence.fdseq'])
-    if (!fdseq.includes('PrintTicketRef')) {
-      const xmlnsMatch = fdseq.match(/xmlns="([^"]+)"/)
-      const xmlnsAttr = xmlnsMatch ? ` xmlns="${xmlnsMatch[1]}"` : ''
-      fdseq = fdseq.replace(
-        /<FixedDocumentSequence[^>]*>/,
-        `<FixedDocumentSequence${xmlnsAttr}><FixedDocumentSequence.PrintTicketRef PrintTicketRef="/${ptPath}" />`
-      )
-      fdseq = fdseq.replace('</FixedDocumentSequence>', `</FixedDocumentSequence>`)
-      zip['FixedDocumentSequence.fdseq'] = new TextEncoder().encode(fdseq)
-    }
-    
-    const newXpsData = UZIP.encode(zip)
-    writeFileSync(xpsPath, Buffer.from(newXpsData))
-  } catch (error) {
-    console.error('嵌入PrintTicket失败:', error)
-  }
-}
-
 const renderPdfToJpegs = (pdfPath: string, dpi: number = 300): string[] => {
   const tempDir = join(UPLOADS_DIR, `_xps_tmp_${Date.now()}`)
   mkdirSync(tempDir, { recursive: true })
   
   const prefix = join(tempDir, 'page')
-  const cmd = `pdftocairo -jpeg -r ${dpi} -jpegopt quality=85 "${pdfPath}" "${prefix}"`
+  const cmd = `pdftocairo -jpeg -r ${dpi} -paper A4 -jpegopt quality=85 "${pdfPath}" "${prefix}"`
   execSync(cmd, { stdio: 'ignore', shell: true } as any)
   
   const files = readdirSync(tempDir)
@@ -83,73 +34,27 @@ const renderPdfToJpegs = (pdfPath: string, dpi: number = 300): string[] => {
   return files
 }
 
-const assembleXps = (jpegPaths: string[], outputPath: string): void => {
+const packageJpegsToZip = (jpegPaths: string[], outputPath: string): void => {
   const zip: Record<string, Uint8Array> = {}
   
-  const encoder = new TextEncoder()
-  
-  zip['[Content_Types].xml'] = encoder.encode(`<?xml version="1.0" encoding="UTF-8"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="jpg" ContentType="image/jpeg"/>
-  <Default Extension="fdseq" ContentType="application/vnd.ms-package.xps-fixeddocumentsequence+xml"/>
-  <Default Extension="fdoc" ContentType="application/vnd.ms-package.xps-fixeddocument+xml"/>
-  <Default Extension="fpage" ContentType="application/vnd.ms-package.xps-fixedpage+xml"/>
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-</Types>`)
-  
-  zip['FixedDocumentSequence.fdseq'] = encoder.encode(`<?xml version="1.0" encoding="UTF-8"?>
-<FixedDocumentSequence xmlns="http://schemas.microsoft.com/xps/2005/06">
-  <DocumentReference Source="Documents/1/FixedDocument.fdoc" />
-</FixedDocumentSequence>`)
-  
-  const pageCount = jpegPaths.length
-  
-  let fdocContent = `<?xml version="1.0" encoding="UTF-8"?>
-<FixedDocument xmlns="http://schemas.microsoft.com/xps/2005/06">`
-  
-  for (let i = 0; i < pageCount; i++) {
-    fdocContent += `\n  <PageContent Source="Pages/${i + 1}.fpage" />`
-  }
-  fdocContent += '\n</FixedDocument>'
-  zip['Documents/1/FixedDocument.fdoc'] = encoder.encode(fdocContent)
-  
-  for (let i = 0; i < pageCount; i++) {
+  for (let i = 0; i < jpegPaths.length; i++) {
     const jpegData = readFileSync(jpegPaths[i])
-    const imgWidth = jpegPaths[i].replace(/\.jpg$/, '')
-    
-    zip[`Documents/1/Resources/Images/${i}.jpg`] = jpegData
-    
-    const fpageContent = `<?xml version="1.0" encoding="UTF-8"?>
-<FixedPage xmlns="http://schemas.microsoft.com/xps/2005/06" xml:lang="en-US" Width="816" Height="1056">
-  <Canvas>
-    <Canvas.Clip>
-      <PathGeometry Figures="M 0,0 L 816,0 L 816,1056 L 0,1056 Z" />
-    </Canvas.Clip>
-    <Path Data="F0 M 0,0 L 816,0 L 816,1056 L 0,1056 Z">
-      <Path.Fill>
-        <ImageBrush ImageSource="/Documents/1/Resources/Images/${i}.jpg" Viewport="0,0,816,1056" ViewportUnits="Absolute" />
-      </Path.Fill>
-    </Path>
-  </Canvas>
-</FixedPage>`
-    
-    zip[`Documents/1/Pages/${i + 1}.fpage`] = encoder.encode(fpageContent)
+    zip[`page-${i + 1}.jpg`] = jpegData
   }
   
-  const xpsData = UZIP.encode(zip)
-  writeFileSync(outputPath, Buffer.from(xpsData))
+  const zipData = UZIP.encode(zip)
+  writeFileSync(outputPath, Buffer.from(zipData))
 }
 
 export const convertPdfToXps = (pdfPath: string, duplex: boolean = true, tumble: boolean = false): void => {
-  const xpsPath = pdfPath.replace(/\.pdf$/i, '.xps')
+  const zipPath = pdfPath.replace(/\.pdf$/i, '.zip')
   try {
     const jpegPaths = renderPdfToJpegs(pdfPath, 300)
     if (jpegPaths.length === 0) {
       console.error('PDF渲染JPEG失败：未生成任何图片')
       return
     }
-    assembleXps(jpegPaths, xpsPath)
-    embedPrintTicket(xpsPath, duplex, tumble)
+    packageJpegsToZip(jpegPaths, zipPath)
     
     try {
       const tempDirs = readdirSync(UPLOADS_DIR).filter(d => d.startsWith('_xps_tmp_'))
@@ -160,7 +65,7 @@ export const convertPdfToXps = (pdfPath: string, duplex: boolean = true, tumble:
       console.error('清理临时目录失败:', cleanupError)
     }
   } catch (error) {
-    console.error('PDF转XPS失败:', error)
+    console.error('PDF转ZIP失败:', error)
   }
 }
 
@@ -352,7 +257,7 @@ export const downloadMedia = async (
 }
 
 export const getFilePath = (fileId: string): string | null => {
-  const exts = ['.pdf', '.xps', '.ps', '.jpg', '.png', '.gif', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
+  const exts = ['.pdf', '.zip', '.ps', '.jpg', '.png', '.gif', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
   for (const ext of exts) {
     const filePath = join(UPLOADS_DIR, fileId + ext)
     if (existsSync(filePath)) {
