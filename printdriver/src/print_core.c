@@ -26,28 +26,27 @@
 #pragma comment(lib, "shlwapi.lib")
 
 static IWICImagingFactory *g_wic_factory = NULL;
-static BOOL g_com_initialized = FALSE;
+static BOOL g_ole_initialized = FALSE;
 
 static int init_wic_factory(void) {
     if (g_wic_factory) return 0;
     
-    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE && hr != S_FALSE) {
+    HRESULT hr = OleInitialize(NULL);
+    if (FAILED(hr) && hr != S_FALSE && hr != RPC_E_CHANGED_MODE) {
         wchar_t log[128];
-        swprintf(log, 128, L"COM初始化失败: 0x%08X", hr);
+        swprintf(log, 128, L"OLE初始化失败: 0x%08X", hr);
         add_log(log);
         return -1;
     }
-    g_com_initialized = TRUE;
+    g_ole_initialized = TRUE;
     
     hr = CoCreateInstance(&CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
                           &IID_IWICImagingFactory, (void**)&g_wic_factory);
     if (FAILED(hr)) {
         wchar_t log[128];
-        swprintf(log, 128, L"创建WIC工厂失败: 0x%08X", hr);
+        swprintf(log, 128, L"创建WIC工厂失败: 0x%08X (将使用OleLoadPicture)", hr);
         add_log(log);
         g_wic_factory = NULL;
-        return -1;
     }
     
     return 0;
@@ -179,23 +178,31 @@ static HBITMAP load_jpeg_with_ole(const wchar_t *jpeg_path, int *width, int *hei
     HANDLE hFile = CreateFileW(jpeg_path, GENERIC_READ, FILE_SHARE_READ, NULL, 
                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE) {
+        wchar_t log[256];
+        swprintf(log, 256, L"OleLoadPicture: 打开文件失败 %s", jpeg_path);
+        add_log(log);
         return NULL;
     }
     
     DWORD fileSize = GetFileSize(hFile, NULL);
     if (fileSize == 0 || fileSize > 100 * 1024 * 1024) {
+        wchar_t log[128];
+        swprintf(log, 128, L"OleLoadPicture: 文件大小无效 %lu", fileSize);
+        add_log(log);
         CloseHandle(hFile);
         return NULL;
     }
     
     HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, fileSize);
     if (!hGlobal) {
+        add_log(L"OleLoadPicture: GlobalAlloc失败");
         CloseHandle(hFile);
         return NULL;
     }
     
     void *pData = GlobalLock(hGlobal);
     if (!pData) {
+        add_log(L"OleLoadPicture: GlobalLock失败");
         GlobalFree(hGlobal);
         CloseHandle(hFile);
         return NULL;
@@ -203,6 +210,7 @@ static HBITMAP load_jpeg_with_ole(const wchar_t *jpeg_path, int *width, int *hei
     
     DWORD bytesRead;
     if (!ReadFile(hFile, pData, fileSize, &bytesRead, NULL) || bytesRead != fileSize) {
+        add_log(L"OleLoadPicture: ReadFile失败");
         GlobalUnlock(hGlobal);
         GlobalFree(hGlobal);
         CloseHandle(hFile);
@@ -215,6 +223,9 @@ static HBITMAP load_jpeg_with_ole(const wchar_t *jpeg_path, int *width, int *hei
     IStream *pStream = NULL;
     HRESULT hr = CreateStreamOnHGlobal(hGlobal, TRUE, &pStream);
     if (FAILED(hr)) {
+        wchar_t log[128];
+        swprintf(log, 128, L"OleLoadPicture: CreateStreamOnHGlobal失败 0x%08X", hr);
+        add_log(log);
         GlobalFree(hGlobal);
         return NULL;
     }
@@ -224,6 +235,9 @@ static HBITMAP load_jpeg_with_ole(const wchar_t *jpeg_path, int *width, int *hei
     pStream->lpVtbl->Release(pStream);
     
     if (FAILED(hr) || !pPicture) {
+        wchar_t log[128];
+        swprintf(log, 128, L"OleLoadPicture: OleLoadPicture失败 0x%08X", hr);
+        add_log(log);
         return NULL;
     }
     
@@ -253,9 +267,16 @@ static HBITMAP load_jpeg_with_ole(const wchar_t *jpeg_path, int *width, int *hei
     pPicture->lpVtbl->Release(pPicture);
     
     if (FAILED(hr)) {
+        wchar_t log[128];
+        swprintf(log, 128, L"OleLoadPicture: Render失败 0x%08X", hr);
+        add_log(log);
         DeleteObject(hBitmap);
         return NULL;
     }
+    
+    wchar_t log[128];
+    swprintf(log, 128, L"OleLoadPicture: 成功 %dx%d", pxWidth, pxHeight);
+    add_log(log);
     
     *width = pxWidth;
     *height = pxHeight;
