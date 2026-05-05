@@ -1,6 +1,7 @@
 import { getAccessToken } from './token.ts'
 import type { Message } from './message.ts'
 import { WeixinKf } from '../../models/index.ts'
+import { logger } from "../../logger.ts";
 
 type SyncMsgRequest = {
   cursor?: string
@@ -23,7 +24,7 @@ const loadCursor = (openKfId: string): string | null => {
     const kf = WeixinKf.findOne({ id: openKfId })
     return kf?.messageCursor || null
   } catch (error) {
-    console.error('读取 cursor 失败:', error)
+    logger.error('读取 cursor 失败:', error)
   }
   return null
 }
@@ -37,7 +38,7 @@ const saveCursor = (openKfId: string, cursor: string): void => {
       WeixinKf.insert([{ id: openKfId, messageCursor: cursor }])
     }
   } catch (error) {
-    console.error('保存 cursor 失败:', error)
+    logger.error('保存 cursor 失败:', error)
   }
 }
 

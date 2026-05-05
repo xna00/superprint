@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { createHash } from "node:crypto"
 import { GLM_API_KEY } from "./constants.local.ts"
 import { jsonrepair } from "jsonrepair"
+import { logger } from "../logger.ts";
 
 const ZHIPU_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4'
 const MODEL_NAME = 'glm-4v-flash'
@@ -28,7 +29,7 @@ export const pdfToImage = (pdfPath: string): string | null => {
     }
     return null
   } catch (error) {
-    console.error('PDF转图片失败:', error)
+    logger.error('PDF转图片失败:', error)
     return null
   }
 }

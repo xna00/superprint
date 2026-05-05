@@ -1,4 +1,5 @@
 import { init, PrintTask, PrintFile } from "./models/index.ts";
+import { logger } from "./logger.ts";
 
 // PrintTask.insert([{
 //     'printerId': 0,

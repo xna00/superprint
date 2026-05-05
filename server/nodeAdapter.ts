@@ -7,8 +7,7 @@ import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { apiHandler } from "./api/handler.ts";
 import {createWebSocketServer} from './ws/index.ts'
-
-console.log(createWebSocketServer)
+import { logger } from './logger.ts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const staticDir = join(__dirname, 'static');
@@ -95,7 +94,7 @@ const serveStatic = (pathname: string, res: ServerResponse) => {
 };
 
 const server = createServer({}, (req, res) => {
-  console.log(req.url);
+  logger.log(req.method, req.url);
 
   assert(req.url);
   const pathname = new URL(req.url, base).pathname;
@@ -109,4 +108,4 @@ const server = createServer({}, (req, res) => {
 createWebSocketServer(server)
 
 server.listen(port, "::");
-console.log(base);
+logger.log(base);

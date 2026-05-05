@@ -7,6 +7,7 @@ import { generateTaskId } from "./weixin/message.ts"
 import { PrintTask, PrintFile, Computer, Printer } from "../models/index.ts"
 import { sendMsgMenuMessage } from "./weixin/send.ts"
 import { addTokenToUrl } from "./utils.ts"
+import { logger } from "../logger.ts";
 
 const ASSETS_DIR = join(import.meta.dirname, "..", "assets")
 const UPLOADS_DIR = join(process.cwd(), 'uploads')
@@ -70,28 +71,28 @@ export const processDocumentSimple = async (
   ensureUploadsDir()
 
   const downloadResult = await downloadMedia(mediaId, true, false)
-  console.log(`文件下载完成: ${downloadResult.filename}`)
+  logger.log(`文件下载完成: ${downloadResult.filename}`)
 
   const ext = extname(downloadResult.filename).toLowerCase()
   const filePath = join(UPLOADS_DIR, downloadResult.fileId + ext)
   const fileUrl = `file://${filePath}`
 
-  console.log('开始识别公文...')
+  logger.log('开始识别公文...')
   const recognized = await recognizeDocument(fileUrl)
-  console.log('识别结果:', recognized)
+  logger.log('识别结果:', recognized)
 
-  console.log('生成 docx 文件...')
+  logger.log('生成 docx 文件...')
   const docxBuffer = generateDocx(recognized)
   const docxFileId = downloadResult.fileId + '_docx'
   const docxPath = join(UPLOADS_DIR, docxFileId + '.docx')
   writeFileSync(docxPath, docxBuffer)
-  console.log(`docx 文件已保存: ${docxPath}`)
+  logger.log(`docx 文件已保存: ${docxPath}`)
 
   const pdfPath = convertOfficeToPdf(docxPath)
   if (!pdfPath) {
     throw new Error('PDF 生成失败')
   }
-  console.log(`PDF 预览文件已生成: ${pdfPath}`)
+  logger.log(`PDF 预览文件已生成: ${pdfPath}`)
 
   return {
     recognized,
@@ -110,30 +111,30 @@ export const processDocument = async (
   ensureUploadsDir()
 
   const downloadResult = await downloadMedia(mediaId, true, false)
-  console.log(`文件下载完成: ${downloadResult.filename}`)
+  logger.log(`文件下载完成: ${downloadResult.filename}`)
 
   const ext = extname(downloadResult.filename).toLowerCase()
   const filePath = join(UPLOADS_DIR, downloadResult.fileId + ext)
   const fileUrl = `file://${filePath}`
 
-  console.log('开始识别公文...')
+  logger.log('开始识别公文...')
   const recognized = await recognizeDocument(fileUrl)
-  console.log('识别结果:', recognized)
+  logger.log('识别结果:', recognized)
 
-  console.log('生成 docx 文件...')
+  logger.log('生成 docx 文件...')
   const docxBuffer = generateDocx(recognized)
   const docxFileId = downloadResult.fileId + '_docx'
   const docxPath = join(UPLOADS_DIR, docxFileId + '.docx')
   writeFileSync(docxPath, docxBuffer)
-  console.log(`docx 文件已保存: ${docxPath}`)
+  logger.log(`docx 文件已保存: ${docxPath}`)
 
   // 转换 docx 为 PDF 供前端预览
   const pdfPath = convertOfficeToPdf(docxPath)
   if (pdfPath) {
-    console.log(`PDF 预览文件已生成: ${pdfPath}`)
+    logger.log(`PDF 预览文件已生成: ${pdfPath}`)
     convertPdfToXps(pdfPath, true, false)
   } else {
-    console.warn('PDF 预览文件生成失败')
+    logger.warn('PDF 预览文件生成失败')
   }
 
   const existingTask = PrintTask.findOne({ userId: userId, weixinKfId: kfid, externalUserId: externalUserId, state: "waiting_confirmation" })
@@ -177,7 +178,7 @@ export const processDocument = async (
       )
     }
   } catch (error) {
-    console.error("发送微信通知失败:", error)
+    logger.error("发送微信通知失败:", error)
   }
 
   return {

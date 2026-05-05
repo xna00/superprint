@@ -9,6 +9,7 @@ import { convertPdfToXps, convertOfficeToPdf, isOfficeFile, isPresentationFile, 
 import { generateTaskId } from "./weixin/message.ts"
 import { getInfo } from "./global.ts"
 import { createHash } from "node:crypto"
+import { logger } from "../logger.ts";
 
 const WEIXIN_KF_ID = 'wkHnU4FQAAnkssZ2Y0t7gAKpQxcw7gjQ'
 
@@ -150,7 +151,7 @@ export const fileSucceed = async (id: number) => {
 
 const sendPrintFailureNotification = async (task: PrintTaskBase, failedFiles: PrintFileBase[]) => {
     if (!task.externalUserId) {
-        console.log(`任务 ${task.id} 没有 externalUserId，跳过通知`)
+        logger.log(`任务 ${task.id} 没有 externalUserId，跳过通知`)
         return
     }
 
@@ -164,9 +165,9 @@ const sendPrintFailureNotification = async (task: PrintTaskBase, failedFiles: Pr
             task.weixinKfId,
             task.externalUserId
         )
-        console.log(`已向 ${task.externalUserId} 发送打印失败通知`)
+        logger.log(`已向 ${task.externalUserId} 发送打印失败通知`)
     } catch (error) {
-        console.error(`发送打印失败通知失败:`, error)
+        logger.error(`发送打印失败通知失败:`, error)
     }
 }
 
@@ -330,7 +331,7 @@ export const _outUploadPrintFile = async (req: Request): Promise<Response> => {
                 )
             }
         } catch (error) {
-            console.error("发送微信通知失败:", error)
+            logger.error("发送微信通知失败:", error)
         }
     }
 

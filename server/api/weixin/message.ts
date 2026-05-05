@@ -6,6 +6,7 @@ import { addTokenToUrl } from '../utils.ts'
 import { processDocument, processDocumentSimple } from '../docProcess.ts'
 import { handlePdfConvertMessages } from '../pdfConvert.ts'
 import { handlePdfToWordMessages } from '../pdfToWord.ts'
+import { logger } from "../../logger.ts";
 
 export const generateTaskId = (): number => {
   const timestamp = Date.now()
@@ -137,7 +138,7 @@ const HELP_MESSAGE = `📖 帮助信息
 
 const sendHelp = async (openKfId: string, externalUserId: string) => {
   await sendTextMessage(HELP_MESSAGE, openKfId, externalUserId)
-  console.log('✅ 帮助信息发送成功')
+  logger.log('✅ 帮助信息发送成功')
 }
 
 const handleLogout = async (openKfId: string, externalUserId: string) => {
@@ -150,7 +151,7 @@ const handleLogout = async (openKfId: string, externalUserId: string) => {
       openKfId,
       externalUserId
     )
-    console.log('✅ 用户已退出登录')
+    logger.log('✅ 用户已退出登录')
   } else {
     await sendTextMessage(
       '您还未登录，无需退出。',
@@ -179,7 +180,7 @@ const handleConfirmById = async (openKfId: string, externalUserId: string, print
   }
 
   await sendTextMessage('✅ 打印任务已确认，等待打印中。', openKfId, externalUserId)
-  console.log(`✅ 已确认打印任务 ID: ${printTaskId}`)
+  logger.log(`✅ 已确认打印任务 ID: ${printTaskId}`)
 }
 
 const handleDeleteById = async (openKfId: string, externalUserId: string, printTaskId: number) => {
@@ -205,10 +206,10 @@ const handleDeleteById = async (openKfId: string, externalUserId: string, printT
     PrintFile.remove({ printTaskId: printTaskId })
     PrintTask.remove({ id: printTaskId })
     await sendTextMessage('✅ 打印任务已删除。', openKfId, externalUserId)
-    console.log(`✅ 已删除打印任务 ID: ${printTaskId}`)
+    logger.log(`✅ 已删除打印任务 ID: ${printTaskId}`)
   } catch (error) {
     await sendTextMessage('删除任务失败，请稍后重试。', openKfId, externalUserId)
-    console.error('删除任务失败:', error)
+    logger.error('删除任务失败:', error)
   }
 }
 
@@ -253,10 +254,10 @@ const handleRetryById = async (openKfId: string, externalUserId: string, printTa
     }
 
     await sendTextMessage(`✅ 已重新提交 ${failedFiles.length} 个失败文件进行打印。`, openKfId, externalUserId)
-    console.log(`✅ 已重试打印任务 ID: ${printTaskId}, 文件数: ${failedFiles.length}`)
+    logger.log(`✅ 已重试打印任务 ID: ${printTaskId}, 文件数: ${failedFiles.length}`)
   } catch (error) {
     await sendTextMessage('重试失败，请稍后再试。', openKfId, externalUserId)
-    console.error('重试打印失败:', error)
+    logger.error('重试打印失败:', error)
   }
 }
 
@@ -282,7 +283,7 @@ const processMediaMessage = async (
     const ext = fileResult.filename.substring(fileResult.filename.lastIndexOf('.')).toLowerCase()
     const officeExts = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
     if (!officeExts.includes(ext)) {
-      console.log(`不支持的文件类型: ${fileResult.filename}`)
+      logger.log(`不支持的文件类型: ${fileResult.filename}`)
       return null
     }
 
@@ -304,7 +305,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     const kfid = userMessages[0].open_kfid
 
     if (!kfUser) {
-      console.log(`\n用户 ${externalUserId} 未关联，发送登录链接`)
+      logger.log(`\n用户 ${externalUserId} 未关联，发送登录链接`)
       if (kfid) {
         const loginUrl = `https://superprint.xna00.top/?external_userid=${externalUserId}&open_kfid=${kfid}`
         await sendTextMessage(
@@ -312,12 +313,12 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
           kfid,
           externalUserId
         )
-        console.log('✅ 登录链接发送成功')
+        logger.log('✅ 登录链接发送成功')
       }
       return
     }
 
-    console.log(`\n用户 ${externalUserId} 已关联: ${kfUser.user.username}`)
+    logger.log(`\n用户 ${externalUserId} 已关联: ${kfUser.user.username}`)
 
     const textMessages = userMessages.filter(m => m.msgtype === 'text')
     const mediaMessages = userMessages.filter(m => m.msgtype === 'image' || m.msgtype === 'file')
@@ -380,7 +381,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     if (existingPrintTask) {
       printTaskId = existingPrintTask.id
       printerId = existingPrintTask.printerId
-      console.log(`使用现有 PrintTask，ID: ${printTaskId}`)
+      logger.log(`使用现有 PrintTask，ID: ${printTaskId}`)
     } else {
       const lastTask = PrintTask.findBy({userId: kfUser.userId}, {printFiles: false, printer: false, user: false}).sort((a, b) => b.id - a.id)[0]
       printerId = lastTask?.printerId ?? defaultComputer.printers[0].id
@@ -394,7 +395,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         printerId: printerId
       }])
       isNewJob = true
-      console.log(`PrintTask 已创建，ID: ${printTaskId}`)
+      logger.log(`PrintTask 已创建，ID: ${printTaskId}`)
     }
 
     const printer = Printer.findBy({id: printerId}, {computer: true}).at(0)!
@@ -406,7 +407,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     await Promise.all(mediaMessages.map(async m => {
       const result = await processMediaMessage(m)
       if (!result) {
-        console.log(`无法处理消息 ${JSON.stringify(m)}: 无法下载文件`)
+        logger.log(`无法处理消息 ${JSON.stringify(m)}: 无法下载文件`)
         return
 
       }
@@ -419,7 +420,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         tumble: isPresentationFile(result.filename)
       }])
       const fileId = fileResult.lastInsertRowid
-      console.log(`PrintFile 已创建，ID: ${fileId}, 文件: ${result.filename}`)
+      logger.log(`PrintFile 已创建，ID: ${fileId}, 文件: ${result.filename}`)
     }))
 
     const allFiles = PrintFile.findBy({ printTaskId })
@@ -453,9 +454,9 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       kfid,
       externalUserId
     )
-    console.log('✅ 打印任务信息已发送给用户')
+    logger.log('✅ 打印任务信息已发送给用户')
   })).then(() => {
-    console.log('✅ 所有用户消息已处理')
+    logger.log('✅ 所有用户消息已处理')
   })
 
 }
@@ -495,7 +496,7 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
           await sendFileMessage(pdfMediaId, kfid, externalUserId)
         }
       } catch (error: any) {
-        console.error('公文处理失败:', error)
+        logger.error('公文处理失败:', error)
         await sendTextMessage(`❌ 公文处理失败: ${error.message}`, kfid, externalUserId)
       }
     }
@@ -535,7 +536,7 @@ const messageHandlerMap: Partial<Record<string, (messages: NonEventMessage[]) =>
 
 export const handleMessages = async (_messages: Message[]) => {
   const messages = _messages.filter(m => m.msgtype !== 'event')
-  console.log(`共 ${messages.length} 条消息, 来自 ${Object.keys(Object.groupBy(messages, m => m.external_userid)).length} 个用户`)
+  logger.log(`共 ${messages.length} 条消息, 来自 ${Object.keys(Object.groupBy(messages, m => m.external_userid)).length} 个用户`)
   const grouped = Object.groupBy(messages, m => m.open_kfid)
   return Promise.all(Object.entries(grouped).map(([openKfId, userMessages = []]) => {
     return messageHandlerMap[openKfId]?.(userMessages)

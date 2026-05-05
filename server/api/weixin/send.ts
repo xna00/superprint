@@ -1,5 +1,6 @@
 import { getAccessToken } from './token.ts'
 import { readFileSync } from 'node:fs'
+import { logger } from "../../logger.ts";
 
 type SendMessageRequest = {
   touser: string
@@ -169,7 +170,7 @@ export const sendMsgMenuMessage = async (
   })
 
   const data = await response.json() as SendMessageResponse
-  console.log('msgmenu response:', data)
+  logger.log('msgmenu response:', data)
 
   if (data.errcode !== 0) {
     throw new Error(`发送消息失败: ${data.errmsg} (errcode: ${data.errcode})`)

@@ -2,6 +2,7 @@ import { downloadMedia, convertOfficeToPdf, convertImageToPdf, isOfficeFile, get
 import { sendTextMessage, uploadMedia, sendFileMessage } from './weixin/send.ts'
 import { extname, join } from 'node:path'
 import { existsSync } from 'node:fs'
+import { logger } from "../logger.ts";
 
 const WEIXIN_KF_ID = 'wkHnU4FQAAAO-EtO4HBU2vWdk213Gwjg'
 
@@ -46,10 +47,10 @@ const processFileMessage = async (msg: NonEventMessage, kfid: string, externalUs
     const pdfMediaId = await uploadMedia(pdfPath, 'file')
 
     await sendFileMessage(pdfMediaId, kfid, externalUserId)
-    console.log(`✅ PDF 发送成功: ${result.filename}`)
+    logger.log(`✅ PDF 发送成功: ${result.filename}`)
 
   } catch (error) {
-    console.error('PDF 转换失败:', error)
+    logger.error('PDF 转换失败:', error)
     await sendTextMessage('❌ 转换失败，请稍后重试', kfid, externalUserId)
   }
 }

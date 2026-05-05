@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { idMap, state } from "./global.ts";
 import * as api from "./index.ts";
 import { ApiError, makeJsonResponse } from "./utils.ts";
+import { logger } from "../logger.ts";
 
 const parseFn = (req: Request): [fn: any, fnName: string] => {
   const pathname = new URL(req.url).pathname;
@@ -37,7 +38,7 @@ export const apiHandler = async (req: Request): Promise<Response> => {
         params = JSON.parse(new URL(req.url).searchParams.get("data") ?? "");
     } catch (e) {
       assert(e instanceof Error);
-      console.error(e);
+      logger.error(e);
       res = makeJsonResponse(400, {}, { message: e.message });
       return res;
     }
@@ -57,7 +58,7 @@ export const apiHandler = async (req: Request): Promise<Response> => {
     if (ret instanceof Response) res = ret;
     else res = makeJsonResponse(idMap[id].status, idMap[id].headers, ret);
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     let status = 500;
     let headers: ResponseInit["headers"] = {};
     let obj: object = { message: e };

@@ -4,6 +4,7 @@ import { execSync } from 'node:child_process'
 import { extname, join } from 'node:path'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import { logger } from "../logger.ts";
 
 const WEIXIN_KF_ID = 'wkHnU4FQAAgFJKiO2JHdsWVrKIM3157Q'
 const UPLOADS_DIR = join(process.cwd(), 'uploads')
@@ -90,7 +91,7 @@ export const handlePdfToWordMessages = async (messages: NonEventMessage[]): Prom
         await sendFileMessage(docxMediaId, kfid, externalUserId)
 
       } catch (error) {
-        console.error('PDF 转 Word 失败:', error)
+        logger.error('PDF 转 Word 失败:', error)
         await sendTextMessage('❌ 转换失败，请稍后重试', kfid, externalUserId)
       }
     }

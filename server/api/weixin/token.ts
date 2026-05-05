@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
 import { WECOM_CORP_ID, WECOM_CORP_SECRET } from '../constants.ts'
+import { logger } from "../../logger.ts";
 
 const CACHE_FILE = join(process.cwd(), 'cache.local.json')
 
@@ -28,7 +29,7 @@ const loadTokenFromCache = (): CachedToken | null => {
       }
     }
   } catch (error) {
-    console.error('读取缓存文件失败:', error)
+    logger.error('读取缓存文件失败:', error)
   }
   return null
 }
@@ -37,7 +38,7 @@ const saveTokenToCache = (token: CachedToken): void => {
   try {
     writeFileSync(CACHE_FILE, JSON.stringify(token, null, 2), 'utf-8')
   } catch (error) {
-    console.error('写入缓存文件失败:', error)
+    logger.error('写入缓存文件失败:', error)
   }
 }
 
@@ -47,7 +48,7 @@ const deleteCacheFile = (): void => {
       writeFileSync(CACHE_FILE, '', 'utf-8')
     }
   } catch (error) {
-    console.error('删除缓存文件失败:', error)
+    logger.error('删除缓存文件失败:', error)
   }
 }
 

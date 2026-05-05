@@ -5,6 +5,7 @@ import { execSync } from "node:child_process"
 import { getAccessToken } from './token.ts'
 import PDFDocument from "pdfkit"
 import UZIP from "uzip"
+import { logger } from "../../logger.ts";
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads')
 
@@ -55,7 +56,7 @@ export const convertPdfToXps = (pdfPath: string, duplex: boolean = true, tumble:
   try {
     const jpegPaths = renderPdfToJpegs(pdfPath, 300)
     if (jpegPaths.length === 0) {
-      console.error('PDF渲染JPEG失败：未生成任何图片')
+      logger.error('PDF渲染JPEG失败：未生成任何图片')
       return
     }
     packageJpegsToZip(jpegPaths, zipPath)
@@ -66,10 +67,10 @@ export const convertPdfToXps = (pdfPath: string, duplex: boolean = true, tumble:
         rmSync(join(UPLOADS_DIR, dir), { recursive: true, force: true })
       }
     } catch (cleanupError) {
-      console.error('清理临时目录失败:', cleanupError)
+      logger.error('清理临时目录失败:', cleanupError)
     }
   } catch (error) {
-    console.error('PDF转ZIP失败:', error)
+    logger.error('PDF转ZIP失败:', error)
   }
 }
 
@@ -84,7 +85,7 @@ export const convertImageToPdf = (imagePath: string): Promise<string> => {
     doc.on('end', () => {
       const pdfBuffer = Buffer.concat(chunks)
       writeFileSync(pdfPath, pdfBuffer)
-      console.log('PDFKit: PDF 生成完成', pdfPath)
+      logger.log('PDFKit: PDF 生成完成', pdfPath)
       resolve(pdfPath)
     })
     doc.on('error', reject)
@@ -122,7 +123,7 @@ const convertImageToXps = async (imagePath: string, duplex: boolean = true, tumb
       convertPdfToXps(pdfPath, duplex, tumble)
     }
   } catch (error) {
-    console.error('图片转PDF失败:', error)
+    logger.error('图片转PDF失败:', error)
   }
 }
 
@@ -153,7 +154,7 @@ export const convertOfficeToPdf = (filePath: string): string | null => {
     }
     return null
   } catch (error) {
-    console.error('Office转PDF失败:', error)
+    logger.error('Office转PDF失败:', error)
     return null
   }
 }

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { rename, rm, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import UZIP from "uzip";
+import { logger } from "../logger.ts";
 
 const staticDir = join(import.meta.dirname, "..", "static");
 
@@ -44,13 +45,13 @@ export const _outUploadStatic = async (req: Request): Promise<Response> => {
 
     return Response.json({ success: true, message: "Static files updated" });
   } catch (error) {
-    console.error("Upload static error:", error);
+    logger.error("Upload static error:", error);
 
     if (!existsSync(staticDir) && existsSync(backupDir)) {
       try {
         await rename(backupDir, staticDir);
       } catch (e) {
-        console.error("Failed to restore backup:", e);
+        logger.error("Failed to restore backup:", e);
       }
     }
 
