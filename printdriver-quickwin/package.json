@@ -1,0 +1,20 @@
+{
+  "name": "printdriver-quickwin",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "typecheck": "npx tsgo",
+    "build": "npx tsgo && npx vite build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@typescript/native-preview": "^7.0.0-dev.20260524.1",
+    "quickwin": "^2026.5.24-165358",
+    "vite": "^8.0.14"
+  }
+}
