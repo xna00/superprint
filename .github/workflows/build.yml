@@ -1,9 +1,6 @@
 name: Build and Upload
 
-on:
-  push:
-  pull_request:
-  workflow_dispatch:
+on: [push, pull_request, workflow_dispatch]
 
 env:
   NODE_VERSION: '24'
