@@ -37,12 +37,15 @@ let ws: WebSocket | null = null
 
 function App() {
     const [tab, setTab] = useState(0)
+    const [loggedIn, setLoggedIn] = useState(false)
     const [username, setUsername] = useState('')
     const [computerId, setComputerId] = useState('')
     const [computerName, setComputerName] = useState('')
     const [printers, setPrinters] = useState<string[]>([])
     const [wsStatus, setWsStatus] = useState('disconnected')
     const logBoxRef = useRef<number | null>(null)
+    const usernameRef = useRef<number | null>(null)
+    const passwordRef = useRef<number | null>(null)
 
     const addLog = (msg: string) => {
         console.log('[log]', msg)
@@ -69,6 +72,32 @@ function App() {
         } catch (e: any) {
             addLog('[api] error: ' + (e.message || String(e)))
             return false
+        }
+    }
+
+    const handleLogin = async () => {
+        const user = gui.GetWindowText(usernameRef.current! as gui.HWND)
+        const pass = gui.GetWindowText(passwordRef.current! as gui.HWND)
+        if (!user || !pass) {
+            addLog('[login] username and password required')
+            return
+        }
+        addLog('[login] logging in as ' + user)
+        try {
+            const result = await api.auth.login({ username: user, password: pass })
+            if (result && (result.token || result.username)) {
+                api.saveCookie()
+                setUsername(result.username || user)
+                setLoggedIn(true)
+                addLog('[login] success')
+                await registerComputer()
+                await syncPrinters()
+                os.setTimeout(() => connectWs(), 500)
+            } else {
+                addLog('[login] failed: ' + JSON.stringify(result))
+            }
+        } catch (e: any) {
+            addLog('[login] error: ' + (e.message || String(e)))
         }
     }
 
@@ -195,6 +224,7 @@ function App() {
         os.setTimeout(async () => {
             const ok = await checkUser()
             if (ok) {
+                setLoggedIn(true)
                 await registerComputer()
                 await syncPrinters()
                 os.setTimeout(() => connectWs(), 500)
@@ -221,6 +251,19 @@ function App() {
         }
     }
 
+    if (!loggedIn) {
+        return (
+            <w style={{ flexDirection: 'column', gap: 8, flexGrow: 1, padding: 40, justifyContent: 'center' }}>
+                <w type="static" text="SuperPrint" style={{ height: 28, width: '100%' }} />
+                <w type="edit" ref={usernameRef} placeholder="Username" style={{ height: 28, width: '100%' }} />
+                <w type="edit" ref={passwordRef} placeholder="Password" password={true} style={{ height: 28, width: '100%' }} />
+                <w type="button" text="Login" style={{ height: 30, width: '100%' }} onEvent={(e: any) => {
+                    if (e.msg === gui.WmMsg.LBUTTONDOWN) handleLogin()
+                }} />
+            </w>
+        )
+    }
+
     return (
         <w style={{ flexDirection: 'column', padding: 10, gap: 8, flexGrow: 1, width: '100%' }}>
             <w style={{ flexDirection: 'row', gap: 4 }}>
@@ -241,7 +284,7 @@ function App() {
                 <w style={{ flexDirection: 'column', gap: 4, flexGrow: 1, width: '100%' }}>
                     <w type="static" text={'Device ID: ' + computerId} style={{ height: 20, width: '100%' }} />
                     <w type="static" text={'Computer: ' + computerName} style={{ height: 20, width: '100%' }} />
-                    <w type="static" text={'User: ' + (username || 'not logged in')} style={{ height: 20, width: '100%' }} />
+                    <w type="static" text={'User: ' + username} style={{ height: 20, width: '100%' }} />
                     <w type="static" text={'WebSocket: ' + wsStatus} style={{ height: 20, width: '100%' }} />
                     <w type="static" text="Printers:" style={{ height: 20, width: '100%' }} />
                     <w type="static" text={printerText} style={{ flexGrow: 1, width: '100%' }} />

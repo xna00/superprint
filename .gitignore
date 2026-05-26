@@ -14,3 +14,4 @@ server/bundle.js
 server/bundle.js.map
 printdriver/output/
 vcpkg/
+cookie.txt
