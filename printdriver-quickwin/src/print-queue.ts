@@ -3,7 +3,7 @@ import 'quickwin/lib/fetch.js'
 import * as os from 'os'
 import * as std from 'std'
 import UZIP from 'uzip/UZIP.js'
-import * as api from './api.js'
+import { api } from './api.js'
 import { printJpegPages, getDefaultPrinter } from './printer.js'
 import { DOWNLOAD_FOLDER } from './config.js'
 
@@ -42,11 +42,13 @@ function ensureDownloadDir(): string {
 async function downloadFile(fileId: string): Promise<ArrayBuffer | null> {
     log(`downloading file: ${fileId}`)
     try {
-        const buf = await api.files.getPsFile(fileId)
-        if (!buf) {
-            log(`download failed: ${fileId} - no response`)
+        const req = await api.files.getPsFile.makeRequest(fileId)
+        const res = await fetch(req)
+        if (!res || !res.ok) {
+            log(`download failed: ${fileId} - ${res?.status || 'no response'}`)
             return null
         }
+        const buf = await res.arrayBuffer()
         log(`download complete: ${buf.byteLength} bytes`)
         return buf
     } catch (e) {
@@ -152,11 +154,12 @@ export async function handlePrintJob(computerId: string): Promise<void> {
             return
         }
         
+        const r = result as any
         let tasksArray: any[] = []
-        if (Array.isArray(result)) {
-            tasksArray = result
-        } else if (result.printTasks && Array.isArray(result.printTasks)) {
-            tasksArray = result.printTasks
+        if (Array.isArray(r)) {
+            tasksArray = r
+        } else if (r?.printTasks && Array.isArray(r.printTasks)) {
+            tasksArray = r.printTasks
         }
         
         if (tasksArray.length === 0) {

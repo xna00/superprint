@@ -1,4 +1,4 @@
-import type { Api } from "../server";
+import type { Api } from "./__types__/index.js";
 
 const isGetMethod = (path: string) =>
   !!path.split("/").pop()?.startsWith("get");
@@ -17,22 +17,24 @@ export const createHandler = (base: string, options?: {
       }
       return ret;
     },
-    apply(target: any, _thisArg, argArray) {
+    apply: async (target: any, _thisArg, argArray) => {
       const isGet = isGetMethod(base);
-      const req = new Request(
+      let req: any = new Request(
         isGet
-          ? `${base}?data=${encodeURIComponent(JSON.stringify(argArray))}`
+          ? `${base}?data=${encodeURIComponent(JSON.stringify(argArray) ?? '')}`
           : base,
         {
           method: isGet ? "GET" : "POST",
           headers: {
             "content-type": "application/json",
           },
-          body: isGet ? null : JSON.stringify(argArray),
+          body: isGet ? undefined : JSON.stringify(argArray),
         }
       );
+      if (options?.beforeRequest) req = await options.beforeRequest(req);
       if (target.isMakeRequest) return req;
-      return fetch(req).then((res) => {
+      return fetch(req).then(async (res) => {
+        if (options?.beforeResponse) res = await options.beforeResponse(res);
         if (res.status === 401) {
           // location.href = "/login";
         }

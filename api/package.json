@@ -4,11 +4,16 @@
   "description": "",
   "main": "index.js",
   "type": "module",
-  "types": "index.ts",
+  "types": "index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "copy-types": "node scripts/copy-types.js",
+    "build": "npx tsgo"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "@typescript/native-preview": "^7.0.0-dev.20260525.1"
+  }
 }

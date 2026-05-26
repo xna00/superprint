@@ -5,7 +5,7 @@ import * as gui from 'gui'
 import * as os from 'os'
 import { useState, useEffect, useRef } from 'quickwin/lib/preact/hooks.js'
 import { render, notifyResize, scaleFactor } from 'quickwin/lib/preact/render.js'
-import * as api from './api.js'
+import { api, getCookie } from './api.js'
 import { getDeviceId, getComputerName } from './device.js'
 import { enumLocalPrinters, getDefaultPrinter, printJpegPages } from './printer.js'
 import { setLogger, handleWsMessage } from './print-queue.js'
@@ -86,7 +86,6 @@ function App() {
         try {
             const result = await api.auth.login({ username: user, password: pass })
             if (result && (result.token || result.username)) {
-                api.saveCookie()
                 setUsername(result.username || user)
                 setLoggedIn(true)
                 addLog('[login] success')
@@ -136,7 +135,7 @@ function App() {
     }
 
     const connectWs = async () => {
-        const cookie = api.getCookie()
+        const cookie = getCookie()
         if (!cookie) {
             addLog('[ws] no cookie, skip connection')
             return
@@ -193,9 +192,6 @@ function App() {
     }
 
     useEffect(() => {
-        addLog('[init] loading cookie...')
-        api.loadCookie()
-
         const devId = getDeviceId()
         console.log('[device] id:', devId)
         if (devId) {

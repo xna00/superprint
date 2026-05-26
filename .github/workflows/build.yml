@@ -9,6 +9,58 @@ env:
   NODE_VERSION: '24'
 
 jobs:
+  build-all:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Build Server
+        run: |
+          cd server
+          npm ci
+          npm run buildtype
+
+      - name: Build API
+        run: |
+          cd api
+          npm ci
+          npm run copy-types
+          npm run build
+
+      - name: Build Web
+        run: |
+          cd web
+          npm ci
+          npm run build
+
+      - name: Build QuickWIN app
+        run: |
+          cd printdriver-quickwin
+          npm ci --force
+          npm run build
+
+      - name: Copy win-mingw64.exe to dist
+        run: |
+          cp printdriver-quickwin/node_modules/quickwin/win-mingw64.exe printdriver-quickwin/dist/
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: all-build-artifacts
+          path: |
+            server/dist/
+            api/__types__/
+            api/index.js
+            api/index.d.ts
+            web/dist/
+            printdriver-quickwin/dist/
+
   build-printdriver:
     runs-on: windows-2022
     defaults:
@@ -115,120 +167,13 @@ jobs:
             Write-Host "Generated printdriver.json with version $version"
           }
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/upload-artifact@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Cache quickwin build
-        id: cache-quickwin
-        uses: actions/cache@v5
-        with:
-          path: |
-            printdriver-quickwin/node_modules
-            printdriver-quickwin/dist-tsgo
-          key: ${{ runner.os }}-quickwin-${{ hashFiles('printdriver-quickwin/package-lock.json', 'printdriver-quickwin/src/**') }}
-
-      - name: Build quickwin app
-        run: |
-          cd printdriver-quickwin
-          npm ci
-          npm run build
-
-      - name: Copy quickwin to output
-        run: |
-          md printdriver\output\printdriver -Force
-          copy printdriver-quickwin\node_modules\quickwin\win-mingw64.exe printdriver\output\printdriver\
-          Copy-Item -Recurse printdriver-quickwin\dist\* printdriver\output\printdriver\
-
-      - name: Upload printdriver artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: PrintDriver
-          path: |
-            printdriver/output/PrintDriver.exe
-            printdriver/output/Setup.exe
-            printdriver/output/printdriver.json
-            printdriver/output/printdriver/**
-
-  build-server:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Cache server build
-        id: cache-server
-        uses: actions/cache@v5
-        with:
-          path: server/dist
-          key: ${{ runner.os }}-server-dist-${{ hashFiles('server/**/*.ts') }}
-
-      - name: Build Server
-        if: steps.cache-server.outputs.cache-hit != 'true'
-        run: |
-          cd server
-          npm ci
-          npm run buildtype
-
-      - name: Upload server artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: server-artifacts
-          path: server/dist
-          retention-days: 1
-
-  build-web:
-    needs: build-server
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Download server artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: server-artifacts
-          path: server/dist
-          merge-multiple: true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Cache web build
-        id: cache-web
-        uses: actions/cache@v5
-        with:
-          path: web/dist
-          key: ${{ runner.os }}-web-dist-${{ hashFiles('web/**') }}-${{ hashFiles('server/**/*.ts') }}
-
-      - name: Build Web
-        if: steps.cache-web.outputs.cache-hit != 'true'
-        run: |
-          cd web
-          npm ci
-          npm run build
-
-      - name: Upload web artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: web-artifacts
-          path: web/dist
-          retention-days: 1
+          name: printdriver-artifacts
+          path: printdriver/output/
 
   assemble:
-    needs: [build-printdriver, build-server, build-web]
+    needs: [build-all, build-printdriver]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     defaults:
@@ -237,44 +182,41 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Download printdriver artifacts
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8
         with:
-          name: PrintDriver
-          path: printdriver/output
+          name: all-build-artifacts
+          path: artifacts
           merge-multiple: true
 
-      - name: Download server artifacts
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8
         with:
-          name: server-artifacts
-          path: server/dist
-          merge-multiple: true
-
-      - name: Download web artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: web-artifacts
-          path: web/dist
+          name: printdriver-artifacts
+          path: artifacts/printdriver
           merge-multiple: true
 
       - name: Prepare static files
         run: |
           mkdir -p static
-          if [ -d "web/dist" ] && [ "$(ls -A web/dist 2>/dev/null)" ]; then
-            cp -r web/dist/* static/
+
+          # Web dist
+          if [ -d "artifacts/web/dist" ] && [ "$(ls -A artifacts/web/dist 2>/dev/null)" ]; then
+            cp -r artifacts/web/dist/* static/
           fi
-          if [ -d "printdriver/output" ] && ls printdriver/output/*.exe printdriver/output/*.json 1> /dev/null 2>&1; then
-            cp printdriver/output/PrintDriver.exe static/
-            cp printdriver/output/Setup.exe static/
-            cp printdriver/output/printdriver.json static/
-            
-            VERSION=$(grep -oP '"version":\s*"\K[^"]+' printdriver/output/printdriver.json)
-            cp printdriver/output/PrintDriver.exe "static/PrintDriver-${VERSION}.exe"
-            cp printdriver/output/Setup.exe "static/Setup-${VERSION}.exe"
+
+          # PrintDriver executables
+          if ls artifacts/printdriver/*.exe artifacts/printdriver/*.json 1> /dev/null 2>&1; then
+            cp artifacts/printdriver/PrintDriver.exe static/
+            cp artifacts/printdriver/Setup.exe static/
+            cp artifacts/printdriver/printdriver.json static/
+
+            VERSION=$(grep -oP '"version":\s*"\K[^"]+' artifacts/printdriver/printdriver.json)
+            cp artifacts/printdriver/PrintDriver.exe "static/PrintDriver-${VERSION}.exe"
+            cp artifacts/printdriver/Setup.exe "static/Setup-${VERSION}.exe"
           fi
-          if [ -d "printdriver/output/printdriver" ]; then
-            cp -r printdriver/output/printdriver static/
+
+          # QuickWIN app
+          if [ -d "artifacts/printdriver-quickwin/dist" ]; then
+            cp -r artifacts/printdriver-quickwin/dist static/printdriver/
           fi
 
       - name: Create ZIP archive
