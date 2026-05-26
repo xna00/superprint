@@ -115,6 +115,32 @@ jobs:
             Write-Host "Generated printdriver.json with version $version"
           }
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache quickwin build
+        id: cache-quickwin
+        uses: actions/cache@v5
+        with:
+          path: |
+            printdriver-quickwin/node_modules
+            printdriver-quickwin/dist-tsgo
+          key: ${{ runner.os }}-quickwin-${{ hashFiles('printdriver-quickwin/package-lock.json', 'printdriver-quickwin/src/**') }}
+
+      - name: Build quickwin app
+        run: |
+          cd printdriver-quickwin
+          npm ci
+          npm run build
+
+      - name: Copy quickwin to output
+        run: |
+          md printdriver\output\printdriver -Force
+          copy printdriver-quickwin\node_modules\quickwin\win-mingw64.exe printdriver\output\printdriver\
+          Copy-Item -Recurse printdriver-quickwin\dist\* printdriver\output\printdriver\
+
       - name: Upload printdriver artifacts
         uses: actions/upload-artifact@v6
         with:
@@ -123,6 +149,7 @@ jobs:
             printdriver/output/PrintDriver.exe
             printdriver/output/Setup.exe
             printdriver/output/printdriver.json
+            printdriver/output/printdriver/**
 
   build-server:
     runs-on: ubuntu-latest
@@ -245,6 +272,9 @@ jobs:
             VERSION=$(grep -oP '"version":\s*"\K[^"]+' printdriver/output/printdriver.json)
             cp printdriver/output/PrintDriver.exe "static/PrintDriver-${VERSION}.exe"
             cp printdriver/output/Setup.exe "static/Setup-${VERSION}.exe"
+          fi
+          if [ -d "printdriver/output/printdriver" ]; then
+            cp -r printdriver/output/printdriver static/
           fi
 
       - name: Create ZIP archive

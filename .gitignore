@@ -7,6 +7,7 @@ server/uploads/
 server/dev.db
 node_modules/
 dist
+dist-tsgo
 server/static/
 server/static.backup
 server/bundle.js
