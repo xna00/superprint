@@ -11,9 +11,9 @@
     "rootDir": "src",
     "outDir": "./dist-tsgo",
     "lib": ["ESNext"],
-    "types": ["./node_modules/quickwin/quickwin.d.ts", "./node_modules/quickwin/lib/preact/jsx.d.ts", "./src/types.d.ts"],
+    "types": ["./node_modules/quickwin/quickwin.d.ts", "./src/types.d.ts"],
     "jsx": "react-jsx",
-    "jsxImportSource": "quickwin/lib/preact",
+    "jsxImportSource": "react",
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": []

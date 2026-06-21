@@ -3,28 +3,32 @@ import 'quickwin/lib/fetch.js'
 import 'quickwin/lib/websocket.js'
 import * as gui from 'gui'
 import * as os from 'os'
-import { useState, useEffect, useRef } from 'quickwin/lib/preact/hooks.js'
-import { render, notifyResize, scaleFactor } from 'quickwin/lib/preact/render.js'
+import { useState, useEffect } from 'react'
+import { render, Button, Input, Tab, ListBox } from 'quickwin/lib/react-qw/index.js'
 import { api, getCookie } from './api.js'
 import { getDeviceId, getComputerName } from './device.js'
-import { enumLocalPrinters, getDefaultPrinter, printJpegPages } from './printer.js'
+import { enumLocalPrinters, getDefaultPrinter } from './printer.js'
 import { setLogger, handleWsMessage } from './print-queue.js'
 import { WS_URLS } from './config.js'
 
-const winW = 600 * scaleFactor
-const winH = 400 * scaleFactor
+const VISIBLE = gui.WindowStyle.VISIBLE
+const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
+
+const winW = 600
+const winH = 400
 const scr = gui.GetScreenSize()
 const winX = Math.max(0, (scr[0] - winW) / 2)
 const winY = Math.max(0, (scr[1] - winH) / 2)
 
 gui.RegisterClass('TestWin', (hwnd, msg, wParam, lParam) => {
-    switch (msg) {
-        case gui.WmMsg.DESTROY:
-            gui.PostQuitMessage(0)
-            return 0
-        case gui.WmMsg.SIZE:
-            notifyResize(hwnd)
-            return 0
+    if (msg === gui.WmMsg.DESTROY) {
+        if (ws) {
+            ws.onclose = null
+            ws.close()
+            ws = null
+        }
+        gui.PostQuitMessage(0)
+        return 0
     }
     return gui.DefWindowProc(hwnd, msg, wParam, lParam)
 })
@@ -33,25 +37,26 @@ const hwnd = gui.CreateWindow('TestWin', 'SuperPrint',
     gui.WindowStyle.OVERLAPPEDWINDOW,
     winX, winY, winW, winH, null, null)
 
+const cr = hwnd ? gui.GetClientRect(hwnd) : null
+const cw = cr ? cr.right - cr.left : winW
+const ch = cr ? cr.bottom - cr.top : winH
+
 let ws: WebSocket | null = null
 
 function App() {
-    const [tab, setTab] = useState(0)
     const [loggedIn, setLoggedIn] = useState(false)
     const [username, setUsername] = useState('')
+    const [loginUser, setLoginUser] = useState('')
+    const [loginPass, setLoginPass] = useState('')
     const [computerId, setComputerId] = useState('')
     const [computerName, setComputerName] = useState('')
     const [printers, setPrinters] = useState<string[]>([])
     const [wsStatus, setWsStatus] = useState('disconnected')
-    const logBoxRef = useRef<number | null>(null)
-    const usernameRef = useRef<number | null>(null)
-    const passwordRef = useRef<number | null>(null)
+    const [logs, setLogs] = useState<string[]>([])
 
     const addLog = (msg: string) => {
         console.log('[log]', msg)
-        if (logBoxRef.current) {
-            gui.SendMessage(logBoxRef.current as gui.HWND, gui.LbMsg.ADDSTRING, 0, msg)
-        }
+        setLogs(prev => [...prev, msg])
     }
 
     setLogger(addLog)
@@ -76,17 +81,15 @@ function App() {
     }
 
     const handleLogin = async () => {
-        const user = gui.GetWindowText(usernameRef.current! as gui.HWND)
-        const pass = gui.GetWindowText(passwordRef.current! as gui.HWND)
-        if (!user || !pass) {
+        if (!loginUser || !loginPass) {
             addLog('[login] username and password required')
             return
         }
-        addLog('[login] logging in as ' + user)
+        addLog('[login] logging in as ' + loginUser)
         try {
-            const result = await api.auth.login({ username: user, password: pass })
+            const result = await api.auth.login({ username: loginUser, password: loginPass })
             if (result && (result.token || result.username)) {
-                setUsername(result.username || user)
+                setUsername(result.username || loginUser)
                 setLoggedIn(true)
                 addLog('[login] success')
                 await registerComputer()
@@ -228,67 +231,43 @@ function App() {
         }, 500)
     }, [])
 
-    const printerText = printers.join('\n')
-    
-    const testPrint = () => {
-        addLog('[test] starting test print...')
-        const defPrinter = getDefaultPrinter()
-        if (!defPrinter) {
-            addLog('[test] no default printer')
-            return
-        }
-        addLog('[test] printer: ' + defPrinter)
-        
-        try {
-            const result = printJpegPages([], defPrinter, false, false)
-            addLog('[test] result: ' + result)
-        } catch (e) {
-            addLog('[test] error: ' + String(e))
-        }
-    }
-
     if (!loggedIn) {
         return (
-            <w style={{ flexDirection: 'column', gap: 8, flexGrow: 1, padding: 40, justifyContent: 'center' }}>
-                <w type="static" text="SuperPrint" style={{ height: 28, width: '100%' }} />
-                <w type="edit" ref={usernameRef} placeholder="Username" style={{ height: 28, width: '100%' }} />
-                <w type="edit" ref={passwordRef} placeholder="Password" password={true} style={{ height: 28, width: '100%' }} />
-                <w type="button" text="Login" style={{ height: 30, width: '100%' }} onEvent={(e: any) => {
-                    if (e.msg === gui.WmMsg.LBUTTONDOWN) handleLogin()
-                }} />
+            <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', gap: 8, padding: 40, justifyContent: 'center', x: 0, y: 0, width: cw, height: ch }}>
+                <w type="STATIC" ws={VISIBLE} text="SuperPrint" style={{ height: 28 }} />
+                <Input value={loginUser} onChange={setLoginUser} placeholder="Username" style={{ height: 28 }} />
+                <Input value={loginPass} onChange={setLoginPass} password={true} placeholder="Password" style={{ height: 28 }} />
+                <Button onClick={handleLogin} style={{ height: 30 }}>Login</Button>
             </w>
         )
     }
 
     return (
-        <w style={{ flexDirection: 'column', padding: 10, gap: 8, flexGrow: 1, width: '100%' }}>
-            <w style={{ flexDirection: 'row', gap: 4 }}>
-                <w type="button" text="Logs" style={{ width: 60, height: 24 }} onEvent={(e: any) => {
-                    if (e.msg === gui.WmMsg.LBUTTONDOWN) setTab(0)
-                }} />
-                <w type="button" text="Printers" style={{ width: 70, height: 24 }} onEvent={(e: any) => {
-                    if (e.msg === gui.WmMsg.LBUTTONDOWN) setTab(1)
-                }} />
-                <w type="button" text="Test Print" style={{ width: 80, height: 24 }} onEvent={(e: any) => {
-                    if (e.msg === gui.WmMsg.LBUTTONDOWN) testPrint()
-                }} />
-            </w>
-            {tab === 0 && (
-                <w type="listbox" ref={logBoxRef} style={{ flexGrow: 1, width: '100%' }} />
-            )}
-            {tab === 1 && (
-                <w style={{ flexDirection: 'column', gap: 4, flexGrow: 1, width: '100%' }}>
-                    <w type="static" text={'Device ID: ' + computerId} style={{ height: 20, width: '100%' }} />
-                    <w type="static" text={'Computer: ' + computerName} style={{ height: 20, width: '100%' }} />
-                    <w type="static" text={'User: ' + username} style={{ height: 20, width: '100%' }} />
-                    <w type="static" text={'WebSocket: ' + wsStatus} style={{ height: 20, width: '100%' }} />
-                    <w type="static" text="Printers:" style={{ height: 20, width: '100%' }} />
-                    <w type="static" text={printerText} style={{ flexGrow: 1, width: '100%' }} />
-                </w>
-            )}
+        <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', x: 0, y: 0, width: cw, height: ch }}>
+            <Tab tabs={[
+                {
+                    title: 'Logs',
+                    content: <ListBox items={logs} style={{ flexGrow: 1 }} />
+                },
+                {
+                    title: 'Printers',
+                    content: (
+                        <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 4, flexGrow: 1 }}>
+                            <w type="STATIC" ws={VISIBLE} text={'Device ID: ' + computerId} style={{ height: 20 }} />
+                            <w type="STATIC" ws={VISIBLE} text={'Computer: ' + computerName} style={{ height: 20 }} />
+                            <w type="STATIC" ws={VISIBLE} text={'User: ' + username} style={{ height: 20 }} />
+                            <w type="STATIC" ws={VISIBLE} text={'WebSocket: ' + wsStatus} style={{ height: 20 }} />
+                            <w type="STATIC" ws={VISIBLE} text="Printers:" style={{ height: 20 }} />
+                            <ListBox items={printers} style={{ flexGrow: 1 }} />
+                        </w>
+                    )
+                },
+            ]} style={{ flexGrow: 1 }} />
         </w>
     )
 }
 
-gui.ShowWindow(hwnd)
-render(<App />, hwnd)
+if (hwnd) {
+    render(<App />, hwnd)
+    gui.ShowWindow(hwnd)
+}
