@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  base: '',
   define: { DEBUG: 'false' },
   preview: {
     host: '0.0.0.0',
