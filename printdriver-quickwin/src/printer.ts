@@ -1,5 +1,6 @@
 import * as win from 'win'
 import * as ffi from 'ffi'
+import type { Document, Page, Pixmap } from 'quickwin/vendor/mupdf-wasm/mupdf.js'
 type MuPdfModule = typeof import('quickwin/vendor/mupdf-wasm/mupdf.js').default
 
 // Vite resolves this at build time → dist/assets/mupdf-wasm-[hash].wasm
@@ -93,20 +94,18 @@ export function loadMuPdf(): Promise<MuPdfModule> {
     return _mupdfPromise
 }
 
-function renderPdfPageToDib(mupdf: MuPdfModule, pdfBuf: ArrayBuffer, pageIndex: number, scale: number): DibResult | null {
-    let doc: any = null
-    let page: any = null
-    let pixmap: any = null
+function renderPdfPageToDib(mupdf: MuPdfModule, doc: Document, pageIndex: number, scale: number): DibResult | null {
+    let page: Page | null = null
+    let pixmap: Pixmap | null = null
     try {
-        doc = mupdf.Document.openDocument(new Uint8Array(pdfBuf), 'application/pdf')
         page = doc.loadPage(pageIndex)
         pixmap = page.toPixmap(mupdf.Matrix.scale(scale, scale), mupdf.ColorSpace.DeviceRGB, false)
         if (!pixmap) return null
 
-        const srcPixels = pixmap.getPixels() as Uint8ClampedArray
-        const srcStride = pixmap.getStride() as number
-        const w = pixmap.getWidth() as number
-        const h = pixmap.getHeight() as number
+        const srcPixels = pixmap.getPixels()
+        const srcStride = pixmap.getStride()
+        const w = pixmap.getWidth()
+        const h = pixmap.getHeight()
         const dibStride = Math.floor((w * 3 + 3) / 4) * 4
         const dib = new Uint8Array(h * dibStride)
 
@@ -129,23 +128,6 @@ function renderPdfPageToDib(mupdf: MuPdfModule, pdfBuf: ArrayBuffer, pageIndex: 
     } finally {
         if (pixmap) try { pixmap.destroy() } catch {}
         if (page) try { page.destroy() } catch {}
-        if (doc) try { doc.destroy() } catch {}
-    }
-}
-
-function getDpiScale(mupdf: MuPdfModule, pdfBuf: ArrayBuffer, pageIndex: number, dpi: number): number {
-    try {
-        const doc = mupdf.Document.openDocument(new Uint8Array(pdfBuf), 'application/pdf')
-        const page = doc.loadPage(pageIndex)
-        const bounds = page.getBounds() as [number, number, number, number]
-        page.destroy()
-        doc.destroy()
-        const ptW = bounds[2] - bounds[0]
-        if (ptW <= 0) return dpi / 72
-        const nominalDpi = 72
-        return dpi / nominalDpi
-    } catch {
-        return dpi / 72
     }
 }
 
@@ -210,10 +192,10 @@ export async function printPdfPages(pdfBuf: ArrayBuffer, printerName: string, du
         return false
     }
 
-    let doc: any = null
+    let doc: Document | null = null
     try {
         doc = mupdf.Document.openDocument(new Uint8Array(pdfBuf), 'application/pdf')
-        const totalPages = doc.countPages() as number
+        const totalPages = doc.countPages()
         console.log('[printer] PDF pages:', totalPages)
 
         const dpi = Math.min(dpiX, dpiY)
@@ -223,7 +205,7 @@ export async function printPdfPages(pdfBuf: ArrayBuffer, printerName: string, du
             ffi.ffiCall(StartPage, [ffi.FFI_TYPE_UINT64], [hdc], ffi.FFI_TYPE_SINT32)
 
             try {
-                const dib = renderPdfPageToDib(mupdf, pdfBuf, i, scale)
+                const dib = renderPdfPageToDib(mupdf, doc, i, scale)
                 if (dib) {
                     const bmi = makeBitmapInfo(dib.w, dib.h)
                     ffi.ffiCall(StretchDIBits, [

@@ -70,7 +70,7 @@ export async function connectWs(addLog: (msg: string) => void, setWsStatus: (s: 
                 wsTimeoutTimer = os.setTimeout(checkWsTimeout, WS_TIMEOUT_CHECK)
                 setWsStatus('已连接')
                 addLog('[ws] connected')
-                w.onmessage = (ev: any) => {
+                w.onmessage = (ev: MessageEvent) => {
                     const data = ev.data
                     if (typeof data === 'string' && data) {
                         lastMsgTime = Date.now()
