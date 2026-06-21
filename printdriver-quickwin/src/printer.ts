@@ -85,6 +85,7 @@ export function loadMuPdf(): Promise<MuPdfModule> {
     _mupdfPromise = (async () => {
         console.log('[printer] loading MuPDF WASM from:', wasmUrl)
         const resp = await fetch(wasmUrl)
+        console.log('MuPDF WASM loaded!')
         const wasmBinary = await resp.arrayBuffer()
         ;(globalThis).$libmupdf_wasm_Module = { wasmBinary, locateFile: (p: string) => p }
         const mod = await import('quickwin/vendor/mupdf-wasm/mupdf.js')
@@ -93,6 +94,8 @@ export function loadMuPdf(): Promise<MuPdfModule> {
     })()
     return _mupdfPromise
 }
+
+loadMuPdf()
 
 function renderPdfPageToDib(mupdf: MuPdfModule, doc: Document, pageIndex: number, scale: number): DibResult | null {
     let page: Page | null = null
