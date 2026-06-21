@@ -2,6 +2,13 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   define: { DEBUG: 'false' },
+  preview: {
+    host: '0.0.0.0',
+    port: 4173,
+    headers: {
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  },
   build: {
     target: 'es2022',
     outDir: 'dist',
