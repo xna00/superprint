@@ -196,26 +196,22 @@ function App() {
 
     useEffect(() => {
         const devId = getDeviceId()
-        console.log('[device] id:', devId)
         if (devId) {
             setComputerId(devId)
             addLog('[device] ID: ' + devId)
         }
 
         const compName = getComputerName()
-        console.log('[device] name:', compName)
         if (compName) {
             setComputerName(compName)
             addLog('[device] name: ' + compName)
         }
 
         const localPrinters = enumLocalPrinters()
-        console.log('[printer] count:', localPrinters.length)
         setPrinters(localPrinters.map(p => p.name))
         addLog('[printer] found ' + localPrinters.length + ' printers')
 
         const defPrinter = getDefaultPrinter()
-        console.log('[printer] default:', defPrinter)
         if (defPrinter) {
             addLog('[printer] default: ' + defPrinter)
         }
