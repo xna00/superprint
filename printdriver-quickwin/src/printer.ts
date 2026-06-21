@@ -86,6 +86,7 @@ export function loadMuPdf(): Promise<MuPdfModule> {
         console.log('[printer] loading MuPDF WASM from:', wasmUrl)
         const resp = await fetch(wasmUrl)
         console.log('MuPDF WASM resp loaded')
+        console.log(resp.status, resp.headers)
         const wasmBinary = await resp.arrayBuffer()
         console.log('MuPDF WASM arrayBuffer loaded!')
         ;(globalThis).$libmupdf_wasm_Module = { wasmBinary, locateFile: (p: string) => p }
