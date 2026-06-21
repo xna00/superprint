@@ -51,7 +51,7 @@ function App() {
     const [computerId, setComputerId] = useState('')
     const [computerName, setComputerName] = useState('')
     const [printers, setPrinters] = useState<string[]>([])
-    const [wsStatus, setWsStatus] = useState('disconnected')
+    const [wsStatus, setWsStatus] = useState('未连接')
     const [logs, setLogs] = useState<string[]>([])
 
     const addLog = (msg: string) => {
@@ -165,7 +165,7 @@ function App() {
                 })
                 if (ok) {
                     ws = w
-                    setWsStatus('connected')
+                    setWsStatus('已连接')
                     addLog('[ws] connected')
                     w.onmessage = (ev: any) => {
                         const data = ev.data
@@ -176,7 +176,7 @@ function App() {
                     }
                     w.onclose = () => {
                         ws = null
-                        setWsStatus('disconnected')
+                        setWsStatus('未连接')
                         addLog('[ws] connection closed')
                         os.setTimeout(() => connectWs(), 5000)
                     }
@@ -235,9 +235,9 @@ function App() {
         return (
             <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', gap: 8, padding: 40, justifyContent: 'center', x: 0, y: 0, width: cw, height: ch }}>
                 <w type="STATIC" ws={VISIBLE} text="SuperPrint" style={{ height: 28 }} />
-                <Input value={loginUser} onChange={setLoginUser} placeholder="Username" style={{ height: 28 }} />
-                <Input value={loginPass} onChange={setLoginPass} password={true} placeholder="Password" style={{ height: 28 }} />
-                <Button onClick={handleLogin} style={{ height: 30 }}>Login</Button>
+                <Input value={loginUser} onChange={setLoginUser} placeholder="用户名" style={{ height: 28 }} />
+                <Input value={loginPass} onChange={setLoginPass} password={true} placeholder="密码" style={{ height: 28 }} />
+                <Button onClick={handleLogin} style={{ height: 30 }}>登录</Button>
             </w>
         )
     }
@@ -246,18 +246,18 @@ function App() {
         <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', x: 0, y: 0, width: cw, height: ch }}>
             <Tab tabs={[
                 {
-                    title: 'Logs',
+                    title: '日志',
                     content: <ListBox items={logs} style={{ flexGrow: 1 }} />
                 },
                 {
-                    title: 'Printers',
+                    title: '打印机',
                     content: (
                         <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 4, flexGrow: 1 }}>
-                            <w type="STATIC" ws={VISIBLE} text={'Device ID: ' + computerId} style={{ height: 20 }} />
-                            <w type="STATIC" ws={VISIBLE} text={'Computer: ' + computerName} style={{ height: 20 }} />
-                            <w type="STATIC" ws={VISIBLE} text={'User: ' + username} style={{ height: 20 }} />
-                            <w type="STATIC" ws={VISIBLE} text={'WebSocket: ' + wsStatus} style={{ height: 20 }} />
-                            <w type="STATIC" ws={VISIBLE} text="Printers:" style={{ height: 20 }} />
+                            <w type="STATIC" ws={VISIBLE} text={'设备ID: ' + computerId} style={{ height: 20 }} />
+                            <w type="STATIC" ws={VISIBLE} text={'计算机: ' + computerName} style={{ height: 20 }} />
+                            <w type="STATIC" ws={VISIBLE} text={'用户: ' + username} style={{ height: 20 }} />
+                            <w type="STATIC" ws={VISIBLE} text={'连接状态: ' + wsStatus} style={{ height: 20 }} />
+                            <w type="STATIC" ws={VISIBLE} text="打印机列表:" style={{ height: 20 }} />
                             <ListBox items={printers} style={{ flexGrow: 1 }} />
                         </w>
                     )
