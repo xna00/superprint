@@ -16,7 +16,7 @@ interface LoginFormProps {
 
 export function LoginForm({ cw, ch, loginUser, setLoginUser, loginPass, setLoginPass, handleLogin }: LoginFormProps) {
     return (
-        <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', gap: 8, padding: 40, justifyContent: 'center', x: 0, y: 0, width: cw, height: ch }}>
+        <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', gap: 8, justifyContent: 'center', x: 40, y: 40, width: cw - 80, height: ch - 80 }}>
             <w type="STATIC" ws={VISIBLE} text="SuperPrint" style={{ height: 28 }} />
             <Input value={loginUser} onChange={setLoginUser} placeholder="用户名" style={{ height: 28 }} />
             <Input value={loginPass} onChange={setLoginPass} password={true} placeholder="密码" style={{ height: 28 }} />

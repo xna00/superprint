@@ -11,10 +11,10 @@
     "rootDir": "src",
     "outDir": "./dist-tsgo",
     "lib": ["ESNext"],
-    "types": ["./node_modules/quickwin/quickwin.d.ts", "./src/types.d.ts"],
+    "types": ["./node_modules/quickwin/quickwin.d.ts"],
     "jsx": "react-jsx",
     "jsxImportSource": "react",
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "./node_modules/quickwin/lib/react-qw/jsx.d.ts"],
   "exclude": []
 }
