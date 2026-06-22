@@ -128,57 +128,56 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         return false
     }
 
-    if (duplex) {
-        const _wspool = win.LoadLibrary('winspool.drv')
-        if (_wspool) {
-            const OpenPrinterW = win.GetProcAddress(_wspool, 'OpenPrinterW')
-            const DocumentPropertiesW = win.GetProcAddress(_wspool, 'DocumentPropertiesW')
-            const ClosePrinter = win.GetProcAddress(_wspool, 'ClosePrinter')
-            if (OpenPrinterW && DocumentPropertiesW && ClosePrinter) {
-                const hPrinterBuf = new ArrayBuffer(8)
-                const ret = ffi.ffiCall(
-                    OpenPrinterW,
-                    [ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER],
-                    [printerNameBuf, hPrinterBuf, null],
-                    ffi.FFI_TYPE_SINT32
-                )
-                if (ret) {
-                    const hpDv = new DataView(hPrinterBuf)
-                    const hPrinter = hpDv.getUint32(0, true) + hpDv.getUint32(4, true) * 4294967296
+    const _wspool = win.LoadLibrary('winspool.drv')
+    if (_wspool) {
+        const OpenPrinterW = win.GetProcAddress(_wspool, 'OpenPrinterW')
+        const DocumentPropertiesW = win.GetProcAddress(_wspool, 'DocumentPropertiesW')
+        const ClosePrinter = win.GetProcAddress(_wspool, 'ClosePrinter')
+        if (OpenPrinterW && DocumentPropertiesW && ClosePrinter) {
+            const hPrinterBuf = new ArrayBuffer(8)
+            const ret = ffi.ffiCall(
+                OpenPrinterW,
+                [ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER],
+                [printerNameBuf, hPrinterBuf, null],
+                ffi.FFI_TYPE_SINT32
+            )
+            if (ret) {
+                const hpDv = new DataView(hPrinterBuf)
+                const hPrinter = hpDv.getUint32(0, true) + hpDv.getUint32(4, true) * 4294967296
 
-                    const dmSize = ffi.ffiCall(
+                const dmSize = ffi.ffiCall(
+                    DocumentPropertiesW,
+                    [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32],
+                    [0, hPrinter, printerNameBuf, null, null, 0],
+                    ffi.FFI_TYPE_SINT32
+                ) as number
+
+                if (dmSize > 0) {
+                    const devmodeBuf = new ArrayBuffer(dmSize)
+                    ffi.ffiCall(
                         DocumentPropertiesW,
                         [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32],
-                        [0, hPrinter, printerNameBuf, null, null, 0],
+                        [0, hPrinter, printerNameBuf, devmodeBuf, null, 2],
                         ffi.FFI_TYPE_SINT32
-                    ) as number
-
-                    if (dmSize > 0) {
-                        const devmodeBuf = new ArrayBuffer(dmSize)
-                        ffi.ffiCall(
-                            DocumentPropertiesW,
-                            [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32],
-                            [0, hPrinter, printerNameBuf, devmodeBuf, null, 2],
-                            ffi.FFI_TYPE_SINT32
-                        )
-                        const dv = new DataView(devmodeBuf)
-                        dv.setUint32(72, dv.getUint32(72, true) | 0x1000, true)
-                        dv.setUint16(94, tumble ? 3 : 2, true)
-                        ffi.ffiCall(
-                            DocumentPropertiesW,
-                            [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32],
-                            [0, hPrinter, printerNameBuf, devmodeBuf, devmodeBuf, 3],
-                            ffi.FFI_TYPE_SINT32
-                        )
-                        ffi.ffiCall(
-                            ResetDCW,
-                            [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER],
-                            [hdc, devmodeBuf],
-                            ffi.FFI_TYPE_UINT64
-                        )
-                    }
-                    ffi.ffiCall(ClosePrinter, [ffi.FFI_TYPE_UINT64], [hPrinter], ffi.FFI_TYPE_SINT32)
+                    )
+                    const dv = new DataView(devmodeBuf)
+                    dv.setUint32(72, dv.getUint32(72, true) | 0x1000, true)
+                    const duplexVal: number = duplex ? (tumble ? 3 : 2) : 1
+                    dv.setUint16(94, duplexVal, true)
+                    ffi.ffiCall(
+                        DocumentPropertiesW,
+                        [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32],
+                        [0, hPrinter, printerNameBuf, devmodeBuf, devmodeBuf, 3],
+                        ffi.FFI_TYPE_SINT32
+                    )
+                    ffi.ffiCall(
+                        ResetDCW,
+                        [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER],
+                        [hdc, devmodeBuf],
+                        ffi.FFI_TYPE_UINT64
+                    )
                 }
+                ffi.ffiCall(ClosePrinter, [ffi.FFI_TYPE_UINT64], [hPrinter], ffi.FFI_TYPE_SINT32)
             }
         }
     }
