@@ -1,6 +1,6 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
-import type { PrintWorker, WorkerOutMsg, WorkerInMsg } from './worker-types.js'
+import type { PrintWorker, WorkerOutMsg } from './worker-types.js'
 import { api } from './api.js'
 import { getDefaultPrinter } from './printer.js'
 

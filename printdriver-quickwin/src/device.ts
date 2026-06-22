@@ -1,5 +1,6 @@
 import * as win from 'win'
 import * as ffi from 'ffi'
+import { strToWideBuf, decodeWideAtPtr } from './utils.js'
 
 const _advapi32 = win.LoadLibrary('advapi32.dll')
 const _kernel32 = win.LoadLibrary('kernel32.dll')
@@ -11,29 +12,6 @@ const GetComputerNameW = _kernel32 ? win.GetProcAddress(_kernel32, 'GetComputerN
 
 const HKEY_LOCAL_MACHINE = 0x80000002
 const KEY_READ = 0x20019
-
-function strToWideBuf(str: string): ArrayBuffer {
-    const buf = new ArrayBuffer((str.length + 1) * 2)
-    const dv = new DataView(buf)
-    for (let i = 0; i < str.length; i++) dv.setUint16(i * 2, str.charCodeAt(i), true)
-    dv.setUint16(str.length * 2, 0, true)
-    return buf
-}
-
-function decodeWideAtPtr(ptr: number): string {
-    if (!ptr) return ''
-    const chars: number[] = []
-    let pos = ptr
-    while (true) {
-        const low = ffi.readByte(pos)
-        const high = ffi.readByte(pos + 1)
-        const ch = low + high * 256
-        if (ch === 0) break
-        chars.push(ch)
-        pos += 2
-    }
-    return String.fromCharCode(...chars)
-}
 
 export function getDeviceId(): string | null {
     if (!RegOpenKeyExW || !RegQueryValueExW || !RegCloseKey) {

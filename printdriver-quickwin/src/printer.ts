@@ -1,34 +1,19 @@
 import * as win from 'win'
 import * as ffi from 'ffi'
+import { decodeWideAtPtr, readPtr } from './utils.js'
 
 const _winspool = win.LoadLibrary('winspool.drv')
-
-const GetDefaultPrinterW = (_winspool ? win.GetProcAddress(_winspool, 'GetDefaultPrinterW') : 0) as number
-const EnumPrintersW = (_winspool ? win.GetProcAddress(_winspool, 'EnumPrintersW') : 0) as number
+if (!_winspool) throw new Error('winspool.drv not found')
+function gdip(name: string) {
+    const ptr = win.GetProcAddress(_winspool!, name)
+    if (!ptr) throw new Error('winspool!' + name + ' not found')
+    return ptr
+}
+const GetDefaultPrinterW = gdip('GetDefaultPrinterW')
+const EnumPrintersW = gdip('EnumPrintersW')
 
 const PRINTER_ENUM_LOCAL = 0x00000002
 const PRINTER_ENUM_CONNECTIONS = 0x00000004
-
-function decodeWideAtPtr(ptr: number): string {
-    if (!ptr) return ''
-    let result = ''
-    let pos = ptr
-    while (true) {
-        const low = ffi.readByte(pos)
-        const high = ffi.readByte(pos + 1)
-        const ch = low + high * 256
-        if (ch === 0) break
-        result += String.fromCharCode(ch)
-        pos += 2
-    }
-    return result
-}
-
-function readPtr(dv: DataView, offset: number): number {
-    const low = dv.getUint32(offset, true)
-    const high = dv.getUint32(offset + 4, true)
-    return low + high * 4294967296
-}
 
 export interface LocalPrinterInfo {
     name: string
@@ -38,8 +23,6 @@ export interface LocalPrinterInfo {
 }
 
 export function enumLocalPrinters(): LocalPrinterInfo[] {
-    if (!EnumPrintersW) return []
-
     const flags = PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS
     const level = 2
     const neededBuf = new Uint32Array(new ArrayBuffer(4))
@@ -81,8 +64,6 @@ export function enumLocalPrinters(): LocalPrinterInfo[] {
 }
 
 export function getDefaultPrinter(): string | null {
-    if (!GetDefaultPrinterW) return null
-
     const sizeBuf = new ArrayBuffer(4)
     const sizeArr = new Uint32Array(sizeBuf)
     sizeArr[0] = 256

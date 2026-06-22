@@ -5,6 +5,7 @@ import * as ffi from 'ffi'
 import * as win from 'win'
 import type { Document, Page, Pixmap } from 'quickwin/vendor/mupdf-wasm/mupdf.js'
 import type { WorkerInMsg, WorkerOutMsg } from './worker-types.js'
+import { strToWideBuf } from './utils.js'
 type MuPdfModule = typeof import('quickwin/vendor/mupdf-wasm/mupdf.js').default
 
 const wasmUrl = new URL('../node_modules/quickwin/vendor/mupdf-wasm/mupdf-wasm.wasm', import.meta.url).href
@@ -24,6 +25,7 @@ const StartPage = gdip('StartPage')
 const EndPage = gdip('EndPage')
 const GetDeviceCaps = gdip('GetDeviceCaps')
 const StretchDIBits = gdip('StretchDIBits')
+const ResetDCW = gdip('ResetDCW')
 
 const HORZRES = 8
 const VERTRES = 10
@@ -34,16 +36,6 @@ interface DibResult {
     data: ArrayBuffer
     w: number
     h: number
-}
-
-function strToWideBuf(str: string): ArrayBuffer {
-    const buf = new ArrayBuffer((str.length + 1) * 2)
-    const dv = new DataView(buf)
-    for (let i = 0; i < str.length; i++) {
-        dv.setUint16(i * 2, str.charCodeAt(i), true)
-    }
-    dv.setUint16(str.length * 2, 0, true)
-    return buf
 }
 
 function makeBitmapInfo(w: number, h: number): ArrayBuffer {
@@ -104,7 +96,7 @@ function renderPdfPageToDib(mupdf: MuPdfModule, doc: Document, pageIndex: number
         }
 
         return { data: dib.buffer, w, h }
-    } catch (e) {
+    } catch (e: unknown) {
         console.log('[worker] renderPdfPageToDib error:', '' + e)
         return null
     } finally {
@@ -134,6 +126,61 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     if (!hdc) {
         console.log('[worker] CreateDC failed')
         return false
+    }
+
+    if (duplex) {
+        const _wspool = win.LoadLibrary('winspool.drv')
+        if (_wspool) {
+            const OpenPrinterW = win.GetProcAddress(_wspool, 'OpenPrinterW')
+            const DocumentPropertiesW = win.GetProcAddress(_wspool, 'DocumentPropertiesW')
+            const ClosePrinter = win.GetProcAddress(_wspool, 'ClosePrinter')
+            if (OpenPrinterW && DocumentPropertiesW && ClosePrinter) {
+                const hPrinterBuf = new ArrayBuffer(8)
+                const ret = ffi.ffiCall(
+                    OpenPrinterW,
+                    [ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER],
+                    [printerNameBuf, hPrinterBuf, null],
+                    ffi.FFI_TYPE_SINT32
+                )
+                if (ret) {
+                    const hpDv = new DataView(hPrinterBuf)
+                    const hPrinter = hpDv.getUint32(0, true) + hpDv.getUint32(4, true) * 4294967296
+
+                    const dmSize = ffi.ffiCall(
+                        DocumentPropertiesW,
+                        [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32],
+                        [0, hPrinter, printerNameBuf, null, null, 0],
+                        ffi.FFI_TYPE_SINT32
+                    ) as number
+
+                    if (dmSize > 0) {
+                        const devmodeBuf = new ArrayBuffer(dmSize)
+                        ffi.ffiCall(
+                            DocumentPropertiesW,
+                            [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32],
+                            [0, hPrinter, printerNameBuf, devmodeBuf, null, 2],
+                            ffi.FFI_TYPE_SINT32
+                        )
+                        const dv = new DataView(devmodeBuf)
+                        dv.setUint32(72, dv.getUint32(72, true) | 0x1000, true)
+                        dv.setUint16(94, tumble ? 3 : 2, true)
+                        ffi.ffiCall(
+                            DocumentPropertiesW,
+                            [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32],
+                            [0, hPrinter, printerNameBuf, devmodeBuf, devmodeBuf, 3],
+                            ffi.FFI_TYPE_SINT32
+                        )
+                        ffi.ffiCall(
+                            ResetDCW,
+                            [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER],
+                            [hdc, devmodeBuf],
+                            ffi.FFI_TYPE_UINT64
+                        )
+                    }
+                    ffi.ffiCall(ClosePrinter, [ffi.FFI_TYPE_UINT64], [hPrinter], ffi.FFI_TYPE_SINT32)
+                }
+            }
+        }
     }
 
     const paperW = ffi.ffiCall(GetDeviceCaps, [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_SINT32], [hdc, HORZRES], ffi.FFI_TYPE_SINT32) as number
@@ -197,12 +244,12 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                 } else {
                     console.log('[worker] page', i, 'render failed')
                 }
-            } catch (e) {
+            } catch (e: unknown) {
                 console.log('[worker] page', i, 'error:', '' + e)
             }
             ffi.ffiCall(EndPage, [ffi.FFI_TYPE_UINT64], [hdc], ffi.FFI_TYPE_SINT32)
         }
-    } catch (e) {
+    } catch (e: unknown) {
         console.log('[worker] PDF processing error:', '' + e)
         ffi.ffiCall(EndDoc, [ffi.FFI_TYPE_UINT64], [hdc], ffi.FFI_TYPE_SINT32)
         ffi.ffiCall(DeleteDC, [ffi.FFI_TYPE_UINT64], [hdc], ffi.FFI_TYPE_VOID)
@@ -218,7 +265,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     return true
 }
 
-loadMuPdf().catch(e => console.log('[worker] loadMuPdf error: ' + (e?.message || e)))
+loadMuPdf().catch((e: unknown) => console.log('[worker] loadMuPdf error: ' + ((e as Error)?.message || e)))
 
 os.Worker.parent.onmessage = async (e: { data: WorkerInMsg }) => {
     const msg = e.data
@@ -227,7 +274,7 @@ os.Worker.parent.onmessage = async (e: { data: WorkerInMsg }) => {
             const success = await printPdf(msg.pdfBuf, msg.printerName, msg.duplex, msg.tumble)
             const out: WorkerOutMsg = { type: 'done', jobId: msg.jobId, success }
             os.Worker.parent.postMessage(out)
-        } catch (e2) {
+        } catch (e2: unknown) {
             console.log('[worker] print error: ' + e2)
             const out: WorkerOutMsg = { type: 'done', jobId: msg.jobId, success: false }
             os.Worker.parent.postMessage(out)
