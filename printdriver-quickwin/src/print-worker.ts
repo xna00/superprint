@@ -4,19 +4,26 @@ import * as os from 'os'
 import * as ffi from 'ffi'
 import * as win from 'win'
 import type { Document, Page, Pixmap } from 'quickwin/vendor/mupdf-wasm/mupdf.js'
+import type { WorkerInMsg, WorkerOutMsg } from './worker-types.js'
 type MuPdfModule = typeof import('quickwin/vendor/mupdf-wasm/mupdf.js').default
 
 const wasmUrl = new URL('../node_modules/quickwin/vendor/mupdf-wasm/mupdf-wasm.wasm', import.meta.url).href
 
 const _gdi32 = win.LoadLibrary('gdi32.dll')
-const CreateDCW = (_gdi32 ? win.GetProcAddress(_gdi32, 'CreateDCW') : 0) as number
-const DeleteDC = (_gdi32 ? win.GetProcAddress(_gdi32, 'DeleteDC') : 0) as number
-const StartDocW = (_gdi32 ? win.GetProcAddress(_gdi32, 'StartDocW') : 0) as number
-const EndDoc = (_gdi32 ? win.GetProcAddress(_gdi32, 'EndDoc') : 0) as number
-const StartPage = (_gdi32 ? win.GetProcAddress(_gdi32, 'StartPage') : 0) as number
-const EndPage = (_gdi32 ? win.GetProcAddress(_gdi32, 'EndPage') : 0) as number
-const GetDeviceCaps = (_gdi32 ? win.GetProcAddress(_gdi32, 'GetDeviceCaps') : 0) as number
-const StretchDIBits = (_gdi32 ? win.GetProcAddress(_gdi32, 'StretchDIBits') : 0) as number
+if (!_gdi32) throw new Error('gdi32.dll not found')
+function gdip(name: string) {
+    const ptr = win.GetProcAddress(_gdi32!, name)
+    if (!ptr) throw new Error('gdi32!' + name + ' not found')
+    return ptr
+}
+const CreateDCW = gdip('CreateDCW')
+const DeleteDC = gdip('DeleteDC')
+const StartDocW = gdip('StartDocW')
+const EndDoc = gdip('EndDoc')
+const StartPage = gdip('StartPage')
+const EndPage = gdip('EndPage')
+const GetDeviceCaps = gdip('GetDeviceCaps')
+const StretchDIBits = gdip('StretchDIBits')
 
 const HORZRES = 8
 const VERTRES = 10
@@ -60,7 +67,7 @@ async function loadMuPdf(): Promise<MuPdfModule> {
         console.log('[worker] fetch done, status=' + resp.status)
         const wasmBinary = await resp.arrayBuffer()
         console.log('[worker] wasm binary size=' + wasmBinary.byteLength)
-        ;(globalThis).$libmupdf_wasm_Module = { wasmBinary, locateFile: (p: string) => p }
+        globalThis.$libmupdf_wasm_Module = { wasmBinary, locateFile: (p) => p }
         console.log('[worker] importing mupdf.js...')
         const mod = await import('quickwin/vendor/mupdf-wasm/mupdf.js')
         console.log('[worker] MuPDF loaded')
@@ -112,11 +119,6 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     const mupdf = await loadMuPdf()
     if (!mupdf) {
         console.log('[worker] MuPDF not available')
-        return false
-    }
-
-    if (!CreateDCW || !StartDocW || !EndDoc || !StartPage || !EndPage || !DeleteDC || !GetDeviceCaps || !StretchDIBits) {
-        console.log('[worker] GDI functions not available')
         return false
     }
 
@@ -218,15 +220,17 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
 
 loadMuPdf().catch(e => console.log('[worker] loadMuPdf error: ' + (e?.message || e)))
 
-os.Worker.parent.onmessage = async (e: any) => {
+os.Worker.parent.onmessage = async (e: { data: WorkerInMsg }) => {
     const msg = e.data
     if (msg.type === 'print') {
         try {
             const success = await printPdf(msg.pdfBuf, msg.printerName, msg.duplex, msg.tumble)
-            os.Worker.parent.postMessage({ type: 'done', jobId: msg.jobId, success })
-        } catch (e2: any) {
-            console.log('[worker] print error: ' + (e2?.message || e2))
-            os.Worker.parent.postMessage({ type: 'done', jobId: msg.jobId, success: false })
+            const out: WorkerOutMsg = { type: 'done', jobId: msg.jobId, success }
+            os.Worker.parent.postMessage(out)
+        } catch (e2) {
+            console.log('[worker] print error: ' + e2)
+            const out: WorkerOutMsg = { type: 'done', jobId: msg.jobId, success: false }
+            os.Worker.parent.postMessage(out)
         }
     } else if (msg.type === 'done') {
         os.Worker.parent.onmessage = null

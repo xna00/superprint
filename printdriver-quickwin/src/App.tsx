@@ -51,8 +51,8 @@ export function App({ cw, ch }: AppProps) {
                 addLog('[api] not logged in')
                 return false
             }
-        } catch (e: any) {
-            addLog('[api] error: ' + (e.message || String(e)))
+        } catch (e: unknown) {
+            addLog('[api] error: ' + (e instanceof Error ? e.message : String(e)))
             return false
         }
     }
@@ -75,8 +75,8 @@ export function App({ cw, ch }: AppProps) {
             } else {
                 addLog('[login] failed: ' + JSON.stringify(result))
             }
-        } catch (e: any) {
-            addLog('[login] error: ' + (e.message || String(e)))
+        } catch (e: unknown) {
+            addLog('[login] error: ' + (e instanceof Error ? e.message : String(e)))
         }
     }
 
@@ -95,7 +95,7 @@ export function App({ cw, ch }: AppProps) {
             } else {
                 addLog('[computer] registration failed')
             }
-        } catch (e) {
+        } catch (e: unknown) {
             addLog('[computer] registration error: ' + String(e))
         }
     }

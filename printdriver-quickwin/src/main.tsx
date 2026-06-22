@@ -6,6 +6,7 @@ import * as os from 'os'
 import { render } from 'quickwin/lib/react-qw/index.js'
 import { cleanupWs } from './ws.js'
 import { setPrintWorker } from './print-queue.js'
+import type { PrintWorker, WorkerInMsg } from './worker-types.js'
 import { App } from './App.js'
 
 const winW = 600
@@ -14,7 +15,7 @@ const scr = gui.GetScreenSize()
 const winX = Math.max(0, (scr[0] - winW) / 2)
 const winY = Math.max(0, (scr[1] - winH) / 2)
 
-let printWorker: any = null
+let printWorker: PrintWorker | null = null
 
 gui.RegisterClass('TestWin', (hwnd, msg, wParam, lParam) => {
     if (msg === gui.WmMsg.DESTROY) {

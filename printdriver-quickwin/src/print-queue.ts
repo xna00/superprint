@@ -1,5 +1,6 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
+import type { PrintWorker, WorkerOutMsg, WorkerInMsg } from './worker-types.js'
 import { api } from './api.js'
 import { getDefaultPrinter } from './printer.js'
 
@@ -16,7 +17,7 @@ export interface PrintFileInfo {
 type LogCallback = (msg: string) => void
 
 let logFn: LogCallback = () => {}
-let _printWorker: any = null
+let _printWorker: PrintWorker | null = null
 let _jobIdCounter = 0
 const _pendingJobs = new Map<number, (success: boolean) => void>()
 
@@ -24,9 +25,9 @@ export function setLogger(fn: LogCallback): void {
     logFn = fn
 }
 
-export function setPrintWorker(worker: any): void {
+export function setPrintWorker(worker: PrintWorker): void {
     _printWorker = worker
-    worker.onmessage = (e: any) => {
+    worker.onmessage = (e: { data: WorkerOutMsg }) => {
         const msg = e.data
         if (msg.type === 'done') {
             const resolve = _pendingJobs.get(msg.jobId)
@@ -70,7 +71,7 @@ async function processFile(file: PrintFileInfo): Promise<boolean> {
     return new Promise(resolve => {
         const jobId = ++_jobIdCounter
         _pendingJobs.set(jobId, resolve)
-        _printWorker.postMessage({
+        _printWorker!.postMessage({
             type: 'print',
             pdfBuf,
             printerName: printer,
