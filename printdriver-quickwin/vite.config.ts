@@ -3,6 +3,12 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: '',
   define: { DEBUG: 'false' },
+  worker: {
+    format: 'es',
+    rollupOptions: {
+      external: ['gui', 'std', 'os', 'ffi', 'win', 'sock', 'wolfssl', 'brotli'],
+    },
+  },
   preview: {
     host: '0.0.0.0',
     port: 4173,

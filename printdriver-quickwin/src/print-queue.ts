@@ -1,7 +1,7 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
 import { api } from './api.js'
-import { printPdfPages, getDefaultPrinter } from './printer.js'
+import { getDefaultPrinter } from './printer.js'
 
 export interface PrintFileInfo {
     id: number
@@ -16,9 +16,26 @@ export interface PrintFileInfo {
 type LogCallback = (msg: string) => void
 
 let logFn: LogCallback = () => {}
+let _printWorker: any = null
+let _jobIdCounter = 0
+const _pendingJobs = new Map<number, (success: boolean) => void>()
 
 export function setLogger(fn: LogCallback): void {
     logFn = fn
+}
+
+export function setPrintWorker(worker: any): void {
+    _printWorker = worker
+    worker.onmessage = (e: any) => {
+        const msg = e.data
+        if (msg.type === 'done') {
+            const resolve = _pendingJobs.get(msg.jobId)
+            if (resolve) {
+                resolve(msg.success)
+                _pendingJobs.delete(msg.jobId)
+            }
+        }
+    }
 }
 
 function log(msg: string): void {
@@ -45,25 +62,41 @@ async function processFile(file: PrintFileInfo): Promise<boolean> {
         return false
     }
 
-    return await printPdfPages(pdfBuf, printer, file.duplex, file.tumble)
+    if (!_printWorker) {
+        log('print worker not available')
+        return false
+    }
+
+    return new Promise(resolve => {
+        const jobId = ++_jobIdCounter
+        _pendingJobs.set(jobId, resolve)
+        _printWorker.postMessage({
+            type: 'print',
+            pdfBuf,
+            printerName: printer,
+            duplex: file.duplex,
+            tumble: file.tumble,
+            jobId,
+        })
+    })
 }
 
 export async function handlePrintJob(computerId: string): Promise<void> {
     log('fetching print tasks...')
-    
+
     try {
-        const tasks = await api.printTask.listPrintTasks({ 
-            state: 'waiting_print', 
-            computerId 
+        const tasks = await api.printTask.listPrintTasks({
+            state: 'waiting_print',
+            computerId
         })
-        
+
         if (!tasks || tasks.length === 0) {
             log('no pending print tasks')
             return
         }
-        
+
         const files: PrintFileInfo[] = []
-        
+
         for (const task of tasks) {
             for (const pf of task.printFiles) {
                 if (pf.id && pf.fileId) {
@@ -79,15 +112,15 @@ export async function handlePrintJob(computerId: string): Promise<void> {
                 }
             }
         }
-        
+
         log(`found ${files.length} files to print`)
-        
+
         for (let i = 0; i < files.length; i++) {
             const file = files[i]
             log(`task ${i + 1}/${files.length}: ${file.filename}`)
-            
+
             const success = await processFile(file)
-            
+
             try {
                 if (success) {
                     await api.printTask.fileSucceed(file.id)
@@ -100,7 +133,7 @@ export async function handlePrintJob(computerId: string): Promise<void> {
                 log(`report status failed: ${String(e)}`)
             }
         }
-        
+
         log('all tasks completed')
     } catch (e) {
         log(`handle print tasks error: ${String(e)}`)
@@ -111,7 +144,7 @@ export function handleWsMessage(message: string, computerId: string): void {
     try {
         const msg = JSON.parse(message)
         const type = msg.type
-        
+
         if (type === 'check_jobs') {
             log('received check_jobs message')
             handlePrintJob(computerId)

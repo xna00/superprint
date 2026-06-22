@@ -2,8 +2,10 @@ import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
 import 'quickwin/lib/websocket.js'
 import * as gui from 'gui'
+import * as os from 'os'
 import { render } from 'quickwin/lib/react-qw/index.js'
 import { cleanupWs } from './ws.js'
+import { setPrintWorker } from './print-queue.js'
 import { App } from './App.js'
 
 const winW = 600
@@ -12,9 +14,15 @@ const scr = gui.GetScreenSize()
 const winX = Math.max(0, (scr[0] - winW) / 2)
 const winY = Math.max(0, (scr[1] - winH) / 2)
 
+let printWorker: any = null
+
 gui.RegisterClass('TestWin', (hwnd, msg, wParam, lParam) => {
     if (msg === gui.WmMsg.DESTROY) {
         cleanupWs()
+        if (printWorker) {
+            printWorker.onmessage = null
+            printWorker.postMessage({ type: 'done' })
+        }
         gui.PostQuitMessage(0)
         return 0
     }
@@ -33,3 +41,9 @@ if (hwnd) {
     render(<App cw={cw} ch={ch} />, hwnd)
     gui.ShowWindow(hwnd)
 }
+
+import pWorkerUrl from './print-worker?worker&url'
+console.log('[main] worker URL:', pWorkerUrl)
+printWorker = new os.Worker(pWorkerUrl)
+setPrintWorker(printWorker)
+console.log('[main] print worker initialized')
