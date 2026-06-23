@@ -57,6 +57,9 @@ async function loadMuPdf(): Promise<MuPdfModule> {
         console.log('[worker] loadMuPdf: wasmUrl=' + wasmUrl)
         const resp = await fetch(wasmUrl)
         console.log('[worker] fetch done, status=' + resp.status)
+        const headers: string[] = []
+        resp.headers.forEach((v, k) => headers.push(k + ': ' + v))
+        console.log('[worker] response headers:', headers.join(', '))
         const wasmBinary = await resp.arrayBuffer()
         console.log('[worker] wasm binary size=' + wasmBinary.byteLength)
         globalThis.$libmupdf_wasm_Module = { wasmBinary, locateFile: (p) => p }
