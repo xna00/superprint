@@ -1,5 +1,5 @@
 import * as win from 'win'
-import * as ffi from 'ffi'
+import { ffiCall, bufferPtr, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_SINT32 } from 'ffi'
 import { decodeWideAtPtr, readPtr } from './utils.js'
 
 const _winspool = win.LoadLibrary('winspool.drv')
@@ -28,21 +28,21 @@ export function enumLocalPrinters(): LocalPrinterInfo[] {
     const neededBuf = new Uint32Array(new ArrayBuffer(4))
     const returnedBuf = new Uint32Array(new ArrayBuffer(4))
 
-    ffi.ffiCall(
+    ffiCall(
         EnumPrintersW,
-        [ffi.FFI_TYPE_UINT32, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER],
+        [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
         [flags, null, level, null, 0, neededBuf.buffer, returnedBuf.buffer],
-        ffi.FFI_TYPE_SINT32
+        FFI_TYPE_SINT32
     )
 
     if (neededBuf[0] === 0) return []
 
     const printerBuf = new ArrayBuffer(neededBuf[0])
-    const ret = ffi.ffiCall(
+    const ret = ffiCall(
         EnumPrintersW,
-        [ffi.FFI_TYPE_UINT32, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER],
+        [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
         [flags, null, level, printerBuf, neededBuf[0], neededBuf.buffer, returnedBuf.buffer],
-        ffi.FFI_TYPE_SINT32
+        FFI_TYPE_SINT32
     )
 
     if (ret === 0) return []
@@ -69,13 +69,13 @@ export function getDefaultPrinter(): string | null {
     sizeArr[0] = 256
     const nameBuf = new ArrayBuffer(512)
 
-    const ret = ffi.ffiCall(
+    const ret = ffiCall(
         GetDefaultPrinterW,
-        [ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER],
+        [FFI_TYPE_POINTER, FFI_TYPE_POINTER],
         [nameBuf, sizeBuf],
-        ffi.FFI_TYPE_SINT32
+        FFI_TYPE_SINT32
     )
 
     if (ret === 0) return null
-    return decodeWideAtPtr(ffi.bufferPtr(nameBuf))
+    return decodeWideAtPtr(bufferPtr(nameBuf))
 }

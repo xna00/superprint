@@ -1,4 +1,4 @@
-import * as ffi from 'ffi'
+import { readByte } from 'ffi'
 
 export function strToWideBuf(str: string): ArrayBuffer {
     const buf = new ArrayBuffer((str.length + 1) * 2)
@@ -15,8 +15,8 @@ export function decodeWideAtPtr(ptr: number): string {
     let result = ''
     let pos = ptr
     while (true) {
-        const low = ffi.readByte(pos)
-        const high = ffi.readByte(pos + 1)
+        const low = readByte(pos)
+        const high = readByte(pos + 1)
         const ch = low + high * 256
         if (ch === 0) break
         result += String.fromCharCode(ch)

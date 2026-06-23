@@ -1,5 +1,5 @@
 import * as win from 'win'
-import * as ffi from 'ffi'
+import { ffiCall, bufferPtr, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_SINT32 } from 'ffi'
 import { strToWideBuf, decodeWideAtPtr } from './utils.js'
 
 const _advapi32 = win.LoadLibrary('advapi32.dll')
@@ -22,17 +22,17 @@ export function getDeviceId(): string | null {
     const keyBuf = new ArrayBuffer(8)
     const subKeyBuf = strToWideBuf('SOFTWARE\\Microsoft\\Cryptography')
 
-    const ret = ffi.ffiCall(
+    const ret = ffiCall(
         RegOpenKeyExW,
         [
-            ffi.FFI_TYPE_UINT32,
-            ffi.FFI_TYPE_POINTER,
-            ffi.FFI_TYPE_UINT32,
-            ffi.FFI_TYPE_UINT32,
-            ffi.FFI_TYPE_POINTER,
+            FFI_TYPE_UINT32,
+            FFI_TYPE_POINTER,
+            FFI_TYPE_UINT32,
+            FFI_TYPE_UINT32,
+            FFI_TYPE_POINTER,
         ],
         [HKEY_LOCAL_MACHINE, subKeyBuf, 0, KEY_READ, keyBuf],
-        ffi.FFI_TYPE_SINT32
+        FFI_TYPE_SINT32
     )
 
     console.log('[device] RegOpenKeyExW ret:', ret)
@@ -49,30 +49,30 @@ export function getDeviceId(): string | null {
     sizeDv.setUint32(0, 512, true)
     const dataBuf = new ArrayBuffer(512)
 
-    const ret2 = ffi.ffiCall(
+    const ret2 = ffiCall(
         RegQueryValueExW,
         [
-            ffi.FFI_TYPE_UINT32,
-            ffi.FFI_TYPE_POINTER,
-            ffi.FFI_TYPE_POINTER,
-            ffi.FFI_TYPE_POINTER,
-            ffi.FFI_TYPE_POINTER,
-            ffi.FFI_TYPE_POINTER,
+            FFI_TYPE_UINT32,
+            FFI_TYPE_POINTER,
+            FFI_TYPE_POINTER,
+            FFI_TYPE_POINTER,
+            FFI_TYPE_POINTER,
+            FFI_TYPE_POINTER,
         ],
         [hKey, nameBuf, null, typeBuf, dataBuf, sizeBuf],
-        ffi.FFI_TYPE_SINT32
+        FFI_TYPE_SINT32
     )
 
     console.log('[device] RegQueryValueExW ret:', ret2)
 
-    ffi.ffiCall(RegCloseKey, [ffi.FFI_TYPE_UINT32], [hKey], ffi.FFI_TYPE_SINT32)
+    ffiCall(RegCloseKey, [FFI_TYPE_UINT32], [hKey], FFI_TYPE_SINT32)
 
     if (ret2 !== 0) return null
 
     const bytesRead = sizeDv.getUint32(0, true)
     console.log('[device] bytesRead:', bytesRead)
     const charCount = Math.floor(bytesRead / 2)
-    const result = decodeWideAtPtr(ffi.bufferPtr(dataBuf))
+    const result = decodeWideAtPtr(bufferPtr(dataBuf))
     console.log('[device] result:', result)
     return result
 }
@@ -85,14 +85,14 @@ export function getComputerName(): string | null {
     sizeArr[0] = 256
     const nameBuf = new ArrayBuffer(512)
 
-    const ret = ffi.ffiCall(
+    const ret = ffiCall(
         GetComputerNameW,
-        [ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER],
+        [FFI_TYPE_POINTER, FFI_TYPE_POINTER],
         [nameBuf, sizeBuf],
-        ffi.FFI_TYPE_SINT32
+        FFI_TYPE_SINT32
     )
 
     if (ret === 0) return null
 
-    return decodeWideAtPtr(ffi.bufferPtr(nameBuf))
+    return decodeWideAtPtr(bufferPtr(nameBuf))
 }
