@@ -1,7 +1,7 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
 import * as os from 'os'
-import * as ffi from 'ffi'
+import { ffiCall, bufferPtr, FFI_TYPE_POINTER, FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_VOID, FFI_TYPE_UINT32 } from 'ffi'
 import * as win from 'win'
 import type { Document, Page, Pixmap } from 'quickwin/vendor/mupdf-wasm/mupdf.js'
 import type { WorkerInMsg, WorkerOutMsg } from './worker-types.js'
@@ -116,12 +116,12 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
 
     const printerNameBuf = strToWideBuf(printerName)
 
-    const hdc = ffi.ffiCall(
+    const hdc = ffiCall(
         CreateDCW,
-        [ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER],
+        [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
         [null, printerNameBuf, null, null],
-        ffi.FFI_TYPE_UINT64
-    ) as number
+        FFI_TYPE_UINT64
+    )
 
     if (!hdc) {
         console.log('[worker] CreateDC failed')
@@ -135,61 +135,61 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         const ClosePrinter = win.GetProcAddress(_wspool, 'ClosePrinter')
         if (OpenPrinterW && DocumentPropertiesW && ClosePrinter) {
             const hPrinterBuf = new ArrayBuffer(8)
-            const ret = ffi.ffiCall(
+            const ret = ffiCall(
                 OpenPrinterW,
-                [ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER],
+                [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
                 [printerNameBuf, hPrinterBuf, null],
-                ffi.FFI_TYPE_SINT32
+                FFI_TYPE_SINT32
             )
             if (ret) {
                 const hpDv = new DataView(hPrinterBuf)
                 const hPrinter = hpDv.getUint32(0, true) + hpDv.getUint32(4, true) * 4294967296
 
-                const dmSize = ffi.ffiCall(
+                const dmSize = ffiCall(
                     DocumentPropertiesW,
-                    [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32],
+                    [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
                     [0, hPrinter, printerNameBuf, null, null, 0],
-                    ffi.FFI_TYPE_SINT32
-                ) as number
+                    FFI_TYPE_SINT32
+                )
 
                 if (dmSize > 0) {
                     const devmodeBuf = new ArrayBuffer(dmSize)
-                    ffi.ffiCall(
+                    ffiCall(
                         DocumentPropertiesW,
-                        [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32],
+                        [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
                         [0, hPrinter, printerNameBuf, devmodeBuf, null, 2],
-                        ffi.FFI_TYPE_SINT32
+                        FFI_TYPE_SINT32
                     )
                     const dv = new DataView(devmodeBuf)
                     dv.setUint32(72, dv.getUint32(72, true) | 0x1000, true)
                     const duplexVal: number = duplex ? (tumble ? 3 : 2) : 1
                     dv.setUint16(94, duplexVal, true)
-                    ffi.ffiCall(
+                    ffiCall(
                         DocumentPropertiesW,
-                        [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32],
+                        [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
                         [0, hPrinter, printerNameBuf, devmodeBuf, devmodeBuf, 3],
-                        ffi.FFI_TYPE_SINT32
+                        FFI_TYPE_SINT32
                     )
-                    ffi.ffiCall(
+                    ffiCall(
                         ResetDCW,
-                        [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER],
+                        [FFI_TYPE_UINT64, FFI_TYPE_POINTER],
                         [hdc, devmodeBuf],
-                        ffi.FFI_TYPE_UINT64
+                        FFI_TYPE_UINT64
                     )
                 }
-                ffi.ffiCall(ClosePrinter, [ffi.FFI_TYPE_UINT64], [hPrinter], ffi.FFI_TYPE_SINT32)
+                ffiCall(ClosePrinter, [FFI_TYPE_UINT64], [hPrinter], FFI_TYPE_SINT32)
             }
         }
     }
 
-    const paperW = ffi.ffiCall(GetDeviceCaps, [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_SINT32], [hdc, HORZRES], ffi.FFI_TYPE_SINT32) as number
-    const paperH = ffi.ffiCall(GetDeviceCaps, [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_SINT32], [hdc, VERTRES], ffi.FFI_TYPE_SINT32) as number
-    const dpiX = ffi.ffiCall(GetDeviceCaps, [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_SINT32], [hdc, LOGPIXELSX], ffi.FFI_TYPE_SINT32) as number
-    const dpiY = ffi.ffiCall(GetDeviceCaps, [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_SINT32], [hdc, LOGPIXELSY], ffi.FFI_TYPE_SINT32) as number
+    const paperW = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, HORZRES], FFI_TYPE_SINT32)
+    const paperH = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, VERTRES], FFI_TYPE_SINT32)
+    const dpiX = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, LOGPIXELSX], FFI_TYPE_SINT32)
+    const dpiY = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, LOGPIXELSY], FFI_TYPE_SINT32)
     console.log('[worker] paper:', paperW, 'x', paperH, 'dpi:', dpiX, 'x', dpiY)
 
     const docNameBuf = strToWideBuf('SuperPrint')
-    const docNamePtr = ffi.bufferPtr(docNameBuf)
+    const docNamePtr = bufferPtr(docNameBuf)
 
     const docInfo = new ArrayBuffer(40)
     const docInfoView = new DataView(docInfo)
@@ -201,15 +201,15 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     docInfoView.setUint32(32, 0, true)
     docInfoView.setUint32(36, 0, true)
 
-    const docRet = ffi.ffiCall(
+    const docRet = ffiCall(
         StartDocW,
-        [ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_POINTER],
+        [FFI_TYPE_UINT64, FFI_TYPE_POINTER],
         [hdc, docInfo],
-        ffi.FFI_TYPE_SINT32
-    ) as number
+        FFI_TYPE_SINT32
+    )
 
     if (docRet <= 0) {
-        ffi.ffiCall(DeleteDC, [ffi.FFI_TYPE_UINT64], [hdc], ffi.FFI_TYPE_VOID)
+        ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_VOID)
         return false
     }
 
@@ -223,41 +223,41 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         const scale = dpi / 72
 
         for (let i = 0; i < totalPages; i++) {
-            ffi.ffiCall(StartPage, [ffi.FFI_TYPE_UINT64], [hdc], ffi.FFI_TYPE_SINT32)
+            ffiCall(StartPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
             try {
                 const dib = renderPdfPageToDib(mupdf, doc, i, scale)
                 if (dib) {
                     const bmi = makeBitmapInfo(dib.w, dib.h)
-                    ffi.ffiCall(StretchDIBits, [
-                        ffi.FFI_TYPE_UINT64, ffi.FFI_TYPE_SINT32, ffi.FFI_TYPE_SINT32,
-                        ffi.FFI_TYPE_SINT32, ffi.FFI_TYPE_SINT32,
-                        ffi.FFI_TYPE_SINT32, ffi.FFI_TYPE_SINT32,
-                        ffi.FFI_TYPE_SINT32, ffi.FFI_TYPE_SINT32,
-                        ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_POINTER, ffi.FFI_TYPE_UINT32,
-                        ffi.FFI_TYPE_UINT32
+                    ffiCall(StretchDIBits, [
+                        FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                        FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                        FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                        FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                        FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32,
+                        FFI_TYPE_UINT32
                     ], [
                         hdc, 0, 0, paperW, paperH,
                         0, 0, dib.w, dib.h,
                         dib.data, bmi, 0, 0x00CC0020
-                    ], ffi.FFI_TYPE_SINT32)
+                    ], FFI_TYPE_SINT32)
                 } else {
                     console.log('[worker] page', i, 'render failed')
                 }
             } catch (e: unknown) {
                 console.log('[worker] page', i, 'error:', '' + e)
             }
-            ffi.ffiCall(EndPage, [ffi.FFI_TYPE_UINT64], [hdc], ffi.FFI_TYPE_SINT32)
+            ffiCall(EndPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
         }
     } catch (e: unknown) {
         console.log('[worker] PDF processing error:', '' + e)
-        ffi.ffiCall(EndDoc, [ffi.FFI_TYPE_UINT64], [hdc], ffi.FFI_TYPE_SINT32)
-        ffi.ffiCall(DeleteDC, [ffi.FFI_TYPE_UINT64], [hdc], ffi.FFI_TYPE_VOID)
+        ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+        ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_VOID)
         if (doc) try { doc.destroy() } catch {}
         return false
     }
 
-    ffi.ffiCall(EndDoc, [ffi.FFI_TYPE_UINT64], [hdc], ffi.FFI_TYPE_SINT32)
-    ffi.ffiCall(DeleteDC, [ffi.FFI_TYPE_UINT64], [hdc], ffi.FFI_TYPE_VOID)
+    ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+    ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_VOID)
     if (doc) try { doc.destroy() } catch {}
 
     console.log('[worker] printPdf done')
