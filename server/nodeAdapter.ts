@@ -85,7 +85,9 @@ const serveStatic = (pathname: string, req: IncomingMessage, res: ServerResponse
   
   const ext = extname(filePath).toLowerCase();
   const contentType = mimeTypes[ext] || "application/octet-stream";
-  
+
+  const isImmutable = filePath.includes('--immutable--')
+
   const supportsBr = (req.headers['accept-encoding'] as string || '').includes('br')
   const brPath = filePath + '.br'
   if (supportsBr) {
@@ -94,16 +96,18 @@ const serveStatic = (pathname: string, req: IncomingMessage, res: ServerResponse
       res.writeHead(200, "OK", {
         "content-type": contentType,
         "content-encoding": "br",
+        "cache-control": isImmutable ? "public, max-age=31536000, immutable" : "no-cache",
       })
       createReadStream(brPath).pipe(res)
       return
     } catch {}
   }
-  
+
   res.writeHead(200, "OK", {
     "content-type": contentType,
+    "cache-control": isImmutable ? "public, max-age=31536000, immutable" : "no-cache",
   });
-  
+
   createReadStream(filePath).pipe(res);
 };
 

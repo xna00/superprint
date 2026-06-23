@@ -6,6 +6,11 @@ export default defineConfig({
   worker: {
     format: 'es',
     rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-[hash]--immutable--.js',
+        chunkFileNames: 'assets/[name]-[hash]--immutable--.js',
+        assetFileNames: 'assets/[name]-[hash]--immutable--[extname]',
+      },
       external: ['gui', 'std', 'os', 'ffi', 'win', 'sock', 'wolfssl', 'brotli'],
     },
   },
@@ -26,7 +31,7 @@ export default defineConfig({
       output: {
         format: 'es',
         entryFileNames: 'entry.js',
-        chunkFileNames: 'chunks/[name]-[hash].js',
+        chunkFileNames: 'chunks/[name]-[hash]--immutable--.js',
         manualChunks(id) {
           if (id.includes('quickwin\\lib\\') || id.includes('quickwin/lib/')) {
             return 'lib'
