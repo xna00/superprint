@@ -11,6 +11,7 @@ type MuPdfModule = typeof import('quickwin/vendor/mupdf-wasm/mupdf.js').default
 const wasmUrl = new URL('../node_modules/quickwin/vendor/mupdf-wasm/mupdf-wasm.wasm', import.meta.url).href
 
 const _gdi32 = win.LoadLibrary('gdi32.dll')
+const _kernel32 = win.LoadLibrary('kernel32.dll')
 if (!_gdi32) throw new Error('gdi32.dll not found')
 function gdip(name: string) {
     const ptr = win.GetProcAddress(_gdi32!, name)
@@ -26,6 +27,7 @@ const EndPage = gdip('EndPage')
 const GetDeviceCaps = gdip('GetDeviceCaps')
 const StretchDIBits = gdip('StretchDIBits')
 const ResetDCW = gdip('ResetDCW')
+const GetLastError = _kernel32 ? win.GetProcAddress(_kernel32, 'GetLastError') : 0
 
 const HORZRES = 8
 const VERTRES = 10
@@ -127,7 +129,8 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     )
 
     if (!hdc) {
-        console.log('[worker] CreateDC failed')
+        const gle = GetLastError ? ffiCall(GetLastError, [], [], FFI_TYPE_UINT32) as number : 0
+        console.log('[worker] CreateDC failed, GLE=' + gle)
         return false
     }
 
