@@ -2,8 +2,12 @@ import { WECOM_TOKEN } from "./constants.ts";
 import { join } from "node:path";
 import { rename, rm, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { brotliCompress } from "node:zlib";
+import { promisify } from "node:util";
 import UZIP from "uzip";
 import { logger } from "../logger.ts";
+
+const brCompress = promisify(brotliCompress)
 
 const staticDir = join(import.meta.dirname, "..", "static");
 
@@ -41,6 +45,12 @@ export const _outUploadStatic = async (req: Request): Promise<Response> => {
       }
 
       await writeFile(filePath, data);
+
+      if (!filename.endsWith('.br') && data.length > 1024) {
+        brCompress(data)
+          .then(br => writeFile(filePath + '.br', br))
+          .catch(() => {})
+      }
     }
 
     return Response.json({ success: true, message: "Static files updated" });

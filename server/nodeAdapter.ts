@@ -61,7 +61,7 @@ const mimeTypes: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
-const serveStatic = (pathname: string, res: ServerResponse) => {
+const serveStatic = (pathname: string, req: IncomingMessage, res: ServerResponse) => {
   const normalizedPath = normalize(pathname);
   let filePath = join(staticDir, normalizedPath);
   
@@ -86,6 +86,20 @@ const serveStatic = (pathname: string, res: ServerResponse) => {
   const ext = extname(filePath).toLowerCase();
   const contentType = mimeTypes[ext] || "application/octet-stream";
   
+  const supportsBr = (req.headers['accept-encoding'] as string || '').includes('br')
+  const brPath = filePath + '.br'
+  if (supportsBr) {
+    try {
+      statSync(brPath)
+      res.writeHead(200, "OK", {
+        "content-type": contentType,
+        "content-encoding": "br",
+      })
+      createReadStream(brPath).pipe(res)
+      return
+    } catch {}
+  }
+  
   res.writeHead(200, "OK", {
     "content-type": contentType,
   });
@@ -101,7 +115,7 @@ const server = createServer({}, (req, res) => {
   if (req.url.startsWith("/api/")) {
     apiHandler(makeRequest(req)).then(respond.bind(null, res));
   } else {
-    serveStatic(pathname, res);
+    serveStatic(pathname, req, res);
   }
 });
 
