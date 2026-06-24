@@ -17,6 +17,7 @@ export type WorkerOutMsg = PrintResult
 export interface PrintWorker {
     postMessage(msg: WorkerInMsg): void
     onmessage: ((e: { data: WorkerOutMsg }) => void) | null
+    onerror: ((e: Event) => void) | null
 }
 
 declare global {

@@ -1,5 +1,6 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
+import * as os from 'os'
 import type { PrintWorker, WorkerOutMsg } from './worker-types.js'
 import { api } from './api.js'
 import { getDefaultPrinter } from './printer.js'
@@ -37,6 +38,11 @@ export function setPrintWorker(worker: PrintWorker): void {
             }
         }
     }
+    worker.onerror = () => {
+        log('print worker error event, rejecting all pending jobs')
+        _pendingJobs.forEach(resolve => resolve(false))
+        _pendingJobs.clear()
+    }
 }
 
 function log(msg: string): void {
@@ -44,18 +50,30 @@ function log(msg: string): void {
     logFn(msg)
 }
 
+const PRINT_TIMEOUT = 120_000
+
 async function processFile(file: PrintFileInfo): Promise<boolean> {
     log(`processing file: ${file.filename} (ID: ${file.id})`)
 
-    log(`downloading PDF: ${file.fileId}.pdf`)
-    const res = await api.files.getFile(file.fileId + '.pdf')
-    if (!res || !res.ok) {
-        log(`download failed: ${file.fileId}.pdf - ${res?.status || 'no response'}`)
+    let pdfBuf: ArrayBuffer
+    try {
+        log(`downloading PDF: ${file.fileId}.pdf`)
+        const res = await api.files.getFile(file.fileId + '.pdf')
+        if (!res || !res.ok) {
+            log(`download failed: ${file.fileId}.pdf - ${res?.status || 'no response'}`)
+            return false
+        }
+        pdfBuf = await res.arrayBuffer()
+        log(`PDF downloaded: ${pdfBuf.byteLength} bytes`)
+    } catch (e: unknown) {
+        log(`download error for ${file.filename}: ${e instanceof Error ? e.stack : String(e)}`)
         return false
     }
 
-    const pdfBuf = await res.arrayBuffer()
-    log(`PDF downloaded: ${pdfBuf.byteLength} bytes`)
+    if (pdfBuf.byteLength === 0) {
+        log(`downloaded PDF is empty (0 bytes): ${file.fileId}.pdf`)
+        return false
+    }
 
     const printer = file.printerName || getDefaultPrinter()
     if (!printer) {
@@ -70,7 +88,18 @@ async function processFile(file: PrintFileInfo): Promise<boolean> {
 
     return new Promise(resolve => {
         const jobId = ++_jobIdCounter
-        _pendingJobs.set(jobId, resolve)
+
+        const timer = os.setTimeout(() => {
+            _pendingJobs.delete(jobId)
+            log(`print job ${jobId} timed out after ${PRINT_TIMEOUT / 1000}s`)
+            resolve(false)
+        }, PRINT_TIMEOUT)
+
+        _pendingJobs.set(jobId, (success: boolean) => {
+            os.clearTimeout(timer)
+            resolve(success)
+        })
+
         _printWorker!.postMessage({
             type: 'print',
             pdfBuf,
@@ -116,6 +145,8 @@ export async function handlePrintJob(computerId: string): Promise<void> {
 
         log(`found ${files.length} files to print`)
 
+        let successCount = 0
+        let failCount = 0
         for (let i = 0; i < files.length; i++) {
             const file = files[i]
             log(`task ${i + 1}/${files.length}: ${file.filename}`)
@@ -126,29 +157,31 @@ export async function handlePrintJob(computerId: string): Promise<void> {
                 if (success) {
                     await api.printTask.fileSucceed(file.id)
                     log(`file ${file.id} printed successfully`)
+                    successCount++
                 } else {
                     await api.printTask.fileFailed(file.id)
                     log(`file ${file.id} print failed`)
+                    failCount++
                 }
             } catch (e) {
-                log(`report status failed: ${String(e)}`)
+                log(`report status failed for file ${file.id}: ${e instanceof Error ? e.stack : String(e)}`)
             }
         }
 
-        log('all tasks completed')
+        log(`completed: ${successCount} succeeded, ${failCount} failed out of ${files.length}`)
     } catch (e) {
-        log(`handle print tasks error: ${String(e)}`)
+        log(`handle print tasks error: ${e instanceof Error ? e.stack : String(e)}`)
     }
 }
 
-export function handleWsMessage(message: string, computerId: string): void {
+export async function handleWsMessage(message: string, computerId: string): Promise<void> {
     try {
         const msg = JSON.parse(message)
         const type = msg.type
 
         if (type === 'check_jobs') {
             log('received check_jobs message')
-            handlePrintJob(computerId)
+            await handlePrintJob(computerId)
         } else if (type === 'heartbeat' || type === 'ping') {
             log('heartbeat ok')
         } else {

@@ -1,7 +1,7 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
 import * as os from 'os'
-import { ffiCall, bufferPtr, FFI_TYPE_POINTER, FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_VOID, FFI_TYPE_UINT32 } from 'ffi'
+import { ffiCall, bufferPtr, FFI_TYPE_POINTER, FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_UINT32 } from 'ffi'
 import * as win from 'win'
 import type { Document, Page, Pixmap } from 'quickwin/vendor/mupdf-wasm/mupdf.js'
 import type { WorkerInMsg, WorkerOutMsg } from './worker-types.js'
@@ -28,6 +28,9 @@ const GetDeviceCaps = gdip('GetDeviceCaps')
 const StretchDIBits = gdip('StretchDIBits')
 const ResetDCW = gdip('ResetDCW')
 const GetLastError = _kernel32 ? win.GetProcAddress(_kernel32, 'GetLastError') : 0
+function gle(): number {
+    return GetLastError ? ffiCall(GetLastError, [], [], FFI_TYPE_UINT32) as number : 0
+}
 
 const HORZRES = 8
 const VERTRES = 10
@@ -102,7 +105,7 @@ function renderPdfPageToDib(mupdf: MuPdfModule, doc: Document, pageIndex: number
 
         return { data: dib.buffer, w, h }
     } catch (e: unknown) {
-        console.log('[worker] renderPdfPageToDib error:', '' + e)
+        console.log('[worker] renderPdfPageToDib error page=' + pageIndex + ':', e instanceof Error ? e.stack : String(e))
         return null
     } finally {
         if (pixmap) try { pixmap.destroy() } catch {}
@@ -114,10 +117,6 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     console.log('[worker] printPdf:', printerName, 'duplex:', duplex, 'tumble:', tumble)
 
     const mupdf = await loadMuPdf()
-    if (!mupdf) {
-        console.log('[worker] MuPDF not available')
-        return false
-    }
 
     const printerNameBuf = strToWideBuf(printerName)
 
@@ -129,8 +128,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     )
 
     if (!hdc) {
-        const gle = GetLastError ? ffiCall(GetLastError, [], [], FFI_TYPE_UINT32) as number : 0
-        console.log('[worker] CreateDC failed, GLE=' + gle)
+        console.log('[worker] CreateDCW failed for printer "' + printerName + '", GLE=' + gle())
         return false
     }
 
@@ -141,13 +139,13 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         const ClosePrinter = win.GetProcAddress(_wspool, 'ClosePrinter')
         if (OpenPrinterW && DocumentPropertiesW && ClosePrinter) {
             const hPrinterBuf = new ArrayBuffer(8)
-            const ret = ffiCall(
+            const openRet = ffiCall(
                 OpenPrinterW,
                 [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
                 [printerNameBuf, hPrinterBuf, null],
                 FFI_TYPE_SINT32
             )
-            if (ret) {
+            if (openRet) {
                 const hpDv = new DataView(hPrinterBuf)
                 const hPrinter = hpDv.getUint32(0, true) + hpDv.getUint32(4, true) * 4294967296
 
@@ -176,14 +174,21 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                         [0, hPrinter, printerNameBuf, devmodeBuf, devmodeBuf, 3],
                         FFI_TYPE_SINT32
                     )
-                    ffiCall(
+                    const resetHdc = ffiCall(
                         ResetDCW,
                         [FFI_TYPE_UINT64, FFI_TYPE_POINTER],
                         [hdc, devmodeBuf],
                         FFI_TYPE_UINT64
                     )
+                    if (!resetHdc) {
+                        console.log('[worker] ResetDCW failed, GLE=' + gle())
+                    }
+                } else {
+                    console.log('[worker] DocumentPropertiesW failed for "' + printerName + '", dmSize=' + dmSize + ' GLE=' + gle())
                 }
                 ffiCall(ClosePrinter, [FFI_TYPE_UINT64], [hPrinter], FFI_TYPE_SINT32)
+            } else {
+                console.log('[worker] OpenPrinterW failed for "' + printerName + '", GLE=' + gle())
             }
         }
     }
@@ -193,6 +198,9 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     const dpiX = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, LOGPIXELSX], FFI_TYPE_SINT32)
     const dpiY = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, LOGPIXELSY], FFI_TYPE_SINT32)
     console.log('[worker] paper:', paperW, 'x', paperH, 'dpi:', dpiX, 'x', dpiY)
+    if (paperW <= 0 || paperH <= 0 || dpiX <= 0 || dpiY <= 0) {
+        console.log('[worker] WARNING: invalid paper/dpi from GetDeviceCaps')
+    }
 
     const docNameBuf = strToWideBuf('SuperPrint')
     const docNamePtr = bufferPtr(docNameBuf)
@@ -215,7 +223,8 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     )
 
     if (docRet <= 0) {
-        ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_VOID)
+        console.log('[worker] StartDocW failed, ret=' + docRet + ' GLE=' + gle())
+        ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
         return false
     }
 
@@ -229,12 +238,16 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         const scale = dpi / 72
 
         for (let i = 0; i < totalPages; i++) {
-            ffiCall(StartPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+            console.log('[worker] page ' + (i + 1) + '/' + totalPages)
+            const spRet = ffiCall(StartPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+            if (spRet <= 0) {
+                console.log('[worker] StartPage failed, ret=' + spRet + ' GLE=' + gle())
+            }
             try {
                 const dib = renderPdfPageToDib(mupdf, doc, i, scale)
                 if (dib) {
                     const bmi = makeBitmapInfo(dib.w, dib.h)
-                    ffiCall(StretchDIBits, [
+                    const sdRet = ffiCall(StretchDIBits, [
                         FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
                         FFI_TYPE_SINT32, FFI_TYPE_SINT32,
                         FFI_TYPE_SINT32, FFI_TYPE_SINT32,
@@ -246,31 +259,41 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                         0, 0, dib.w, dib.h,
                         dib.data, bmi, 0, 0x00CC0020
                     ], FFI_TYPE_SINT32)
+                    if (sdRet <= 0) {
+                        console.log('[worker] StretchDIBits failed for page ' + i + ', ret=' + sdRet + ' GLE=' + gle())
+                    }
                 } else {
-                    console.log('[worker] page', i, 'render failed')
+                    console.log('[worker] page ' + i + ' render failed')
                 }
             } catch (e: unknown) {
-                console.log('[worker] page', i, 'error:', '' + e)
+                console.log('[worker] page ' + i + ' error:', e instanceof Error ? e.stack : String(e))
             }
-            ffiCall(EndPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+            const epRet = ffiCall(EndPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+            if (epRet <= 0) {
+                console.log('[worker] EndPage failed, ret=' + epRet + ' GLE=' + gle())
+            }
         }
     } catch (e: unknown) {
-        console.log('[worker] PDF processing error:', '' + e)
-        ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-        ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_VOID)
+        console.log('[worker] PDF processing error:', e instanceof Error ? e.stack : String(e))
+        const edRet = ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+        if (edRet <= 0) console.log('[worker] EndDoc on error path failed, ret=' + edRet + ' GLE=' + gle())
+        const ddRet = ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+        if (!ddRet) console.log('[worker] DeleteDC on error path failed, GLE=' + gle())
         if (doc) try { doc.destroy() } catch {}
         return false
     }
 
-    ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-    ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_VOID)
+    const edRet = ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+    if (edRet <= 0) console.log('[worker] EndDoc failed, ret=' + edRet + ' GLE=' + gle())
+    const ddRet = ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+    if (!ddRet) console.log('[worker] DeleteDC failed, GLE=' + gle())
     if (doc) try { doc.destroy() } catch {}
 
     console.log('[worker] printPdf done')
     return true
 }
 
-loadMuPdf().catch((e: unknown) => console.log('[worker] loadMuPdf error: ' + ((e as Error)?.message || e)))
+loadMuPdf().catch((e: unknown) => console.log('[worker] loadMuPdf error:', e instanceof Error ? e.stack : String(e)))
 
 os.Worker.parent.onmessage = async (e: { data: WorkerInMsg }) => {
     const msg = e.data
@@ -280,7 +303,7 @@ os.Worker.parent.onmessage = async (e: { data: WorkerInMsg }) => {
             const out: WorkerOutMsg = { type: 'done', jobId: msg.jobId, success }
             os.Worker.parent.postMessage(out)
         } catch (e2: unknown) {
-            console.log('[worker] print error: ' + e2)
+            console.log('[worker] print error job=' + msg.jobId + ':', e2 instanceof Error ? e2.stack : String(e2))
             const out: WorkerOutMsg = { type: 'done', jobId: msg.jobId, success: false }
             os.Worker.parent.postMessage(out)
         }

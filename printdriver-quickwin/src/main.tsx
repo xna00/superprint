@@ -45,6 +45,6 @@ if (hwnd) {
 
 import pWorkerUrl from './print-worker?worker&url'
 console.log('[main] worker URL:', pWorkerUrl)
-printWorker = new os.Worker(pWorkerUrl)
+printWorker = new os.Worker(pWorkerUrl) as any as PrintWorker
 setPrintWorker(printWorker)
 console.log('[main] print worker initialized')
