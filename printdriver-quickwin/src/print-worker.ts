@@ -159,6 +159,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
 
                 if (dmSize > 0) {
                     const devmodeBuf = new ArrayBuffer(dmSize)
+                    // fMode=2 (DM_OUT_BUFFER): fill devmodeBuf with current printer defaults
                     ffiCall(
                         DocumentPropertiesW,
                         [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
@@ -166,13 +167,17 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                         FFI_TYPE_SINT32
                     )
                     const dv = new DataView(devmodeBuf)
+                    // set DM_DUPLEX flag at offset 72 (dmFields)
                     dv.setUint32(72, dv.getUint32(72, true) | 0x1000, true)
+                    // dmDuplex at offset 94: 1=simplex, 2=vertical, 3=horizontal
                     const duplexVal: number = duplex ? (tumble ? 3 : 2) : 1
                     dv.setUint16(94, duplexVal, true)
+                    // fMode=10 = DM_IN_BUFFER(8) | DM_OUT_BUFFER(2):
+                    // use our modified devmodeBuf as input and write the result back
                     ffiCall(
                         DocumentPropertiesW,
                         [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
-                        [0, hPrinter, printerNameBuf, devmodeBuf, devmodeBuf, 3],
+                        [0, hPrinter, printerNameBuf, devmodeBuf, devmodeBuf, 10],
                         FFI_TYPE_SINT32
                     )
                     const resetHdc = ffiCall(
