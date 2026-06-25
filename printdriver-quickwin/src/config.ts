@@ -17,4 +17,6 @@ export const WS_RECONNECT_DELAY_MIN = 10000
 export const WS_RECONNECT_DELAY_MAX = 30000
 export const WS_TIMEOUT = 60000
 
+export const RENDER_DPI = 300
+
 export const PROJECT_VERSION = '1.0.0'

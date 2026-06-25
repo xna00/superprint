@@ -6,6 +6,7 @@ import * as win from 'win'
 import type { Document, Page, Pixmap } from 'quickwin/vendor/mupdf-wasm/mupdf.js'
 import type { WorkerInMsg, WorkerOutMsg } from './worker-types.js'
 import { strToWideBuf } from './utils.js'
+import { RENDER_DPI } from './config.js'
 type MuPdfModule = typeof import('quickwin/vendor/mupdf-wasm/mupdf.js').default
 
 const wasmUrl = new URL('../node_modules/quickwin/vendor/mupdf-wasm/mupdf-wasm.wasm', import.meta.url).href
@@ -234,8 +235,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         const totalPages = doc.countPages()
         console.log('[worker] PDF pages:', totalPages)
 
-        const dpi = Math.min(dpiX, dpiY)
-        const scale = dpi / 72
+        const scale = RENDER_DPI / 72
 
         for (let i = 0; i < totalPages; i++) {
             console.log('[worker] page ' + (i + 1) + '/' + totalPages)
