@@ -32,8 +32,9 @@ export function App({ cw, ch }: AppProps) {
     const MAX_LOG = 200
 
     const addLog = (msg: string) => {
-        console.log('[log]', msg)
-        setLogs(prev => [...prev.slice(-(MAX_LOG - 1)), msg])
+        const line = `[${new Date().toLocaleString('zh-CN')}] ${msg}`
+        console.log('[log]', line)
+        setLogs(prev => [...prev.slice(-(MAX_LOG - 1)), line])
     }
 
     useEffect(() => {
