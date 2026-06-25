@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import * as gui from 'gui'
 import * as os from 'os'
 import { Tab, ListBox } from 'quickwin/lib/react-qw/index.js'
@@ -28,6 +28,7 @@ export function App({ cw, ch }: AppProps) {
     const [printers, setPrinters] = useState<string[]>([])
     const [wsStatus, setWsStatus] = useState('未连接')
     const [logs, setLogs] = useState<string[]>([])
+    const logListRef = useRef<gui.HWND>(null)
 
     const addLog = (msg: string) => {
         console.log('[log]', msg)
@@ -37,6 +38,15 @@ export function App({ cw, ch }: AppProps) {
     useEffect(() => {
         setLogger(addLog)
     }, [])
+
+    useEffect(() => {
+        if (!logListRef.current) return
+        const lbHwnd = gui.GetWindow(logListRef.current, 5)
+        if (lbHwnd) {
+            const count = gui.SendMessage(lbHwnd, 395, 0, 0)
+            gui.SendMessage(lbHwnd, 407, Math.max(0, count - 1), 0)
+        }
+    }, [logs])
 
     const checkUser = async () => {
         try {
@@ -166,7 +176,7 @@ export function App({ cw, ch }: AppProps) {
             <Tab tabs={[
                 {
                     title: '日志',
-                    content: <ListBox items={logs} style={{ flexGrow: 1 }} />
+                    content: <ListBox ref={logListRef} items={logs} style={{ flexGrow: 1 }} />
                 },
                 {
                     title: '打印机',
