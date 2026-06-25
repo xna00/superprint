@@ -7,6 +7,7 @@ import type { Document, Page, Pixmap } from 'quickwin/vendor/mupdf-wasm/mupdf.js
 import type { WorkerInMsg, WorkerOutMsg } from './worker-types.js'
 import { strToWideBuf } from './utils.js'
 import { RENDER_DPI } from './config.js'
+import { api } from './api.js'
 type MuPdfModule = typeof import('quickwin/vendor/mupdf-wasm/mupdf.js').default
 
 const wasmUrl = new URL('../node_modules/quickwin/vendor/mupdf-wasm/mupdf-wasm.wasm', import.meta.url).href
@@ -304,7 +305,13 @@ os.Worker.parent.onmessage = async (e: { data: WorkerInMsg }) => {
     const msg = e.data
     if (msg.type === 'print') {
         try {
-            const success = await printPdf(msg.pdfBuf, msg.printerName, msg.duplex, msg.tumble)
+            const res = await api.files.getFile(msg.fileId + '.pdf')
+            if (!res || !res.ok) {
+                throw new Error('download failed: ' + (res?.status || 'no response'))
+            }
+            const pdfBuf = await res.arrayBuffer()
+            if (pdfBuf.byteLength === 0) throw new Error('downloaded PDF is empty')
+            const success = await printPdf(pdfBuf, msg.printerName, msg.duplex, msg.tumble)
             const out: WorkerOutMsg = { type: 'done', jobId: msg.jobId, success }
             os.Worker.parent.postMessage(out)
         } catch (e2: unknown) {

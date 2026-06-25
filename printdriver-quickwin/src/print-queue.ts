@@ -55,26 +55,6 @@ const PRINT_TIMEOUT = 120_000
 async function processFile(file: PrintFileInfo): Promise<boolean> {
     log(`processing file: ${file.filename} (ID: ${file.id})`)
 
-    let pdfBuf: ArrayBuffer
-    try {
-        log(`downloading PDF: ${file.fileId}.pdf`)
-        const res = await api.files.getFile(file.fileId + '.pdf')
-        if (!res || !res.ok) {
-            log(`download failed: ${file.fileId}.pdf - ${res?.status || 'no response'}`)
-            return false
-        }
-        pdfBuf = await res.arrayBuffer()
-        log(`PDF downloaded: ${pdfBuf.byteLength} bytes`)
-    } catch (e: unknown) {
-        log(`download error for ${file.filename}: ${e instanceof Error ? e.stack : String(e)}`)
-        return false
-    }
-
-    if (pdfBuf.byteLength === 0) {
-        log(`downloaded PDF is empty (0 bytes): ${file.fileId}.pdf`)
-        return false
-    }
-
     const printer = file.printerName || getDefaultPrinter()
     if (!printer) {
         log('no printer found')
@@ -102,7 +82,7 @@ async function processFile(file: PrintFileInfo): Promise<boolean> {
 
         _printWorker!.postMessage({
             type: 'print',
-            pdfBuf,
+            fileId: file.fileId,
             printerName: printer,
             duplex: file.duplex,
             tumble: file.tumble,

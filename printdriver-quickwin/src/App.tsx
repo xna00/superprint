@@ -29,10 +29,11 @@ export function App({ cw, ch }: AppProps) {
     const [wsStatus, setWsStatus] = useState('未连接')
     const [logs, setLogs] = useState<string[]>([])
     const logListRef = useRef<gui.HWND>(null)
+    const MAX_LOG = 200
 
     const addLog = (msg: string) => {
         console.log('[log]', msg)
-        setLogs(prev => [...prev, msg])
+        setLogs(prev => [...prev.slice(-(MAX_LOG - 1)), msg])
     }
 
     useEffect(() => {

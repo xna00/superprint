@@ -13,7 +13,8 @@ let _cookie: string | null = null
 
 export const api = createHandler(API_BASE_URL, {
   beforeRequest: async (req) => {
-    if (_cookie) req.headers.set('Cookie', _cookie)
+    const f = std.open('cookie.txt', 'r')
+    if (f) { const l = f.getline(); f.close(); if (l) req.headers.set('Cookie', l) }
     return req
   },
   beforeResponse: async (res) => {

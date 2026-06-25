@@ -1,6 +1,6 @@
 export interface PrintRequest {
     type: 'print'
-    pdfBuf: ArrayBuffer
+    fileId: string
     printerName: string
     duplex: boolean
     tumble: boolean
