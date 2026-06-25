@@ -179,10 +179,6 @@ export function App({ cw, ch }: AppProps) {
         <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', x: 0, y: 0, width: cw, height: ch }}>
             <Tab tabs={[
                 {
-                    title: '日志',
-                    content: <ListBox ref={logListRef} items={logs} style={{ flexGrow: 1 }} />
-                },
-                {
                     title: '打印机',
                     content: (
                         <PrintersTab
@@ -193,6 +189,10 @@ export function App({ cw, ch }: AppProps) {
                             printers={printers}
                         />
                     )
+                },
+                {
+                    title: '日志',
+                    content: <ListBox ref={logListRef} items={logs} style={{ flexGrow: 1 }} />
                 },
             ]} style={{ flexGrow: 1 }} />
         </w>
