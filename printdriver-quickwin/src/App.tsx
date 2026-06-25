@@ -32,7 +32,9 @@ export function App({ cw, ch }: AppProps) {
     const MAX_LOG = 200
 
     const addLog = (msg: string) => {
-        const line = `[${new Date().toLocaleString('zh-CN')}] ${msg}`
+        const d = new Date()
+        const ts = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`
+        const line = `[${ts}] ${msg}`
         console.log('[log]', line)
         setLogs(prev => [...prev.slice(-(MAX_LOG - 1)), line])
     }
