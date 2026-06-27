@@ -1,3 +1,8 @@
-const url = 'http://localhost:4173/entry.js?' + Date.now()
-console.log(url)
-import(url).then(() => {}, console.log)
+const timestamp = Date.now()
+
+import('https://superprint6.xna00.top/printdriver/entry.js?' + timestamp).catch(e => {
+    console.log(e)
+    return import('https://superprint.xna00.top/printdriver/entry.js?' + timestamp)
+}).catch(e => {
+    console.log(e)
+})
