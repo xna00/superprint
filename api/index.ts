@@ -4,8 +4,7 @@ const isGetMethod = (path: string) =>
   !!path.split("/").pop()?.startsWith("get");
 
 export const createHandler = (base: string, options?: {
-  beforeRequest?: (req: Request) => Promise<Request>;
-  beforeResponse?: (res: Response) => Promise<Response>;
+  fetch?: (req: Request) => Promise<Response>;
 }): Promisify<Api> => {
   return new Proxy(() => { }, {
     get(_target, p: string, _receiver) {
@@ -31,10 +30,9 @@ export const createHandler = (base: string, options?: {
           body: isGet ? undefined : JSON.stringify(argArray),
         }
       );
-      if (options?.beforeRequest) req = await options.beforeRequest(req);
       if (target.isMakeRequest) return req;
-      return fetch(req).then(async (res) => {
-        if (options?.beforeResponse) res = await options.beforeResponse(res);
+      const doFetch = options?.fetch || fetch;
+      return doFetch(req).then(async (res) => {
         if (res.status === 401) {
           // location.href = "/login";
         }
