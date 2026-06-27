@@ -192,7 +192,7 @@ export function App({ cw, ch }: AppProps) {
                 },
                 {
                     title: '日志',
-                    content: <ListBox ref={logListRef} items={logs} style={{ flexGrow: 1 }} />
+                    content: <ListBox ref={logListRef} items={logs} scrollToBottom={true} style={{ flexGrow: 1 }} />
                 },
             ]} style={{ flexGrow: 1 }} />
         </w>
