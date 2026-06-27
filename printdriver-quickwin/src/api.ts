@@ -38,7 +38,7 @@ export const api = createHandler(firstBase, {
         return res
       } catch (e) {
         lastErr = e;
-        console.log(base, "filed, try next!")
+        console.log(base, "failed, try next!")
       }
     }
     throw lastErr
