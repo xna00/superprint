@@ -16,7 +16,7 @@ const scr = gui.GetScreenSize()
 const winX = Math.max(0, (scr[0] - winW) / 2)
 const winY = Math.max(0, (scr[1] - winH) / 2)
 
-let printWorker: PrintWorker | null = null
+export let printWorker: PrintWorker | null = null
 
 gui.RegisterClass('TestWin', (hwnd, msg, wParam, lParam) => {
     if (msg === gui.WmMsg.DESTROY) {

@@ -6,6 +6,8 @@ import { ffiCall, bufferPtr, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER 
 import { decodeWideAtPtr, strToWideBuf } from './utils.js'
 import { ENTRY_HASH } from './config.js'
 import { api } from './api.js'
+import { cleanupWs } from './ws.js'
+import { printWorker } from './main.js'
 
 const CHECK_INTERVAL = 5 * 60 * 1000
 
@@ -93,6 +95,8 @@ async function tryFetch(urls: string[]) {
   }
 }
 
+export let timer: number | null = null
+
 export async function checkAndUpdate() {
   const exePath = getExePath()
   if (!exePath) {
@@ -170,11 +174,21 @@ export async function checkAndUpdate() {
     if (!started) {
       console.log('[update] CreateProcessW failed, you may restart manually')
     }
+    {
+
+      cleanupWs()
+      if (printWorker) {
+        printWorker.onmessage = null
+        printWorker.postMessage({ type: 'done' })
+      }
+      if (timer !== null) {
+        os.clearTimeout(timer)
+      }
+    }
     std.exit(0)
   }
 }
 
-export let timer: number | null = null
 
 export async function startUpdateCheck() {
   try {
