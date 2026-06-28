@@ -157,9 +157,9 @@ export async function checkAndUpdate() {
 
 export function startUpdateCheck() {
   function poll() {
-    checkAndUpdate()
+    checkAndUpdate().catch(console.log)
     os.setTimeout(poll, CHECK_INTERVAL)
   }
-  checkAndUpdate()
+  checkAndUpdate().catch(console.log)
   os.setTimeout(poll, CHECK_INTERVAL)
 }
