@@ -122,7 +122,7 @@ export async function checkAndUpdate() {
 
   let res: CheckUpdateResult | undefined
   try {
-    res = await api.version.checkDriverUpdate({ exeHash, mainJsHash, entryJsHash }) as CheckUpdateResult | undefined
+    res = await api.version.checkDriverUpdate({ exeHash, mainJsHash, entryJsHash })
   } catch (e) {
     console.log('[update] check failed:', e)
     return
