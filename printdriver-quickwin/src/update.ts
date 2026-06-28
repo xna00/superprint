@@ -9,6 +9,12 @@ import { api } from './api.js'
 
 const CHECK_INTERVAL = 5 * 60 * 1000
 
+interface CheckUpdateResult {
+  exeDownloadUrls: string[]
+  mainJsDownloadUrls: string[]
+  entryJsChanged: boolean
+}
+
 const _kernel32 = win.LoadLibrary('kernel32.dll')
 const pGetModuleFileNameW = _kernel32 ? win.GetProcAddress(_kernel32, 'GetModuleFileNameW') : null
 const pCreateProcessW = _kernel32 ? win.GetProcAddress(_kernel32, 'CreateProcessW') : null
@@ -114,9 +120,9 @@ export async function checkAndUpdate() {
 
   console.log('[update] checking:', { exeHash, mainJsHash, entryJsHash })
 
-  let res: any
+  let res: CheckUpdateResult | undefined
   try {
-    res = await api.version.checkDriverUpdate({ exeHash, mainJsHash, entryJsHash })
+    res = await api.version.checkDriverUpdate({ exeHash, mainJsHash, entryJsHash }) as CheckUpdateResult | undefined
   } catch (e) {
     console.log('[update] check failed:', e)
     return
