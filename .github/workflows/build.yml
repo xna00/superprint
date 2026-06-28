@@ -223,11 +223,13 @@ jobs:
         run: |
           for i in $(seq 1 10); do
             echo "Upload attempt $i/10..."
-            http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            response=$(curl -s -w "\n%{http_code}" -X POST \
               -H "token: $UPLOAD_TOKEN" \
               -H "Content-Type: application/zip" \
               --data-binary "@static.zip" \
               "$UPLOAD_URL")
+            http_code=$(echo "$response" | tail -1)
+            echo "$response" | head -n -1
             if [ "$http_code" = "200" ]; then
               echo "Upload succeeded (HTTP 200)"
               exit 0
