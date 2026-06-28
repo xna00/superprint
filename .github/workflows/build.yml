@@ -221,8 +221,19 @@ jobs:
           UPLOAD_TOKEN: ${{ secrets.UPLOAD_TOKEN }}
           UPLOAD_URL: ${{ secrets.UPLOAD_URL }}
         run: |
-          curl -X POST \
-            -H "token: $UPLOAD_TOKEN" \
-            -H "Content-Type: application/zip" \
-            --data-binary "@static.zip" \
-            "$UPLOAD_URL"
+          for i in $(seq 1 10); do
+            echo "Upload attempt $i/10..."
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+              -H "token: $UPLOAD_TOKEN" \
+              -H "Content-Type: application/zip" \
+              --data-binary "@static.zip" \
+              "$UPLOAD_URL")
+            if [ "$http_code" = "200" ]; then
+              echo "Upload succeeded (HTTP 200)"
+              exit 0
+            fi
+            echo "Upload failed (HTTP $http_code), retrying in 5s..."
+            sleep 5
+          done
+          echo "Upload failed after 10 attempts"
+          exit 1
