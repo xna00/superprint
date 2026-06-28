@@ -13,7 +13,6 @@ const CHECK_INTERVAL = 5 * 60 * 1000
 
 interface CheckUpdateResult {
   exeDownloadUrls: string[]
-  mainJsDownloadUrls: string[]
   entryJsChanged: boolean
 }
 
@@ -92,26 +91,22 @@ export async function checkAndUpdate() {
     return
   }
 
-  const dir = exePath.replace(/\\[^\\]+$/, '')
-  const mainJsPath = dir + '\\main.js'
-
   const exeHash = await sha1File(exePath)
-  const mainJsHash = await sha1File(mainJsPath)
   const entryJsHash = ENTRY_HASH
 
-  console.log('[update] checking:', { exeHash, mainJsHash, entryJsHash })
+  console.log('[update] checking:', { exeHash, entryJsHash })
 
   let res: CheckUpdateResult | undefined
   try {
-    res = await api.version.checkDriverUpdate({ exeHash, mainJsHash, entryJsHash })
+    res = await api.version.checkDriverUpdate({ exeHash, entryJsHash })
   } catch (e) {
     console.log('[update] check failed:', e)
     return
   }
   if (!res) return
 
-  const { exeDownloadUrls, mainJsDownloadUrls, entryJsChanged } = res
-  if (!exeDownloadUrls?.length && !mainJsDownloadUrls?.length && !entryJsChanged) {
+  const { exeDownloadUrls, entryJsChanged } = res
+  if (!exeDownloadUrls?.length && !entryJsChanged) {
     console.log('[update] up to date')
     return
   }
@@ -120,35 +115,17 @@ export async function checkAndUpdate() {
 
   if (exeDownloadUrls.length) {
     console.log('[update] downloading exe from:', exeDownloadUrls)
-    const res = await tryFetch(exeDownloadUrls)
-    if (res) {
+    const resp = await tryFetch(exeDownloadUrls)
+    if (resp) {
       os.rename(exePath, exePath + '.old')
       const f = std.open(exePath, 'wb')
       if (f) {
-        const buf = await res.arrayBuffer()
+        const buf = await resp.arrayBuffer()
         console.log('[update] exe buffer size:', buf.byteLength)
         f.write(buf, 0, buf.byteLength)
         f.close()
       } else {
         os.rename(exePath + '.old', exePath)
-      }
-    }
-    needRestart = true
-  }
-
-  if (mainJsDownloadUrls.length) {
-    console.log('[update] downloading main.js from:', mainJsDownloadUrls)
-    const res = await tryFetch(mainJsDownloadUrls)
-    if (res) {
-      os.rename(mainJsPath, mainJsPath + '.old')
-      const f = std.open(mainJsPath, 'wb')
-      if (f) {
-        const buf = await res.arrayBuffer()
-        console.log('[update] main.js buffer size:', buf.byteLength)
-        f.write(buf, 0, buf.byteLength)
-        f.close()
-      } else {
-        os.rename(mainJsPath + '.old', mainJsPath)
       }
     }
     needRestart = true
