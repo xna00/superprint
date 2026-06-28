@@ -40,10 +40,11 @@ async function sha1File(filePath: string): Promise<string> {
   if (!f) return ''
   try {
     const chunks: ArrayBuffer[] = []
+    const buf = new ArrayBuffer(65536)
     while (true) {
-      const buf = f.readAsArrayBuffer(65536)
-      if (!buf || buf.byteLength === 0) break
-      chunks.push(buf)
+      const n = f.read(buf)
+      if (n <= 0) break
+      chunks.push(buf.slice(0, n))
     }
     const totalLen = chunks.reduce((s, c) => s + c.byteLength, 0)
     const combined = new Uint8Array(totalLen)
