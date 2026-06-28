@@ -20,3 +20,4 @@ export const WS_TIMEOUT = 60000
 export const RENDER_DPI = 300
 
 export const PROJECT_VERSION = '1.0.0'
+export const ENTRY_HASH = '__ENTRY_HASH__'

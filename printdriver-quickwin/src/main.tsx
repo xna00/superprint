@@ -8,6 +8,7 @@ import { cleanupWs } from './ws.js'
 import { setPrintWorker } from './print-queue.js'
 import type { PrintWorker, WorkerInMsg } from './worker-types.js'
 import { App } from './App.js'
+import { startUpdateCheck } from './update.js'
 
 const winW = 600
 const winH = 400
@@ -48,3 +49,5 @@ console.log('[main] worker URL:', pWorkerUrl)
 printWorker = new os.Worker(pWorkerUrl) as any as PrintWorker
 setPrintWorker(printWorker)
 console.log('[main] print worker initialized')
+
+startUpdateCheck()

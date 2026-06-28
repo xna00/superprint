@@ -43,10 +43,6 @@ jobs:
           npm ci --force
           npm run build
 
-      - name: Copy win-mingw64.exe to dist
-        run: |
-          cp printdriver-quickwin/node_modules/quickwin/win-mingw64.exe printdriver-quickwin/dist/
-
       - uses: actions/upload-artifact@v6
         with:
           name: all-build-artifacts

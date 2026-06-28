@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "typecheck": "npx tsgo",
-    "build": "npx tsgo && npx vite build && node -e \"fs.copyFileSync('main.js','dist/main.js')\"",
+    "build": "npx tsgo && npx vite build && node scripts/postbuild.js",
     "start": "quickwin",
     "preview": "vite preview"
   },
