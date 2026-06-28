@@ -41,21 +41,9 @@ async function sha1File(filePath: string): Promise<string> {
   const f = std.open(filePath, 'rb')
   if (!f) return ''
   try {
-    const chunks: ArrayBuffer[] = []
-    const buf = new ArrayBuffer(65536)
-    while (true) {
-      const n = f.read(buf)
-      if (n <= 0) break
-      chunks.push(buf.slice(0, n))
-    }
-    const totalLen = chunks.reduce((s, c) => s + c.byteLength, 0)
-    const combined = new Uint8Array(totalLen)
-    let offset = 0
-    for (const chunk of chunks) {
-      combined.set(new Uint8Array(chunk), offset)
-      offset += chunk.byteLength
-    }
-    const hashBuffer = await crypto.subtle.digest('SHA-1', combined.buffer)
+    f.seek(0, 2); const size = f.tell(); f.seek(0, 0)
+    const buf = new ArrayBuffer(size); f.read(buf, 0, size); f.close()
+    const hashBuffer = await crypto.subtle.digest('SHA-1', buf)
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
   } finally {
     f.close()
