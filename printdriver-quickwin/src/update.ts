@@ -136,6 +136,7 @@ export async function checkAndUpdate() {
         const buf = await res.arrayBuffer()
         console.log('[update] exe buffer size:', buf.byteLength)
         f.write(buf)
+        f.close()
       } else {
         os.rename(exePath + '.old', exePath)
       }
@@ -153,6 +154,7 @@ export async function checkAndUpdate() {
         const buf = await res.arrayBuffer()
         console.log('[update] main.js buffer size:', buf.byteLength)
         f.write(buf)
+        f.close()
       } else {
         os.rename(mainJsPath + '.old', mainJsPath)
       }
