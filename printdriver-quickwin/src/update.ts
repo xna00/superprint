@@ -127,6 +127,7 @@ export async function checkAndUpdate() {
   let needRestart = false
 
   if (exeDownloadUrls.length) {
+    console.log('[update] downloading exe from:', exeDownloadUrls)
     const res = await tryFetch(exeDownloadUrls)
     if (res) {
       os.rename(exePath, exePath + '.old')
@@ -142,6 +143,7 @@ export async function checkAndUpdate() {
   }
 
   if (mainJsDownloadUrls.length) {
+    console.log('[update] downloading main.js from:', mainJsDownloadUrls)
     const res = await tryFetch(mainJsDownloadUrls)
     if (res) {
       os.rename(mainJsPath, mainJsPath + '.old')
