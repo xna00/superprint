@@ -42,7 +42,7 @@ async function sha1File(filePath: string): Promise<string> {
   if (!f) return ''
   try {
     f.seek(0, 2); const size = f.tell(); f.seek(0, 0)
-    const buf = new ArrayBuffer(size); f.read(buf, 0, size); f.close()
+    const buf = new ArrayBuffer(size); f.read(buf, 0, size);
     const hashBuffer = await crypto.subtle.digest('SHA-1', buf)
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
   } finally {
