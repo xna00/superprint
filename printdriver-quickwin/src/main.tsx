@@ -8,7 +8,7 @@ import { cleanupWs } from './ws.js'
 import { setPrintWorker } from './print-queue.js'
 import type { PrintWorker, WorkerInMsg } from './worker-types.js'
 import { App } from './App.js'
-import { startUpdateCheck } from './update.js'
+import { startUpdateCheck, timer } from './update.js'
 
 const winW = 600
 const winH = 400
@@ -24,6 +24,9 @@ gui.RegisterClass('TestWin', (hwnd, msg, wParam, lParam) => {
         if (printWorker) {
             printWorker.onmessage = null
             printWorker.postMessage({ type: 'done' })
+        }
+        if (timer !== null) {
+            os.clearTimeout(timer)
         }
         gui.PostQuitMessage(0)
         return 0
@@ -50,4 +53,6 @@ printWorker = new os.Worker(pWorkerUrl) as any as PrintWorker
 setPrintWorker(printWorker)
 console.log('[main] print worker initialized')
 
-startUpdateCheck()
+if (globalThis.checkUpdate !== false) {
+    startUpdateCheck()
+}

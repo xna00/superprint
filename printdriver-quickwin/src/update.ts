@@ -60,27 +60,6 @@ async function sha1File(filePath: string): Promise<string> {
   }
 }
 
-async function tryDownload(urls: string[], destPath: string): Promise<boolean> {
-  for (const url of urls) {
-    try {
-      const res = await fetch(url)
-      if (!res.ok) continue
-      const data = await res.arrayBuffer()
-      const f = std.open(destPath, 'wb')
-      if (!f) continue
-      try {
-        f.write(data)
-      } finally {
-        f.close()
-      }
-      console.log('[update] downloaded:', destPath)
-      return true
-    } catch {
-      console.log('[update] download failed:', url)
-    }
-  }
-  return false
-}
 
 function startNewProcess(exePath: string) {
   if (!pCreateProcessW) return false
@@ -104,6 +83,16 @@ function startNewProcess(exePath: string) {
   return ret !== 0
 }
 
+async function tryFetch(urls: string[]) {
+  for (const url of urls) {
+    try {
+      return await fetch(url)
+    } catch (e) {
+      console.log(e)
+    }
+  }
+}
+
 export async function checkAndUpdate() {
   const exePath = getExePath()
   if (!exePath) {
@@ -113,7 +102,6 @@ export async function checkAndUpdate() {
 
   const dir = exePath.replace(/\\[^\\]+$/, '')
   const mainJsPath = dir + '\\main.js'
-  const exeOldPath = exePath.replace(/\.exe$/i, '.old')
 
   const exeHash = await sha1File(exePath)
   const mainJsHash = await sha1File(mainJsPath)
@@ -138,16 +126,34 @@ export async function checkAndUpdate() {
 
   let needRestart = false
 
-  if (exeDownloadUrls?.length) {
-    try { os.remove(exeOldPath) } catch {}
-    try { os.rename(exePath, exeOldPath) } catch {}
-    const ok = await tryDownload(exeDownloadUrls, exePath)
-    if (ok) needRestart = true
+  if (exeDownloadUrls.length) {
+    const res = await tryFetch(exeDownloadUrls)
+    if (res) {
+      os.rename(exePath, exePath + '.old')
+      const f = std.open(exePath, 'wb')
+      if (f) {
+        const buf = await res.arrayBuffer()
+        f.write(buf)
+      } else {
+        os.rename(exePath + '.old', exePath)
+      }
+    }
+    needRestart = true
   }
 
-  if (mainJsDownloadUrls?.length) {
-    const ok = await tryDownload(mainJsDownloadUrls, mainJsPath)
-    if (ok) needRestart = true
+  if (mainJsDownloadUrls.length) {
+    const res = await tryFetch(mainJsDownloadUrls)
+    if (res) {
+      os.rename(mainJsPath, mainJsPath + '.old')
+      const f = std.open(mainJsPath, 'wb')
+      if (f) {
+        const buf = await res.arrayBuffer()
+        f.write(buf)
+      } else {
+        os.rename(mainJsPath + '.old', mainJsPath)
+      }
+    }
+    needRestart = true
   }
 
   if (entryJsChanged) needRestart = true
@@ -162,11 +168,13 @@ export async function checkAndUpdate() {
   }
 }
 
-export function startUpdateCheck() {
-  function poll() {
-    checkAndUpdate().catch(console.log)
-    os.setTimeout(poll, CHECK_INTERVAL)
+export let timer: number | null = null
+
+export async function startUpdateCheck() {
+  try {
+    await checkAndUpdate()
+  } catch (e) {
+    console.log(e)
   }
-  checkAndUpdate().catch(console.log)
-  os.setTimeout(poll, CHECK_INTERVAL)
+  timer = os.setTimeout(startUpdateCheck, CHECK_INTERVAL)
 }
