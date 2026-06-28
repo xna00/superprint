@@ -221,20 +221,8 @@ jobs:
           UPLOAD_TOKEN: ${{ secrets.UPLOAD_TOKEN }}
           UPLOAD_URL: ${{ secrets.UPLOAD_URL }}
         run: |
-          for i in $(seq 1 10); do
-            echo "Upload attempt $i/10..."
-            if curl -X POST \
-              -H "token: $UPLOAD_TOKEN" \
-              -H "Content-Type: application/zip" \
-              --data-binary "@static.zip" \
-              --max-time 60 \
-              --fail \
-              "$UPLOAD_URL"; then
-              echo "Upload succeeded on attempt $i"
-              exit 0
-            fi
-            echo "Upload failed or timed out on attempt $i, retrying in 5s..."
-            sleep 5
-          done
-          echo "Upload failed after 10 attempts"
-          exit 1
+          curl -X POST \
+            -H "token: $UPLOAD_TOKEN" \
+            -H "Content-Type: application/zip" \
+            --data-binary "@static.zip" \
+            "$UPLOAD_URL"
