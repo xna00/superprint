@@ -5,13 +5,18 @@ const crypto = require('crypto')
 const root = path.join(__dirname, '..')
 const dist = path.join(root, 'dist')
 
-// 1. Copy main.js
+// 1. Copy main.js for dev (quickwin main.js)
 fs.copyFileSync(path.join(root, 'main.js'), path.join(dist, 'main.js'))
 
-// 2. Copy + rename exe
+// 2. Copy + rename + embed main.js into exe
 const exeSrc = path.join(root, 'node_modules', 'quickwin', 'win-mingw64.exe')
+const mainJs = fs.readFileSync(path.join(root, 'main.js'))
 if (fs.existsSync(exeSrc)) {
-  fs.copyFileSync(exeSrc, path.join(dist, 'QuickSuperPrint.exe'))
+  const exeBuf = fs.readFileSync(exeSrc)
+  const lenBuf = Buffer.alloc(4)
+  lenBuf.writeUInt32LE(mainJs.length)
+  const magic = Buffer.from('QWJS', 'ascii')
+  fs.writeFileSync(path.join(dist, 'QuickSuperPrint.exe'), Buffer.concat([exeBuf, mainJs, lenBuf, magic]))
 }
 
 // 3. Compute entry.js SHA-1
