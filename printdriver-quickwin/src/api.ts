@@ -23,7 +23,6 @@ export const api = createHandler(firstBase, {
     for (const base of API_BASE_URLS) {
       try {
         const res = await fetch(base + pathAndQuery, {
-          ...req,
           method: req.method,
           headers: Object.fromEntries(req.headers.entries()),
           body: req.body ?? undefined,
