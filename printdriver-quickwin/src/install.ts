@@ -111,24 +111,22 @@ const CREATE_NO_WINDOW = 0x08000000
 
 function spawnDetached(cmdLine: string, cwd: string): void {
   const k32 = win.LoadLibrary('kernel32.dll')
-  if (!k32) return
+  if (!k32) throw new Error('加载 kernel32.dll 失败')
   const pCP = win.GetProcAddress(k32, 'CreateProcessW')
-  if (!pCP) return
-  // STARTUPINFOW — just set cb + flags so it doesn't inherit handles
+  if (!pCP) throw new Error('获取 CreateProcessW 失败')
   const si = new ArrayBuffer(256)
   const siDv = new DataView(si)
-  siDv.setUint32(0, 104, true)         // cb = sizeof(STARTUPINFOW)
-  siDv.setUint32(60, 0x100, true)       // dwFlags = STARTF_USESHOWWINDOW (don't need this, but harmless)
-  // PROCESS_INFORMATION
+  siDv.setUint32(0, 104, true)
   const pi = new ArrayBuffer(24)
-  ffiCall(pCP,
+  const ok = ffiCall(pCP,
     [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER,
      FFI_TYPE_POINTER, FFI_TYPE_SINT32, FFI_TYPE_UINT32,
      FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER,
      FFI_TYPE_POINTER],
     [null, strToWideBuf(cmdLine), null, null, 0, CREATE_NO_WINDOW,
      null, strToWideBuf(cwd), si, pi],
-    FFI_TYPE_SINT32)
+    FFI_TYPE_SINT32) as number
+  if (!ok) throw new Error('CreateProcessW 失败')
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +381,7 @@ function uninstallStepFiles(): boolean {
   // 3. spawn delayed bat to delete the entire SuperPrint dir (incl. running exe)
   const tmpDir = std.getenv('TEMP') || ''
   const batPath = tmpDir + '\\del_superprint.bat'
-  const batContent = '@timeout /t 8 /nobreak > nul\n@rmdir /s /q "' + installDir + '"\n@del "%~f0"\n'
+  const batContent = '@ping 127.0.0.1 -n 9 > nul\n@rmdir /s /q "' + installDir + '"\n@del "%~f0"\n'
   const f = std.open(batPath, 'wb')
   if (f) {
     const buf = new ArrayBuffer(batContent.length)
