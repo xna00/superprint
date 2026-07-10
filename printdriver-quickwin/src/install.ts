@@ -217,7 +217,10 @@ export function install(): void {
 
   const appData = std.getenv('APPDATA') || ''
   const userProfile = std.getenv('USERPROFILE') || ''
-  createShortcut(targetExe, '-c --run', appData + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印.lnk', '超人打印')
+  const startMenuDir = appData + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
+  os.mkdir(startMenuDir)
+  createShortcut(targetExe, '-c --run', startMenuDir + '\\超人打印.lnk', '超人打印')
+  createShortcut(targetExe, '-c --uninstall', startMenuDir + '\\卸载.lnk', '卸载超人打印')
   createShortcut(targetExe, '-c --run', userProfile + '\\Desktop\\超人打印.lnk', '超人打印')
   std.out.printf('[install] shortcuts created\n'); std.out.flush()
 
@@ -229,16 +232,21 @@ export function uninstall(): void {
   const appData = std.getenv('APPDATA') || ''
   const userProfile = std.getenv('USERPROFILE') || ''
   const installDir = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
+  const startMenuDir = appData + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
 
-  os.remove(appData + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印.lnk')
+  os.remove(startMenuDir + '\\超人打印.lnk')
+  os.remove(startMenuDir + '\\卸载.lnk')
   os.remove(userProfile + '\\Desktop\\超人打印.lnk')
   regDeleteRun()
   os.remove(installDir + '\\QuickSuperPrint.exe')
 
-  const k32 = win.LoadLibrary('kernel32.dll')
-  if (k32) {
-    const pRDW = win.GetProcAddress(k32, 'RemoveDirectoryW')
-    if (pRDW) ffiCall(pRDW, [FFI_TYPE_POINTER], [strToWideBuf(installDir)], FFI_TYPE_SINT32)
+  const k32_rm = win.LoadLibrary('kernel32.dll')
+  if (k32_rm) {
+    const pRDW = win.GetProcAddress(k32_rm, 'RemoveDirectoryW')
+    if (pRDW) {
+      ffiCall(pRDW, [FFI_TYPE_POINTER], [strToWideBuf(startMenuDir)], FFI_TYPE_SINT32)
+      ffiCall(pRDW, [FFI_TYPE_POINTER], [strToWideBuf(installDir)], FFI_TYPE_SINT32)
+    }
   }
 
   std.out.printf('[uninstall] done\n'); std.out.flush()
