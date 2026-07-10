@@ -53,6 +53,84 @@ function copyFile(src: string, dst: string): boolean {
   return true
 }
 
+function mkdirW(path: string): boolean {
+  const k32 = win.LoadLibrary('kernel32.dll')
+  if (!k32) return false
+  const pCDW = win.GetProcAddress(k32, 'CreateDirectoryW')
+  if (!pCDW) return false
+  const ok = ffiCall(pCDW,
+    [FFI_TYPE_POINTER, FFI_TYPE_POINTER],
+    [strToWideBuf(path), null],
+    FFI_TYPE_SINT32) as number
+  if (ok) return true
+  const pGLE = win.GetProcAddress(k32, 'GetLastError')
+  if (!pGLE) return false
+  const err = ffiCall(pGLE, [], [], FFI_TYPE_SINT32) as number
+  return err === 0x0B7 // ERROR_ALREADY_EXISTS
+}
+
+function deleteFileW(path: string): boolean {
+  const k32 = win.LoadLibrary('kernel32.dll')
+  if (!k32) return false
+  const pDFW = win.GetProcAddress(k32, 'DeleteFileW')
+  if (!pDFW) return false
+  const ok = ffiCall(pDFW, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32) as number
+  if (ok) return true
+  const pGLE = win.GetProcAddress(k32, 'GetLastError')
+  if (!pGLE) return false
+  const err = ffiCall(pGLE, [], [], FFI_TYPE_SINT32) as number
+  return err === 2 // ERROR_FILE_NOT_FOUND
+}
+
+function removeDirW(path: string): boolean {
+  const k32 = win.LoadLibrary('kernel32.dll')
+  if (!k32) return false
+  const pRDW = win.GetProcAddress(k32, 'RemoveDirectoryW')
+  if (!pRDW) return false
+  const ok = ffiCall(pRDW, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32) as number
+  if (ok) return true
+  const pGLE = win.GetProcAddress(k32, 'GetLastError')
+  if (!pGLE) return false
+  const err = ffiCall(pGLE, [], [], FFI_TYPE_SINT32) as number
+  return err === 2 // ERROR_FILE_NOT_FOUND
+}
+
+function moveFileW(oldPath: string, newPath: string): boolean {
+  const k32 = win.LoadLibrary('kernel32.dll')
+  if (!k32) return false
+  const pMF = win.GetProcAddress(k32, 'MoveFileExW')
+  if (!pMF) return false
+  const hr = ffiCall(pMF,
+    [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
+    [strToWideBuf(oldPath), strToWideBuf(newPath), 1], // MOVEFILE_REPLACE_EXISTING = 1
+    FFI_TYPE_SINT32) as number
+  return hr !== 0
+}
+
+const CREATE_NO_WINDOW = 0x08000000
+
+function spawnDetached(cmdLine: string, cwd: string): void {
+  const k32 = win.LoadLibrary('kernel32.dll')
+  if (!k32) return
+  const pCP = win.GetProcAddress(k32, 'CreateProcessW')
+  if (!pCP) return
+  // STARTUPINFOW — just set cb + flags so it doesn't inherit handles
+  const si = new ArrayBuffer(256)
+  const siDv = new DataView(si)
+  siDv.setUint32(0, 104, true)         // cb = sizeof(STARTUPINFOW)
+  siDv.setUint32(60, 0x100, true)       // dwFlags = STARTF_USESHOWWINDOW (don't need this, but harmless)
+  // PROCESS_INFORMATION
+  const pi = new ArrayBuffer(24)
+  ffiCall(pCP,
+    [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER,
+     FFI_TYPE_POINTER, FFI_TYPE_SINT32, FFI_TYPE_UINT32,
+     FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER,
+     FFI_TYPE_POINTER],
+    [null, strToWideBuf(cmdLine), null, null, 0, CREATE_NO_WINDOW,
+     null, strToWideBuf(cwd), si, pi],
+    FFI_TYPE_SINT32)
+}
+
 // ---------------------------------------------------------------------------
 // registry  (advapi32.dll)
 // ---------------------------------------------------------------------------
@@ -100,7 +178,8 @@ function regDeleteRun(): boolean {
     [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
     [HKCU, keyW, nameW],
     FFI_TYPE_SINT32) as number
-  return hr === 0
+  // ERROR_FILE_NOT_FOUND = 2  → value doesn't exist, success
+  return hr === 0 || hr === 2
 }
 
 // ---------------------------------------------------------------------------
@@ -141,11 +220,11 @@ function callComVoid(vtable: number, idx: number, thisPtr: number, arg2?: ArrayB
 
 function createShortcut(targetPath: string, args: string, shortcutPath: string, desc: string): boolean {
   const ole32 = win.LoadLibrary('ole32.dll')
-  if (!ole32) return false
+  if (!ole32) throw new Error('加载 ole32.dll 失败')
   const pInit = win.GetProcAddress(ole32, 'CoInitialize')
   const pInst = win.GetProcAddress(ole32, 'CoCreateInstance')
   const pUninit = win.GetProcAddress(ole32, 'CoUninitialize')
-  if (!pInit || !pInst || !pUninit) return false
+  if (!pInit || !pInst || !pUninit) throw new Error('获取 COM 函数地址失败')
 
   ffiCall(pInit, [FFI_TYPE_POINTER], [null], FFI_TYPE_SINT32)
 
@@ -155,99 +234,188 @@ function createShortcut(targetPath: string, args: string, shortcutPath: string, 
     [CLSID_ShellLink, null, 1, IID_IShellLinkW, ppv],
     FFI_TYPE_SINT32) as number
 
-  let ok = false
-  if (hr === 0) {
-    const pSL = readPtr(new DataView(ppv), 0)
-    const vt = readQword(pSL)
-
-    callComVoid(vt, VT_IDX_SET_PATH, pSL, strToWideBuf(targetPath))
-    if (args) callComVoid(vt, VT_IDX_SET_ARGS, pSL, strToWideBuf(args))
-    const idx = targetPath.lastIndexOf('\\')
-    if (idx !== -1) callComVoid(vt, VT_IDX_SET_WORKDIR, pSL, strToWideBuf(targetPath.substring(0, idx)))
-    if (desc) callComVoid(vt, VT_IDX_SET_DESC, pSL, strToWideBuf(desc))
-
-    const ppf = new ArrayBuffer(8)
-    const pQI = readQword(vt + VT_IDX_QI * 8)
-    const hrQI = ffiCall(pQI,
-      [FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
-      [pSL, IID_IPersistFile, ppf],
-      FFI_TYPE_SINT32) as number
-    if (hrQI === 0) {
-      const pPF = readPtr(new DataView(ppf), 0)
-      const pfVt = readQword(pPF)
-      const pSave = readQword(pfVt + VT_IDX_PERSIST_SAVE * 8)
-      const hrSave = ffiCall(pSave,
-        [FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
-        [pPF, strToWideBuf(shortcutPath), 1],
-        FFI_TYPE_SINT32) as number
-      ok = hrSave === 0
-      callComVoid(pfVt, VT_IDX_RELEASE, pPF)
-    }
-    callComVoid(vt, VT_IDX_RELEASE, pSL)
+  if (hr !== 0) {
+    ffiCall(pUninit, [], [], FFI_TYPE_SINT32)
+    throw new Error('CoCreateInstance 失败')
   }
+
+  const pSL = readPtr(new DataView(ppv), 0)
+  const vt = readQword(pSL)
+
+  callComVoid(vt, VT_IDX_SET_PATH, pSL, strToWideBuf(targetPath))
+  if (args) callComVoid(vt, VT_IDX_SET_ARGS, pSL, strToWideBuf(args))
+  const idx = targetPath.lastIndexOf('\\')
+  if (idx !== -1) callComVoid(vt, VT_IDX_SET_WORKDIR, pSL, strToWideBuf(targetPath.substring(0, idx)))
+  if (desc) callComVoid(vt, VT_IDX_SET_DESC, pSL, strToWideBuf(desc))
+
+  const ppf = new ArrayBuffer(8)
+  const pQI = readQword(vt + VT_IDX_QI * 8)
+  const hrQI = ffiCall(pQI,
+    [FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
+    [pSL, IID_IPersistFile, ppf],
+    FFI_TYPE_SINT32) as number
+
+  if (hrQI !== 0) {
+    callComVoid(vt, VT_IDX_RELEASE, pSL)
+    ffiCall(pUninit, [], [], FFI_TYPE_SINT32)
+    throw new Error('QueryInterface(IPersistFile) 失败')
+  }
+
+  const pPF = readPtr(new DataView(ppf), 0)
+  const pfVt = readQword(pPF)
+  const pSave = readQword(pfVt + VT_IDX_PERSIST_SAVE * 8)
+  const hrSave = ffiCall(pSave,
+    [FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
+    [pPF, strToWideBuf(shortcutPath), 1],
+    FFI_TYPE_SINT32) as number
+
+  callComVoid(pfVt, VT_IDX_RELEASE, pPF)
+  callComVoid(vt, VT_IDX_RELEASE, pSL)
   ffiCall(pUninit, [], [], FFI_TYPE_SINT32)
-  return ok
+
+  if (hrSave !== 0) throw new Error('IPersistFile::Save 失败')
+  return true
 }
 
 // ---------------------------------------------------------------------------
-// public API
+// step definitions (for GUI install/uninstall)
 // ---------------------------------------------------------------------------
 
-export function install(): void {
-  const exePath = getExePath()
-  if (!exePath) {
-    std.out.printf('[install] ERROR: cannot get exe path\n'); std.out.flush()
-    return
-  }
+export interface InstallStep {
+  key: string
+  label: string
+}
 
+export const INSTALL_STEPS: InstallStep[] = [
+  { key: 'copy', label: '复制文件到安装目录' },
+  { key: 'regrun', label: '注册系统开机自启' },
+  { key: 'startmenu', label: '添加开始菜单快捷方式' },
+  { key: 'desktop', label: '添加桌面快捷方式' },
+]
+
+export const UNINSTALL_STEPS: InstallStep[] = [
+  { key: 'remove_shortcuts', label: '删除快捷方式' },
+  { key: 'remove_regrun', label: '删除开机自启注册表' },
+  { key: 'remove_files', label: '删除程序文件' },
+]
+
+export function runInstallStep(key: string): boolean {
+  switch (key) {
+    case 'copy': return installStepCopy()
+    case 'regrun': return installStepRegRun()
+    case 'startmenu': return installStepStartMenu()
+    case 'desktop': return installStepDesktop()
+    default: return false
+  }
+}
+
+export function runUninstallStep(key: string): boolean {
+  switch (key) {
+    case 'remove_shortcuts': return uninstallStepShortcuts()
+    case 'remove_regrun': return regDeleteRun()
+    case 'remove_files': return uninstallStepFiles()
+    default: return false
+  }
+}
+
+function installStepCopy(): boolean {
+  const exePath = getExePath()
+  if (!exePath) return false
   const installDir = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
   const targetExe = installDir + '\\QuickSuperPrint.exe'
-  const cmdLine = '"' + targetExe + '" -c --run'
-
-  std.out.printf('[install] target dir: %s\n', installDir); std.out.flush()
   os.mkdir(installDir)
-  if (!copyFile(exePath, targetExe)) {
-    std.out.printf('[install] ERROR: copy failed\n'); std.out.flush()
-    return
-  }
-  std.out.printf('[install] copied\n'); std.out.flush()
+  return copyFile(exePath, targetExe)
+}
 
-  regSetRun(cmdLine)
-  std.out.printf('[install] registry set\n'); std.out.flush()
+function installStepRegRun(): boolean {
+  const targetExe = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint\\QuickSuperPrint.exe'
+  const cmdLine = '"' + targetExe + '" --run'
+  return regSetRun(cmdLine)
+}
 
+function installStepStartMenu(): boolean {
+  const targetExe = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint\\QuickSuperPrint.exe'
+  const appData = std.getenv('APPDATA') || ''
+  const startMenuDir = appData + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
+  mkdirW(startMenuDir)
+  createShortcut(targetExe, '-c --run', startMenuDir + '\\超人打印(-c).lnk', '超人打印')
+  createShortcut(targetExe, '-c --uninstall', startMenuDir + '\\卸载(-c).lnk', '卸载超人打印')
+  createShortcut(targetExe, '--run', startMenuDir + '\\超人打印.lnk', '超人打印')
+  createShortcut(targetExe, '--uninstall', startMenuDir + '\\卸载.lnk', '卸载超人打印')
+  return true
+}
+
+function installStepDesktop(): boolean {
+  const targetExe = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint\\QuickSuperPrint.exe'
+  const userProfile = std.getenv('USERPROFILE') || ''
+  return createShortcut(targetExe, '--run', userProfile + '\\Desktop\\超人打印.lnk', '超人打印')
+}
+
+function uninstallStepShortcuts(): boolean {
   const appData = std.getenv('APPDATA') || ''
   const userProfile = std.getenv('USERPROFILE') || ''
   const startMenuDir = appData + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
-  os.mkdir(startMenuDir)
-  createShortcut(targetExe, '-c --run', startMenuDir + '\\超人打印.lnk', '超人打印')
-  createShortcut(targetExe, '-c --uninstall', startMenuDir + '\\卸载.lnk', '卸载超人打印')
-  createShortcut(targetExe, '-c --run', userProfile + '\\Desktop\\超人打印.lnk', '超人打印')
-  std.out.printf('[install] shortcuts created\n'); std.out.flush()
+  deleteFileW(startMenuDir + '\\超人打印(-c).lnk')
+  deleteFileW(startMenuDir + '\\卸载(-c).lnk')
+  deleteFileW(startMenuDir + '\\超人打印.lnk')
+  deleteFileW(startMenuDir + '\\卸载.lnk')
+  deleteFileW(userProfile + '\\Desktop\\超人打印.lnk')
+  return true
+}
 
+function uninstallStepFiles(): boolean {
+  const installDir = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
+  const startMenuDir = (std.getenv('APPDATA') || '') + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
+
+  // 1. clear _cache
+  const cacheDir = installDir + '\\_cache'
+  const cacheFiles = os.readdir(cacheDir)
+  if (cacheFiles) {
+    for (let i = 0; i < cacheFiles.length; i++) {
+      deleteFileW(cacheDir + '\\' + cacheFiles[i])
+    }
+  }
+  removeDirW(cacheDir)
+
+  // 2. remove start menu folder (lnks already deleted in previous step)
+  removeDirW(startMenuDir)
+
+  // 3. spawn delayed bat to delete the entire SuperPrint dir (incl. running exe)
+  const tmpDir = std.getenv('TEMP') || ''
+  const batPath = tmpDir + '\\del_superprint.bat'
+  const batContent = '@timeout /t 8 /nobreak > nul\n@rmdir /s /q "' + installDir + '"\n@del "%~f0"\n'
+  const f = std.open(batPath, 'wb')
+  if (f) {
+    const buf = new ArrayBuffer(batContent.length)
+    const dv = new DataView(buf)
+    for (let i = 0; i < batContent.length; i++) dv.setUint8(i, batContent.charCodeAt(i))
+    f.write(buf, 0, batContent.length)
+    f.close()
+    spawnDetached(batPath, tmpDir)
+  }
+  return true
+}
+
+// ---------------------------------------------------------------------------
+// combined CLI functions
+// ---------------------------------------------------------------------------
+
+export function install(): void {
+  std.out.printf('[install] starting...\n'); std.out.flush()
+  for (const step of INSTALL_STEPS) {
+    const ok = runInstallStep(step.key)
+    std.out.printf('[install] %s: %s\n', step.label, ok ? 'OK' : 'FAIL'); std.out.flush()
+    if (!ok) return
+  }
+  std.out.printf('[install] done\n'); std.out.flush()
 }
 
 export function uninstall(): void {
   std.out.printf('[uninstall] starting...\n'); std.out.flush()
-
-  const appData = std.getenv('APPDATA') || ''
-  const userProfile = std.getenv('USERPROFILE') || ''
-  const installDir = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
-  const startMenuDir = appData + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
-
-  os.remove(startMenuDir + '\\超人打印.lnk')
-  os.remove(startMenuDir + '\\卸载.lnk')
-  os.remove(userProfile + '\\Desktop\\超人打印.lnk')
-  regDeleteRun()
-  os.remove(installDir + '\\QuickSuperPrint.exe')
-
-  const k32_rm = win.LoadLibrary('kernel32.dll')
-  if (k32_rm) {
-    const pRDW = win.GetProcAddress(k32_rm, 'RemoveDirectoryW')
-    if (pRDW) {
-      ffiCall(pRDW, [FFI_TYPE_POINTER], [strToWideBuf(startMenuDir)], FFI_TYPE_SINT32)
-      ffiCall(pRDW, [FFI_TYPE_POINTER], [strToWideBuf(installDir)], FFI_TYPE_SINT32)
-    }
+  for (const step of UNINSTALL_STEPS) {
+    const ok = runUninstallStep(step.key)
+    std.out.printf('[uninstall] %s: %s\n', step.label, ok ? 'OK' : 'FAIL'); std.out.flush()
+    if (!ok) return
   }
-
   std.out.printf('[uninstall] done\n'); std.out.flush()
 }
