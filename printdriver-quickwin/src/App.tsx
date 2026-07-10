@@ -4,7 +4,7 @@ import * as os from 'os'
 import { Tab, ListBox } from 'quickwin/lib/react-qw/index.js'
 import { api } from './api.js'
 import { getDeviceId, getComputerName } from './device.js'
-import { enumLocalPrinters, getDefaultPrinter } from './printer.js'
+import { enumLocalPrinters, getDefaultPrinter, type LocalPrinterInfo } from './printer.js'
 import { setLogger } from './print-queue.js'
 import { connectWs } from './ws.js'
 import { LoginForm } from './components/LoginForm.js'
@@ -25,7 +25,7 @@ export function App({ cw, ch }: AppProps) {
     const [loginPass, setLoginPass] = useState('')
     const [computerId, setComputerId] = useState('')
     const [computerName, setComputerName] = useState('')
-    const [printers, setPrinters] = useState<string[]>([])
+    const [printers, setPrinters] = useState<LocalPrinterInfo[]>([])
     const [wsStatus, setWsStatus] = useState('未连接')
     const [logs, setLogs] = useState<string[]>([])
     const logListRef = useRef<gui.HWND>(null)
@@ -123,6 +123,17 @@ export function App({ cw, ch }: AppProps) {
                 await api.computer.addComputerPrinter(devId, p.name)
             }
             addLog('[printer] synced ' + localPrinters.length + ' printers')
+            const info = await api.computer.computerInfo(devId) as any
+            if (info && info.printers) {
+                const serverMap: Record<string, boolean> = {}
+                for (const sp of info.printers) {
+                    serverMap[sp.name] = !sp.disabled
+                }
+                setPrinters(localPrinters.map(p => ({
+                    ...p,
+                    enabled: serverMap[p.name] !== undefined ? serverMap[p.name] : true,
+                })))
+            }
         } catch (e) {
             addLog('[printer] sync failed: ' + String(e))
         }
@@ -142,7 +153,7 @@ export function App({ cw, ch }: AppProps) {
         }
 
         const localPrinters = enumLocalPrinters()
-        setPrinters(localPrinters.map(p => p.name))
+        setPrinters(localPrinters)
         addLog('[printer] found ' + localPrinters.length + ' printers')
 
         const defPrinter = getDefaultPrinter()
