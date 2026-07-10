@@ -224,6 +224,7 @@ jobs:
           for i in $(seq 1 10); do
             echo "Upload attempt $i/10..."
             response=$(curl -s -w "\n%{http_code}" -X POST \
+              --max-time 600 \
               -H "token: $UPLOAD_TOKEN" \
               -H "Content-Type: application/zip" \
               --data-binary "@static.zip" \
