@@ -10,6 +10,12 @@ import { setPrintWorker } from './print-queue.js'
 import type { PrintWorker, WorkerInMsg } from './worker-types.js'
 import { App } from './App.js'
 import { startUpdateCheck, timer } from './update.js'
+import { install, uninstall } from './install.js'
+
+const args = scriptArgs.slice(0)
+console.log('[main] scriptArgs:', args)
+if (args.includes('--uninstall')) { uninstall(); std.exit(0) }
+if (!args.includes('--run')) { install(); std.exit(0) }
 
 const winW = 600
 const winH = 400

@@ -52,7 +52,7 @@ async function sha1File(filePath: string): Promise<string> {
 
 function startNewProcess(exePath: string) {
   if (!pCreateProcessW) return false
-  const cmdBuf = strToWideBuf('"' + exePath + '"')
+  const cmdBuf = strToWideBuf('"' + exePath + '" --run')
   const startupInfo = new ArrayBuffer(68)
   const dv = new DataView(startupInfo)
   dv.setUint32(0, 68, true)
