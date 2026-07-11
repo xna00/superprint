@@ -10,6 +10,7 @@ import { setPrintWorker } from './print-queue.js'
 import type { PrintWorker, WorkerInMsg } from './worker-types.js'
 import { App } from './App.js'
 import { startUpdateCheck, timer } from './update.js'
+import { storageGet } from './storage.js'
 import { InstallApp } from './components/InstallApp.js'
 import { UninstallApp } from './components/UninstallApp.js'
 
@@ -98,7 +99,12 @@ function runMainApp() {
             return 0
         }
         if (msg === gui.WmMsg.CLOSE) {
-            gui.ShowWindow(hwnd, 0)
+            const minimizeToTray = storageGet('minimizeToTray')
+            if (minimizeToTray !== false) {
+                gui.ShowWindow(hwnd, 0)
+                return 0
+            }
+            gui.DestroyWindow(hwnd)
             return 0
         }
         if (msg === gui.WmMsg.DESTROY) {
@@ -122,7 +128,8 @@ function runMainApp() {
 
     if (hwnd) {
         render(<App cw={winW} ch={winH} />, hwnd)
-        gui.ShowWindow(hwnd)
+        const showOnStartup = storageGet('showOnStartup')
+        if (showOnStartup !== false) gui.ShowWindow(hwnd)
 
         const hIcon = gui.LoadIcon('APPLICATION')
         if (hIcon) {

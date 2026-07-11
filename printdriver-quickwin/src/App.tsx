@@ -9,6 +9,7 @@ import { setLogger } from './print-queue.js'
 import { connectWs } from './ws.js'
 import { LoginForm } from './components/LoginForm.js'
 import { PrintersTab } from './components/PrintersTab.js'
+import { SettingsTab } from './components/SettingsTab.js'
 
 const VISIBLE = gui.WindowStyle.VISIBLE
 const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
@@ -204,6 +205,10 @@ export function App({ cw, ch }: AppProps) {
                 {
                     title: '日志',
                     content: <ListBox ref={logListRef} items={logs} scrollToBottom={true} style={{ flexGrow: 1 }} />
+                },
+                {
+                    title: '设置',
+                    content: <SettingsTab />,
                 },
             ]} style={{ flexGrow: 1 }} />
         </w>
