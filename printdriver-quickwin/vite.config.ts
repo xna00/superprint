@@ -2,7 +2,10 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   base: '',
-  define: { DEBUG: 'false' },
+  define: {
+    DEBUG: 'false',
+    __BUILD_TIME__: JSON.stringify(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })),
+  },
   worker: {
     format: 'es',
     rollupOptions: {

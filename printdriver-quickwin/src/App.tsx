@@ -20,7 +20,7 @@ interface AppProps {
 }
 
 export function App({ cw, ch }: AppProps) {
-    const [loggedIn, setLoggedIn] = useState(false)
+    const [appState, setAppState] = useState<'loading' | 'login' | 'main'>('loading')
     const [username, setUsername] = useState('')
     const [loginUser, setLoginUser] = useState('')
     const [loginPass, setLoginPass] = useState('')
@@ -61,15 +61,18 @@ export function App({ cw, ch }: AppProps) {
             if (data && data.username) {
                 setUsername(data.username)
                 addLog('[api] logged in: ' + data.username)
-                return true
+                setAppState('main')
+                await registerComputer()
+                await syncPrinters()
+                os.setTimeout(() => connectWs(addLog, setWsStatus), 500)
+                return
             } else {
                 addLog('[api] not logged in')
-                return false
             }
         } catch (e: unknown) {
             addLog('[api] error: ' + (e instanceof Error ? e.message : String(e)))
-            return false
         }
+        setAppState('login')
     }
 
     const handleLogin = async () => {
@@ -82,7 +85,7 @@ export function App({ cw, ch }: AppProps) {
             const result = await api.auth.login({ username: loginUser, password: loginPass })
             if (result && (result.token || result.username)) {
                 setUsername(result.username || loginUser)
-                setLoggedIn(true)
+                setAppState('main')
                 addLog('[login] success')
                 await registerComputer()
                 await syncPrinters()
@@ -162,18 +165,13 @@ export function App({ cw, ch }: AppProps) {
             addLog('[printer] default: ' + defPrinter)
         }
 
-        os.setTimeout(async () => {
-            const ok = await checkUser()
-            if (ok) {
-                setLoggedIn(true)
-                await registerComputer()
-                await syncPrinters()
-                os.setTimeout(() => connectWs(addLog, setWsStatus), 500)
-            }
-        }, 500)
+        os.setTimeout(checkUser, 500)
     }, [])
 
-    if (!loggedIn) {
+    if (appState === 'loading') {
+        return <w type="STATIC" ws={VISIBLE} text="正在加载..." style={{ flexDirection: 'column', justifyContent: 'center', x: 0, y: 0, width: cw, height: ch }} />
+    }
+    if (appState === 'login') {
         return (
             <LoginForm
                 cw={cw}

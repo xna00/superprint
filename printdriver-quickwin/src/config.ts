@@ -21,3 +21,6 @@ export const RENDER_DPI = 300
 
 export const PROJECT_VERSION = '1.0.0'
 export const ENTRY_HASH = '__ENTRY_HASH__'
+
+declare const __BUILD_TIME__: string
+export const BUILD_TIME = __BUILD_TIME__

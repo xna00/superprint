@@ -2,6 +2,7 @@ import { useState } from 'react'
 import * as gui from 'gui'
 import { CheckBox } from 'quickwin/lib/react-qw/index.js'
 import { storageGet, storageSet } from '../storage.js'
+import { BUILD_TIME } from '../config.js'
 
 const VISIBLE = gui.WindowStyle.VISIBLE
 
@@ -29,6 +30,7 @@ export function SettingsTab() {
         label="开机自启动时弹出"
         style={{ height: 26 }}
       />
+      <w type="STATIC" ws={VISIBLE} text={"构建时间: " + BUILD_TIME} style={{ height: 22 }} />
     </w>
   )
 }
