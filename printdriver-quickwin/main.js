@@ -1,3 +1,9 @@
+import * as os from 'os'
+import * as std from 'std'
+
+const installDir = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
+os.chdir(installDir)
+
 const timestamp = Date.now()
 
 import('https://superprint6.xna00.top/printdriver/entry.js?' + timestamp).catch(e => {
