@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "typecheck": "npx tsgo",
-    "build": "npx tsgo && npx vite build && node scripts/postbuild.js",
+    "typecheck": "npx tsc --noEmit",
+    "build": "npx tsc --noEmit && npx vite build && node scripts/postbuild.js",
     "start": "quickwin",
     "start:dev": "quickwin main.dev.js",
     "preview": "vite preview",
@@ -18,11 +18,13 @@
   "type": "commonjs",
   "dependencies": {
     "@types/react": "^19.2.17",
-    "@typescript/native-preview": "^7.0.0-dev.20260524.1",
     "api": "../api",
     "quickwin": "^2026.7.11-145212",
     "react": "^19.2.7",
     "uzip": "^0.20201231.0",
     "vite": "^8.0.14"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
   }
 }
