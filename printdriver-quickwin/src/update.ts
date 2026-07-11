@@ -2,8 +2,8 @@ import 'quickwin/lib/polyfill.js'
 import * as std from 'std'
 import * as os from 'os'
 import * as win from 'win'
-import { ffiCall, bufferPtr, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER } from 'ffi'
-import { decodeWideAtPtr, strToWideBuf } from './utils.js'
+import { ffiCall, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER } from 'ffi'
+import { strToWideBuf, getExePath } from './utils.js'
 import { ENTRY_HASH } from './config.js'
 import { api } from './api.js'
 import { cleanupWs } from './ws.js'
@@ -17,24 +17,7 @@ interface CheckUpdateResult {
 }
 
 const _kernel32 = win.LoadLibrary('kernel32.dll')
-const pGetModuleFileNameW = _kernel32 ? win.GetProcAddress(_kernel32, 'GetModuleFileNameW') : null
 const pCreateProcessW = _kernel32 ? win.GetProcAddress(_kernel32, 'CreateProcessW') : null
-
-function getExePath(): string | null {
-  if (!pGetModuleFileNameW) return null
-  const size = 1024
-  const nameBuf = new ArrayBuffer(size * 2)
-  const sizeArr = new Uint32Array(new ArrayBuffer(4))
-  sizeArr[0] = size
-  const ret = ffiCall(
-    pGetModuleFileNameW,
-    [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
-    [0, nameBuf, size],
-    FFI_TYPE_UINT32
-  )
-  if (ret === 0) return null
-  return decodeWideAtPtr(bufferPtr(nameBuf))
-}
 
 async function sha1File(filePath: string): Promise<string> {
   const f = std.open(filePath, 'rb')

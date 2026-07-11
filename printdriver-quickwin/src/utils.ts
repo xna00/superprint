@@ -1,4 +1,9 @@
 import { readByte } from 'ffi'
+import * as win from 'win'
+
+export function getExePath(): string {
+  return win.GetModuleFileName() || ''
+}
 
 export function strToWideBuf(str: string): ArrayBuffer {
     return new TextEncoder('utf-16le').encode(str + '\0').buffer as ArrayBuffer

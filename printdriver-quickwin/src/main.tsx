@@ -128,8 +128,8 @@ function runMainApp() {
 
     if (hwnd) {
         render(<App cw={winW} ch={winH} />, hwnd)
-        const showOnStartup = storageGet('showOnStartup')
-        if (showOnStartup !== false) gui.ShowWindow(hwnd)
+        const isAutoStart = args.includes('--autostart')
+        if (!isAutoStart || storageGet('showOnStartup') !== false) gui.ShowWindow(hwnd)
 
         const hIcon = gui.LoadIcon('APPLICATION')
         if (hIcon) {

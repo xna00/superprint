@@ -1,11 +1,18 @@
 import * as std from 'std'
 import { STORAGE_FILE } from './config.js'
+import { getExePath } from './utils.js'
 
 let _cache: Record<string, unknown> | null = null
 
+function storagePath(): string {
+  const p = getExePath().split('\\')
+  p.pop()
+  return p.join('\\') + '\\' + STORAGE_FILE
+}
+
 function load(): Record<string, unknown> {
   if (_cache) return _cache
-  const f = std.open(STORAGE_FILE, 'r')
+  const f = std.open(storagePath(), 'r')
   if (!f) { _cache = {}; return _cache }
   const content = f.readAsString()
   f.close()
@@ -14,7 +21,7 @@ function load(): Record<string, unknown> {
 }
 
 function save(): void {
-  const f = std.open(STORAGE_FILE, 'w')
+  const f = std.open(storagePath(), 'w')
   if (!f) return
   f.puts(JSON.stringify(_cache ?? {}))
   f.close()

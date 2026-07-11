@@ -2,7 +2,7 @@ import * as std from 'std'
 import * as win from 'win'
 import * as os from 'os'
 import { ffiCall, readByte, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT64 } from 'ffi'
-import { strToWideBuf, readPtr } from './utils.js'
+import { strToWideBuf, readPtr, getExePath } from './utils.js'
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -20,20 +20,6 @@ function readQword(addr: number): number {
   const low = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
   const high = b4 | (b5 << 8) | (b6 << 16) | (b7 << 24)
   return (high >>> 0) * 4294967296 + (low >>> 0)
-}
-
-function getExePath(): string {
-  const k32 = win.LoadLibrary('kernel32.dll')
-  if (!k32) return ''
-  const pFn = win.GetProcAddress(k32, 'GetModuleFileNameW')
-  if (!pFn) return ''
-  const buf = new ArrayBuffer(2048)
-  const ret = ffiCall(pFn, [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32], [0, buf, 1024], FFI_TYPE_UINT32) as number
-  if (!ret) return ''
-  const dv = new DataView(buf)
-  let s = ''
-  for (let i = 0; i < ret; i++) s += String.fromCharCode(dv.getUint16(i * 2, true))
-  return s
 }
 
 function copyFile(src: string, dst: string): boolean {
@@ -327,7 +313,7 @@ function installStepCopy(): boolean {
 
 function installStepRegRun(): boolean {
   const targetExe = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint\\QuickSuperPrint.exe'
-  const cmdLine = '"' + targetExe + '" --run'
+  const cmdLine = '"' + targetExe + '" --run --autostart'
   return regSetRun(cmdLine)
 }
 
