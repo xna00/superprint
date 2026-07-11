@@ -1,5 +1,5 @@
 import * as os from 'os'
-import { getCookie } from './api.js'
+import { getCookie } from './storage.js'
 import { getDeviceId } from './device.js'
 import { handleWsMessage } from './print-queue.js'
 import { WS_URLS } from './config.js'

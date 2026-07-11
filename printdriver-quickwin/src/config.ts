@@ -10,7 +10,7 @@ export const WS_URLS = [
 
 export const API_BASE_URL = 'https://superprint.xna00.top/api'
 
-export const COOKIE_FILE = 'cookie.txt'
+export const STORAGE_FILE = 'storage.json'
 export const DOWNLOAD_FOLDER = 'downloads'
 
 export const WS_RECONNECT_DELAY_MIN = 10000
