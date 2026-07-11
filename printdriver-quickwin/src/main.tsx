@@ -18,6 +18,7 @@ console.log('[main] scriptArgs:', args)
 
 const SETUP_W = 400
 const SETUP_H = 220
+const SCALE = gui.GetScaleFactor()
 
 if (args.includes('--uninstall')) {
     gui.RegisterClass('SetupWin', (hwnd, msg, wParam, lParam) => {
@@ -30,11 +31,10 @@ if (args.includes('--uninstall')) {
     const scr = gui.GetScreenSize()
     const hwnd = gui.CreateWindow('SetupWin', '超人打印 - 卸载',
         gui.WindowStyle.OVERLAPPEDWINDOW,
-        Math.max(0, (scr[0] - SETUP_W) / 2), Math.max(0, (scr[1] - SETUP_H) / 2),
-        SETUP_W, SETUP_H, null, null)
-    const cr = hwnd ? gui.GetClientRect(hwnd) : null
+        Math.max(0, (scr[0] - Math.round(SETUP_W * SCALE)) / 2), Math.max(0, (scr[1] - Math.round(SETUP_H * SCALE)) / 2),
+        Math.round(SETUP_W * SCALE), Math.round(SETUP_H * SCALE), null, null)
     if (hwnd) {
-        render(<UninstallApp cw={cr ? cr.right - cr.left : SETUP_W} ch={cr ? cr.bottom - cr.top : SETUP_H} onComplete={() => gui.PostQuitMessage(0)} />, hwnd)
+        render(<UninstallApp cw={SETUP_W} ch={SETUP_H} onComplete={() => gui.PostQuitMessage(0)} />, hwnd)
         gui.ShowWindow(hwnd)
     }
 } else if (!args.includes('--run')) {
@@ -48,11 +48,10 @@ if (args.includes('--uninstall')) {
     const scr = gui.GetScreenSize()
     const hwnd = gui.CreateWindow('SetupWin', '超人打印 - 安装',
         gui.WindowStyle.OVERLAPPEDWINDOW,
-        Math.max(0, (scr[0] - SETUP_W) / 2), Math.max(0, (scr[1] - SETUP_H) / 2),
-        SETUP_W, SETUP_H, null, null)
-    const cr = hwnd ? gui.GetClientRect(hwnd) : null
+        Math.max(0, (scr[0] - Math.round(SETUP_W * SCALE)) / 2), Math.max(0, (scr[1] - Math.round(SETUP_H * SCALE)) / 2),
+        Math.round(SETUP_W * SCALE), Math.round(SETUP_H * SCALE), null, null)
     if (hwnd) {
-        render(<InstallApp cw={cr ? cr.right - cr.left : SETUP_W} ch={cr ? cr.bottom - cr.top : SETUP_H} onComplete={() => gui.PostQuitMessage(0)} />, hwnd)
+        render(<InstallApp cw={SETUP_W} ch={SETUP_H} onComplete={() => gui.PostQuitMessage(0)} />, hwnd)
         gui.ShowWindow(hwnd)
     }
 } else runMainApp()
@@ -65,8 +64,8 @@ function runMainApp() {
     const winW = 600
     const winH = 400
     const scr = gui.GetScreenSize()
-    const winX = Math.max(0, (scr[0] - winW) / 2)
-    const winY = Math.max(0, (scr[1] - winH) / 2)
+    const winX = Math.max(0, (scr[0] - Math.round(winW * SCALE)) / 2)
+    const winY = Math.max(0, (scr[1] - Math.round(winH * SCALE)) / 2)
 
     const WM_TRAY = 0x8001
 
@@ -119,14 +118,10 @@ function runMainApp() {
 
     const hwnd = gui.CreateWindow('TestWin', 'SuperPrint',
         gui.WindowStyle.OVERLAPPEDWINDOW,
-        winX, winY, winW, winH, null, null)
-
-    const cr = hwnd ? gui.GetClientRect(hwnd) : null
-    const cw = cr ? cr.right - cr.left : winW
-    const ch = cr ? cr.bottom - cr.top : winH
+        winX, winY, Math.round(winW * SCALE), Math.round(winH * SCALE), null, null)
 
     if (hwnd) {
-        render(<App cw={cw} ch={ch} />, hwnd)
+        render(<App cw={winW} ch={winH} />, hwnd)
         gui.ShowWindow(hwnd)
 
         const hIcon = gui.LoadIcon('APPLICATION')
