@@ -7,12 +7,10 @@ import { INSTALL_STEPS, runInstallStep } from '../install.js'
 const VISIBLE = gui.WindowStyle.VISIBLE
 
 interface Props {
-    cw: number
-    ch: number
     onComplete: () => void
 }
 
-export function InstallApp({ cw, ch, onComplete }: Props) {
+export function InstallApp({ onComplete }: Props) {
     const [states, setStates] = useState<string[]>(INSTALL_STEPS.map(() => 'pending'))
     const [msg, setMsg] = useState('准备安装...')
     const [done, setDone] = useState(false)
@@ -59,7 +57,7 @@ export function InstallApp({ cw, ch, onComplete }: Props) {
     }
 
     return (
-        <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 2, x: 0, y: 0, width: cw, height: ch }}>
+        <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 2, flexGrow: 1 }}>
             <w type="STATIC" ws={VISIBLE} text="超人打印 - 安装" style={{ height: 24 }} />
             {INSTALL_STEPS.map((step, i) => (
                 <w key={step.key} type="STATIC" ws={VISIBLE}

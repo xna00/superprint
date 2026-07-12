@@ -7,12 +7,10 @@ import { UNINSTALL_STEPS, runUninstallStep } from '../install.js'
 const VISIBLE = gui.WindowStyle.VISIBLE
 
 interface Props {
-    cw: number
-    ch: number
     onComplete: () => void
 }
 
-export function UninstallApp({ cw, ch, onComplete }: Props) {
+export function UninstallApp({ onComplete }: Props) {
     const [states, setStates] = useState<string[]>(UNINSTALL_STEPS.map(() => 'pending'))
     const [msg, setMsg] = useState('准备卸载...')
     const [done, setDone] = useState(false)
@@ -62,7 +60,7 @@ export function UninstallApp({ cw, ch, onComplete }: Props) {
     }
 
     return (
-        <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 2, x: 0, y: 0, width: cw, height: ch }}>
+        <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 2, flexGrow: 1 }}>
             <w type="STATIC" ws={VISIBLE} text="超人打印 - 卸载" style={{ height: 24 }} />
             {UNINSTALL_STEPS.map((step, i) => (
                 <w key={step.key} type="STATIC" ws={VISIBLE}

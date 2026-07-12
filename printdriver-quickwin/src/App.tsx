@@ -14,12 +14,9 @@ import { SettingsTab } from './components/SettingsTab.js'
 const VISIBLE = gui.WindowStyle.VISIBLE
 const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
 
-interface AppProps {
-    cw: number
-    ch: number
-}
+interface AppProps {}
 
-export function App({ cw, ch }: AppProps) {
+export function App(_props: AppProps) {
     const [appState, setAppState] = useState<'loading' | 'login' | 'main'>('loading')
     const [username, setUsername] = useState('')
     const [loginUser, setLoginUser] = useState('')
@@ -169,13 +166,11 @@ export function App({ cw, ch }: AppProps) {
     }, [])
 
     if (appState === 'loading') {
-        return <w type="STATIC" ws={VISIBLE} text="正在加载..." style={{ flexDirection: 'column', justifyContent: 'center', x: 0, y: 0, width: cw, height: ch }} />
+        return <w type="STATIC" ws={VISIBLE} text="正在加载..." style={{ flexDirection: 'column', justifyContent: 'center', flexGrow: 1 }} />
     }
     if (appState === 'login') {
         return (
             <LoginForm
-                cw={cw}
-                ch={ch}
                 loginUser={loginUser}
                 setLoginUser={setLoginUser}
                 loginPass={loginPass}
@@ -186,7 +181,7 @@ export function App({ cw, ch }: AppProps) {
     }
 
     return (
-        <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', x: 0, y: 0, width: cw, height: ch }}>
+        <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', flexGrow: 1 }}>
             <Tab tabs={[
                 {
                     title: '打印机',
