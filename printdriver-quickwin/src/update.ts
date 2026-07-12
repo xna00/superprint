@@ -100,6 +100,7 @@ export async function checkAndUpdate() {
     console.log('[update] downloading exe from:', exeDownloadUrls)
     const resp = await tryFetch(exeDownloadUrls)
     if (resp) {
+      try { os.remove(exePath + '.old') } catch (_) {}
       os.rename(exePath, exePath + '.old')
       const f = std.open(exePath, 'wb')
       if (f) {
