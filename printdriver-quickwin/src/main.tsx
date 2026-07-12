@@ -35,7 +35,13 @@ if (args.includes('--uninstall')) {
         Math.max(0, (scr[0] - Math.round(SETUP_W * SCALE)) / 2), Math.max(0, (scr[1] - Math.round(SETUP_H * SCALE)) / 2),
         Math.round(SETUP_W * SCALE), Math.round(SETUP_H * SCALE), null, null)
     if (hwnd) {
-        render(<UninstallApp cw={SETUP_W} ch={SETUP_H} onComplete={() => gui.PostQuitMessage(0)} />, hwnd)
+        let contentW = SETUP_W, contentH = SETUP_H
+        const cr = gui.GetClientRect(hwnd)
+        if (cr) {
+            contentW = Math.round((cr.right - cr.left) / SCALE)
+            contentH = Math.round((cr.bottom - cr.top) / SCALE)
+        }
+        render(<UninstallApp cw={contentW} ch={contentH} onComplete={() => gui.PostQuitMessage(0)} />, hwnd)
         gui.ShowWindow(hwnd)
     }
 } else if (!args.includes('--run')) {
@@ -52,7 +58,13 @@ if (args.includes('--uninstall')) {
         Math.max(0, (scr[0] - Math.round(SETUP_W * SCALE)) / 2), Math.max(0, (scr[1] - Math.round(SETUP_H * SCALE)) / 2),
         Math.round(SETUP_W * SCALE), Math.round(SETUP_H * SCALE), null, null)
     if (hwnd) {
-        render(<InstallApp cw={SETUP_W} ch={SETUP_H} onComplete={() => gui.PostQuitMessage(0)} />, hwnd)
+        let contentW = SETUP_W, contentH = SETUP_H
+        const cr = gui.GetClientRect(hwnd)
+        if (cr) {
+            contentW = Math.round((cr.right - cr.left) / SCALE)
+            contentH = Math.round((cr.bottom - cr.top) / SCALE)
+        }
+        render(<InstallApp cw={contentW} ch={contentH} onComplete={() => gui.PostQuitMessage(0)} />, hwnd)
         gui.ShowWindow(hwnd)
     }
 } else runMainApp()
@@ -127,7 +139,13 @@ function runMainApp() {
         winX, winY, Math.round(winW * SCALE), Math.round(winH * SCALE), null, null)
 
     if (hwnd) {
-        render(<App cw={winW} ch={winH} />, hwnd)
+        let contentW = winW, contentH = winH
+        const cr = gui.GetClientRect(hwnd)
+        if (cr) {
+            contentW = Math.round((cr.right - cr.left) / SCALE)
+            contentH = Math.round((cr.bottom - cr.top) / SCALE)
+        }
+        render(<App cw={contentW} ch={contentH} />, hwnd)
         const isAutoStart = args.includes('--autostart')
         if (!isAutoStart || storageGet('showOnStartup') !== false) gui.ShowWindow(hwnd)
 

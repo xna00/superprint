@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import * as gui from 'gui'
-import { CheckBox } from 'quickwin/lib/react-qw/index.js'
+import { CheckBox, Button } from 'quickwin/lib/react-qw/index.js'
 import { storageGet, storageSet } from '../storage.js'
 import { BUILD_TIME } from '../config.js'
+import { checkAndUpdate } from '../update.js'
 
 const VISIBLE = gui.WindowStyle.VISIBLE
 
@@ -31,6 +32,7 @@ export function SettingsTab() {
         style={{ height: 26 }}
       />
       <w type="STATIC" ws={VISIBLE} text={"构建时间: " + BUILD_TIME} style={{ height: 22 }} />
+      <Button onClick={checkAndUpdate} style={{ height: 26 }}>检查更新</Button>
     </w>
   )
 }
