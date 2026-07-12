@@ -1,4 +1,5 @@
 import * as win from 'win'
+import * as gui from 'gui'
 import { ffiCall, bufferPtr, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_SINT32 } from 'ffi'
 import { decodeWideAtPtr, readPtr } from './utils.js'
 
@@ -12,8 +13,8 @@ function gdip(name: string) {
 const GetDefaultPrinterW = gdip('GetDefaultPrinterW')
 const EnumPrintersW = gdip('EnumPrintersW')
 
-const PRINTER_ENUM_LOCAL = 0x00000002
-const PRINTER_ENUM_CONNECTIONS = 0x00000004
+const PRINTER_ENUM_LOCAL = gui.PrinterEnum.LOCAL
+const PRINTER_ENUM_CONNECTIONS = gui.PrinterEnum.CONNECTIONS
 
 export interface LocalPrinterInfo {
     name: string

@@ -29,3 +29,17 @@ export function readPtr(dv: DataView, offset: number): number {
     const high = dv.getUint32(offset + 4, true)
     return low + high * 4294967296
 }
+
+/** Convert a GUID string like `{000214F9-0000-0000-C000-000000000046}` to a 16-byte ArrayBuffer */
+export function guidStrToBytes(guid: string): ArrayBuffer {
+    const hex = guid.replace(/[{}]/g, '').replace(/-/g, '')
+    const buf = new ArrayBuffer(16)
+    const dv = new DataView(buf)
+    dv.setUint32(0, parseInt(hex.substring(0, 8), 16), true)
+    dv.setUint16(4, parseInt(hex.substring(8, 12), 16), true)
+    dv.setUint16(6, parseInt(hex.substring(12, 16), 16), true)
+    for (let i = 0; i < 8; i++) {
+        dv.setUint8(8 + i, parseInt(hex.substring(16 + i * 2, 18 + i * 2), 16))
+    }
+    return buf
+}

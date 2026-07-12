@@ -65,23 +65,23 @@ function runMainApp() {
         onEvent: ({ hwnd, msg, wParam, lParam }) => {
             if (msg === WM_TRAY) {
                 const evt = lParam
-                if (evt === 0x0201) {
-                    gui.ShowWindow(hwnd, 5)
+                if (evt === gui.WmMsg.LBUTTONDOWN) {
+                    gui.ShowWindow(hwnd, gui.ShowWindowCmd.SHOW)
                     gui.SetForegroundWindow(hwnd)
-                } else if (evt === 0x0204 || evt === 0x007B) {
+                } else if (evt === gui.WmMsg.RBUTTONDOWN || evt === gui.WmMsg.CONTEXTMENU) {
                     gui.SetForegroundWindow(hwnd)
                     const pos = gui.GetCursorPos()
                     const x = pos ? pos[0] : 0
                     const y = pos ? pos[1] : 0
                     const hMenu = gui.CreatePopupMenu()
                     if (hMenu) {
-                        gui.AppendMenu(hMenu, 0, 1, '显示窗口')
-                        gui.AppendMenu(hMenu, 0x0800, 0, '')
-                        gui.AppendMenu(hMenu, 0, 2, '退出')
+                        gui.AppendMenu(hMenu, gui.MenuFlag.STRING, 1, '显示窗口')
+                        gui.AppendMenu(hMenu, gui.MenuFlag.SEPARATOR, 0, '')
+                        gui.AppendMenu(hMenu, gui.MenuFlag.STRING, 2, '退出')
                         const cmd = gui.TrackPopupMenu(hMenu, x, y, undefined, hwnd)
                         gui.DestroyMenu(hMenu)
                         if (cmd === 1) {
-                            gui.ShowWindow(hwnd, 5)
+                            gui.ShowWindow(hwnd, gui.ShowWindowCmd.SHOW)
                         } else if (cmd === 2) {
                             gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd, uID: 1 })
                             gui.PostQuitMessage(0)
@@ -93,13 +93,13 @@ function runMainApp() {
             if (msg === gui.WmMsg.CLOSE) {
                 const minimizeToTray = storageGet('minimizeToTray')
                 if (minimizeToTray !== false) {
-                    gui.ShowWindow(hwnd, 0)
-                    return 0
-                }
-                gui.DestroyWindow(hwnd)
+                gui.ShowWindow(hwnd, gui.ShowWindowCmd.HIDE)
                 return 0
             }
-            if (msg === gui.WmMsg.DESTROY) {
+            gui.DestroyWindow(hwnd)
+            return 0
+        }
+        if (msg === gui.WmMsg.DESTROY) {
                 cleanupWs()
                 if (printWorker) {
                     printWorker.onmessage = null

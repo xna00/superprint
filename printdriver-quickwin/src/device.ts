@@ -1,4 +1,5 @@
 import * as win from 'win'
+import * as gui from 'gui'
 import { ffiCall, bufferPtr, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_SINT32 } from 'ffi'
 import { strToWideBuf, decodeWideAtPtr } from './utils.js'
 
@@ -10,8 +11,8 @@ const RegQueryValueExW = _advapi32 ? win.GetProcAddress(_advapi32, 'RegQueryValu
 const RegCloseKey = _advapi32 ? win.GetProcAddress(_advapi32, 'RegCloseKey') : null
 const GetComputerNameW = _kernel32 ? win.GetProcAddress(_kernel32, 'GetComputerNameW') : null
 
-const HKEY_LOCAL_MACHINE = 0x80000002
-const KEY_READ = 0x20019
+const HKEY_LOCAL_MACHINE = gui.HKey.LOCAL_MACHINE
+const KEY_READ = gui.RegAccess.READ
 
 export function getDeviceId(): string | null {
     if (!RegOpenKeyExW || !RegQueryValueExW || !RegCloseKey) {

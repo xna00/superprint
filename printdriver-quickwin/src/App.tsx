@@ -43,10 +43,10 @@ export function App(_props: AppProps) {
 
     useEffect(() => {
         if (!logListRef.current) return
-        const lbHwnd = gui.GetWindow(logListRef.current, 5)
+        const lbHwnd = gui.GetWindow(logListRef.current, gui.GetWindowCmd.CHILD)
         if (lbHwnd) {
-            const count = gui.SendMessage(lbHwnd, 395, 0, 0)
-            gui.SendMessage(lbHwnd, 407, Math.max(0, count - 1), 0)
+            const count = gui.SendMessage(lbHwnd, gui.LbMsg.GETCOUNT, 0, 0)
+            gui.SendMessage(lbHwnd, gui.LbMsg.SETTOPINDEX, Math.max(0, count - 1), 0)
         }
     }, [logs])
 

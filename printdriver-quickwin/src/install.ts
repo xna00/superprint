@@ -2,7 +2,8 @@ import * as std from 'std'
 import * as win from 'win'
 import * as os from 'os'
 import { ffiCall, readByte, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT64 } from 'ffi'
-import { strToWideBuf, readPtr, getExePath } from './utils.js'
+import * as gui from 'gui'
+import { strToWideBuf, readPtr, getExePath, guidStrToBytes } from './utils.js'
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -52,7 +53,7 @@ function mkdirW(path: string): boolean {
   const pGLE = win.GetProcAddress(k32, 'GetLastError')
   if (!pGLE) return false
   const err = ffiCall(pGLE, [], [], FFI_TYPE_SINT32) as number
-  return err === 0x0B7 // ERROR_ALREADY_EXISTS
+  return err === gui.ErrorCode.ALREADY_EXISTS
 }
 
 function deleteFileW(path: string): boolean {
@@ -93,8 +94,6 @@ function moveFileW(oldPath: string, newPath: string): boolean {
   return hr !== 0
 }
 
-const CREATE_NO_WINDOW = 0x08000000
-
 function spawnDetached(cmdLine: string, cwd: string): void {
   const k32 = win.LoadLibrary('kernel32.dll')
   if (!k32) throw new Error('加载 kernel32.dll 失败')
@@ -109,7 +108,7 @@ function spawnDetached(cmdLine: string, cwd: string): void {
      FFI_TYPE_POINTER, FFI_TYPE_SINT32, FFI_TYPE_UINT32,
      FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER,
      FFI_TYPE_POINTER],
-    [null, strToWideBuf(cmdLine), null, null, 0, CREATE_NO_WINDOW,
+    [null, strToWideBuf(cmdLine), null, null, 0, gui.ProcessCreationFlag.NO_WINDOW,
      null, strToWideBuf(cwd), si, pi],
     FFI_TYPE_SINT32) as number
   if (!ok) throw new Error('CreateProcessW 失败')
@@ -118,10 +117,6 @@ function spawnDetached(cmdLine: string, cwd: string): void {
 // ---------------------------------------------------------------------------
 // registry  (advapi32.dll)
 // ---------------------------------------------------------------------------
-
-const HKCU = 0x80000001
-const KEY_SET_VALUE = 0x0002
-const REG_SZ = 1
 
 function regSetRun(cmdLine: string): boolean {
   const a32 = win.LoadLibrary('advapi32.dll')
@@ -136,7 +131,7 @@ function regSetRun(cmdLine: string): boolean {
 
   const hr = ffiCall(pCreate,
     [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
-    [HKCU, keyW, 0, null, 0, KEY_SET_VALUE, null, hKeyBuf, null],
+    [gui.HKey.CURRENT_USER, keyW, 0, null, 0, gui.RegAccess.SET_VALUE, null, hKeyBuf, null],
     FFI_TYPE_SINT32) as number
   if (hr !== 0) return false
 
@@ -145,7 +140,7 @@ function regSetRun(cmdLine: string): boolean {
   const dataW = strToWideBuf(cmdLine)
   const hr2 = ffiCall(pSet,
     [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
-    [hKey, nameW, 0, REG_SZ, dataW, cmdLine.length * 2 + 2],
+    [hKey, nameW, 0, gui.RegType.SZ, dataW, cmdLine.length * 2 + 2],
     FFI_TYPE_SINT32) as number
   ffiCall(pClose, [FFI_TYPE_UINT32], [hKey], FFI_TYPE_SINT32)
   return hr2 === 0
@@ -160,7 +155,7 @@ function regDeleteRun(): boolean {
   const nameW = strToWideBuf('SuperPrint')
   const hr = ffiCall(pDel,
     [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
-    [HKCU, keyW, nameW],
+    [gui.HKey.CURRENT_USER, keyW, nameW],
     FFI_TYPE_SINT32) as number
   // ERROR_FILE_NOT_FOUND = 2  → value doesn't exist, success
   return hr === 0 || hr === 2
@@ -175,15 +170,8 @@ const CLSID_ShellLink = new Uint8Array([
   0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46,
 ]).buffer
 
-const IID_IShellLinkW = new Uint8Array([
-  0xF9, 0x14, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46,
-]).buffer
-
-const IID_IPersistFile = new Uint8Array([
-  0x0B, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46,
-]).buffer
+const IID_IShellLinkW = guidStrToBytes(gui.Guid.IID_ISHELLLINKW)
+const IID_IPersistFile = guidStrToBytes(gui.Guid.IID_IPERSISTFILE)
 
 const VT_IDX_QI = 0
 const VT_IDX_RELEASE = 2

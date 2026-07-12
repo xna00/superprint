@@ -1,5 +1,6 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
+import * as gui from 'gui'
 import * as os from 'os'
 import { ffiCall, bufferPtr, FFI_TYPE_POINTER, FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_UINT32 } from 'ffi'
 import * as win from 'win'
@@ -34,10 +35,10 @@ function gle(): number {
     return GetLastError ? ffiCall(GetLastError, [], [], FFI_TYPE_UINT32) as number : 0
 }
 
-const HORZRES = 8
-const VERTRES = 10
-const LOGPIXELSX = 88
-const LOGPIXELSY = 90
+const HORZRES = gui.DeviceCap.HORZRES
+const VERTRES = gui.DeviceCap.VERTRES
+const LOGPIXELSX = gui.DeviceCap.LOGPIXELSX
+const LOGPIXELSY = gui.DeviceCap.LOGPIXELSY
 
 interface DibResult {
     data: ArrayBuffer
@@ -164,12 +165,12 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                     ffiCall(
                         DocumentPropertiesW,
                         [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
-                        [0, hPrinter, printerNameBuf, devmodeBuf, null, 2],
+                        [0, hPrinter, printerNameBuf, devmodeBuf, null, gui.DevMode.OUT_BUFFER],
                         FFI_TYPE_SINT32
                     )
                     const dv = new DataView(devmodeBuf)
                     // set DM_DUPLEX flag at offset 72 (dmFields)
-                    dv.setUint32(72, dv.getUint32(72, true) | 0x1000, true)
+                    dv.setUint32(72, dv.getUint32(72, true) | gui.DevMode.DUPLEX, true)
                     // dmDuplex at offset 94: 1=simplex, 2=vertical, 3=horizontal
                     const duplexVal: number = duplex ? (tumble ? 3 : 2) : 1
                     dv.setUint16(94, duplexVal, true)
@@ -263,7 +264,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                     ], [
                         hdc, 0, 0, paperW, paperH,
                         0, 0, dib.w, dib.h,
-                        dib.data, bmi, 0, 0x00CC0020
+                        dib.data, bmi, 0, gui.RasterOp.SRCCOPY
                     ], FFI_TYPE_SINT32)
                     if (sdRet <= 0) {
                         console.log('[worker] StretchDIBits failed for page ' + i + ', ret=' + sdRet + ' GLE=' + gle())
