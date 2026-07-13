@@ -232,7 +232,8 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
 
     if (docRet <= 0) {
         console.log('[worker] StartDocW failed, ret=' + docRet + ' GLE=' + gle())
-        ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+        const ddRet = ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+        console.log('[worker] DeleteDC (startdoc fail path) returned:', ddRet)
         return false
     }
 
@@ -284,16 +285,18 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         console.log('[worker] PDF processing error:', e instanceof Error ? e.stack : String(e))
         const edRet = ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
         if (edRet <= 0) console.log('[worker] EndDoc on error path failed, ret=' + edRet + ' GLE=' + gle())
+        console.log('[worker] calling DeleteDC (error path)')
         const ddRet = ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-        if (!ddRet) console.log('[worker] DeleteDC on error path failed, GLE=' + gle())
+        console.log('[worker] DeleteDC (error path) returned:', ddRet, 'GLE=' + gle())
         if (doc) try { doc.destroy() } catch {}
         return false
     }
 
     const edRet = ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
     if (edRet <= 0) console.log('[worker] EndDoc failed, ret=' + edRet + ' GLE=' + gle())
+    console.log('[worker] calling DeleteDC (success path)')
     const ddRet = ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-    if (!ddRet) console.log('[worker] DeleteDC failed, GLE=' + gle())
+    console.log('[worker] DeleteDC (success path) returned:', ddRet, 'GLE=' + gle())
     if (doc) try { doc.destroy() } catch {}
 
     console.log('[worker] printPdf done')

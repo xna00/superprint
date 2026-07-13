@@ -341,9 +341,11 @@ function uninstallStepFiles(): boolean {
 
   // 1. clear _cache
   const cacheDir = installDir + '\\_cache'
-  const cacheFiles = os.readdir(cacheDir)
+  const dirResult = os.readdir(cacheDir)
+  const cacheFiles = dirResult ? dirResult[0] : null
   if (cacheFiles) {
     for (let i = 0; i < cacheFiles.length; i++) {
+      if (cacheFiles[i] === '.' || cacheFiles[i] === '..') continue
       deleteFileW(cacheDir + '\\' + cacheFiles[i])
     }
   }
