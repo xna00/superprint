@@ -10,6 +10,7 @@ import { connectWs } from './ws.js'
 import { LoginForm } from './components/LoginForm.js'
 import { PrintersTab } from './components/PrintersTab.js'
 import { SettingsTab } from './components/SettingsTab.js'
+import { QRTestTab } from './components/QRTestTab.js'
 
 const VISIBLE = gui.WindowStyle.VISIBLE
 const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
@@ -203,6 +204,10 @@ export function App(_props: AppProps) {
                 {
                     title: '设置',
                     content: <SettingsTab />,
+                },
+                {
+                    title: '二维码测试',
+                    content: <QRTestTab />,
                 },
             ]} style={{ flexGrow: 1 }} />
         </w>
