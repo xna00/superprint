@@ -66,7 +66,7 @@ function runMainApp() {
             if (msg === WM_TRAY) {
                 const evt = lParam
                 if (evt === gui.WmMsg.LBUTTONDOWN) {
-                    gui.ShowWindow(hwnd, gui.ShowWindowCmd.SHOW)
+                    gui.ShowWindow(hwnd, 9)
                     gui.SetForegroundWindow(hwnd)
                 } else if (evt === gui.WmMsg.RBUTTONDOWN || evt === gui.WmMsg.CONTEXTMENU) {
                     gui.SetForegroundWindow(hwnd)
@@ -81,7 +81,7 @@ function runMainApp() {
                         const cmd = gui.TrackPopupMenu(hMenu, x, y, undefined, hwnd)
                         gui.DestroyMenu(hMenu)
                         if (cmd === 1) {
-                            gui.ShowWindow(hwnd, gui.ShowWindowCmd.SHOW)
+                            gui.ShowWindow(hwnd, 9)
                         } else if (cmd === 2) {
                             gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd, uID: 1 })
                             gui.PostQuitMessage(0)
