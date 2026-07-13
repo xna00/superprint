@@ -27,7 +27,7 @@ export function App(_props: AppProps) {
     const [wsStatus, setWsStatus] = useState('未连接')
     const [logs, setLogs] = useState<string[]>([])
     const logListRef = useRef<gui.HWND>(null)
-    const MAX_LOG = 200
+    const MAX_LOG = 100
 
     const addLog = (msg: string) => {
         const now = new Date()
