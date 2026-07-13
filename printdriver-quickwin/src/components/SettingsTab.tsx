@@ -21,7 +21,7 @@ export function SettingsTab() {
   })
 
   return (
-    <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 8, flexGrow: 1 }}>
+    <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 8, flexGrow: 1, padding: 8 }}>
       <CheckBox
         checked={minimizeToTray}
         onChange={(v) => { setMinimizeToTray(v); storageSet('minimizeToTray', v) }}
@@ -35,24 +35,26 @@ export function SettingsTab() {
         style={{ height: 26 }}
       />
       <w type="STATIC" ws={VISIBLE} text={"构建时间: " + BUILD_TIME} style={{ height: 22 }} />
-      <Button onClick={checkAndUpdate} style={{ height: 26 }}>检查更新</Button>
-      <Button onClick={() => { console.log('[gc] manual GC triggered'); std.gc() }} style={{ height: 26 }}>释放内存 (GC)</Button>
-      <Button onClick={() => {
-        const exe = getExePath()
-        const installDir = exe.substring(0, exe.lastIndexOf('\\'))
-        const cacheDir = installDir + '\\_cache'
-        console.log('[cache] exe:', exe)
-        console.log('[cache] cacheDir:', cacheDir)
-        const dirResult = os.readdir(cacheDir)
-        const names = dirResult ? dirResult[0] : null
-        if (names) {
-          for (let i = 0; i < names.length; i++) {
-            if (names[i] === '.' || names[i] === '..') continue
-            os.remove(cacheDir + '\\' + names[i])
+      <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'row', gap: 4 }}>
+        <Button onClick={checkAndUpdate} style={{ width: 110, height: 26 }}>检查更新</Button>
+        <Button onClick={() => { console.log('[gc] manual GC triggered'); std.gc() }} style={{ width: 110, height: 26 }}>释放内存 (GC)</Button>
+        <Button onClick={() => {
+          const exe = getExePath()
+          const installDir = exe.substring(0, exe.lastIndexOf('\\'))
+          const cacheDir = installDir + '\\_cache'
+          console.log('[cache] exe:', exe)
+          console.log('[cache] cacheDir:', cacheDir)
+          const dirResult = os.readdir(cacheDir)
+          const names = dirResult ? dirResult[0] : null
+          if (names) {
+            for (let i = 0; i < names.length; i++) {
+              if (names[i] === '.' || names[i] === '..') continue
+              os.remove(cacheDir + '\\' + names[i])
+            }
           }
-        }
-        console.log('[cache] cleared: ' + (names ? names.length : 0) + ' files')
-      }} style={{ height: 26 }}>清除缓存</Button>
+          console.log('[cache] cleared: ' + (names ? names.length : 0) + ' files')
+        }} style={{ width: 110, height: 26 }}>清除缓存</Button>
+      </w>
     </w>
   )
 }

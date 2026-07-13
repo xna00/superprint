@@ -28,7 +28,7 @@ export function PrintersTab({ computerId, computerName, username, wsStatus, prin
         status: p.enabled ? '启用' : '禁用',
     }))
     return (
-        <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 4, flexGrow: 1 }}>
+        <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 4, flexGrow: 1, padding: 8 }}>
             <w type="STATIC" ws={VISIBLE} text={'设备ID: ' + computerId} style={{ height: 24 }} />
             <w type="STATIC" ws={VISIBLE} text={'计算机: ' + computerName} style={{ height: 24 }} />
             <w type="STATIC" ws={VISIBLE} text={'用户: ' + username} style={{ height: 24 }} />

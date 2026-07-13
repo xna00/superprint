@@ -57,10 +57,17 @@ function runMainApp() {
     const winH = 400
     const WM_TRAY = 0x8001
 
+    const scale = gui.GetScaleFactor()
+    const [scrW, scrH] = gui.GetScreenSize()
+    const cx = Math.max(0, Math.floor((scrW / scale - winW) / 2))
+    const cy = Math.max(0, Math.floor((scrH / scale - winH) / 2))
+
     const root = createRoot({
         text: 'SuperPrint',
         width: winW,
         height: winH,
+        x: cx,
+        y: cy,
         noShowWindow: true,
         onEvent: ({ hwnd, msg, wParam, lParam }) => {
             if (msg === WM_TRAY) {
