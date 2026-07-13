@@ -30,8 +30,9 @@ export function App(_props: AppProps) {
     const MAX_LOG = 200
 
     const addLog = (msg: string) => {
-        const d = new Date()
-        const ts = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`
+        const now = new Date()
+        const local8 = new Date(now.getTime() + 8 * 3600000)
+        const ts = `${local8.getUTCMonth()+1}/${local8.getUTCDate()} ${String(local8.getUTCHours()).padStart(2,'0')}:${String(local8.getUTCMinutes()).padStart(2,'0')}:${String(local8.getUTCSeconds()).padStart(2,'0')}`
         const line = `[${ts}] ${msg}`
         console.log('[log]', line)
         setLogs(prev => [...prev.slice(-(MAX_LOG - 1)), line])
