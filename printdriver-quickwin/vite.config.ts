@@ -27,7 +27,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     outDir: 'dist',
-    minify: true,
+    minify: false,
     modulePreload: false,
     rollupOptions: {
       input: 'dist-tsgo/entry.js',
@@ -35,13 +35,28 @@ export default defineConfig({
         format: 'es',
         entryFileNames: 'entry.js',
         chunkFileNames: 'chunks/[name]-[hash]--immutable--.js',
-        manualChunks(id) {
-          if (id.includes('quickwin\\lib\\') || id.includes('quickwin/lib/')) {
-            return 'lib'
-          }
-          if (!id.includes('dist-tsgo\\entry') && !id.includes('dist-tsgo/entry')) {
-            return 'vendor'
-          }
+        codeSplitting: {
+          includeDependenciesRecursively: false,
+          groups: [
+            {
+              name: 'lib',
+              test: /quickwin[\\/]lib/,
+              tags: ['$initial'],
+              priority: 20,
+            },
+            {
+              name: 'vendor',
+              test: /node_modules/,
+              tags: ['$initial'],
+              priority: 10,
+            },
+            {
+              name: 'app',
+              test(id) { return !id.includes('entry') },
+              tags: ['$initial'],
+              priority: 1,
+            },
+          ],
         },
       },
       external: (id) => {
@@ -51,3 +66,4 @@ export default defineConfig({
     },
   },
 })
+

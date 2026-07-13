@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import * as gui from 'gui'
 import * as os from 'os'
 import { Tab, ListBox } from 'quickwin/lib/react-qw/index.js'
@@ -10,10 +10,12 @@ import { connectWs } from './ws.js'
 import { LoginForm } from './components/LoginForm.js'
 import { PrintersTab } from './components/PrintersTab.js'
 import { SettingsTab } from './components/SettingsTab.js'
-import { QRTestTab } from './components/QRTestTab.js'
+
 
 const VISIBLE = gui.WindowStyle.VISIBLE
 const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
+
+const QRTestTab = lazy(() => import('./components/QRTestTab.js').then(m => ({ default: m.QRTestTab })))
 
 interface AppProps {}
 
@@ -207,7 +209,7 @@ export function App(_props: AppProps) {
                 },
                 {
                     title: '二维码测试',
-                    content: <QRTestTab />,
+                    content: <Suspense fallback={null}><QRTestTab /></Suspense>,
                 },
             ]} style={{ flexGrow: 1 }} />
         </w>
