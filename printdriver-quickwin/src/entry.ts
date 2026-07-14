@@ -9,7 +9,7 @@ fetch(baseUrl + '.vite/manifest.json')
       const entry = info as any
       if (entry.isDynamicEntry && entry.file && entry.file.endsWith('.js')) {
         const url = baseUrl + entry.file
-        console.log('[preload]', src, '→', entry.file)
+        console.log('[preload]', src, url)
         fetch(url)
           .then(() => console.log('[preload] done:', entry.file))
           .catch(e => console.log('[preload] error:', entry.file, e))
