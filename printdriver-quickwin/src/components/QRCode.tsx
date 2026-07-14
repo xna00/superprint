@@ -25,24 +25,21 @@ export function QRCode({ text, size }: QRCodeProps) {
         qr.addData(text)
         qr.make()
         const moduleCount = qr.getModuleCount()
-        const moduleSize = Math.floor(size / moduleCount)
-        const bmpSize = moduleSize * moduleCount
+        const scale = size / moduleCount
 
-        const stride = bmpSize * 4
-        const buf = new Uint8Array(bmpSize * stride)
-        for (let y = 0; y < moduleCount; y++) {
-            for (let x = 0; x < moduleCount; x++) {
-                const dark = qr.isDark(y, x)
-                for (let py = 0; py < moduleSize; py++) {
-                    for (let px = 0; px < moduleSize; px++) {
-                        const off = (y * moduleSize + py) * stride + (x * moduleSize + px) * 4
-                        const v = dark ? 0 : 255
-                        buf[off] = v
-                        buf[off + 1] = v
-                        buf[off + 2] = v
-                        buf[off + 3] = 255
-                    }
-                }
+        const stride = size * 4
+        const buf = new Uint8Array(size * stride)
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const moduleY = Math.min(Math.floor(y / scale), moduleCount - 1)
+                const moduleX = Math.min(Math.floor(x / scale), moduleCount - 1)
+                const dark = qr.isDark(moduleY, moduleX)
+                const off = y * stride + x * 4
+                const v = dark ? 0 : 255
+                buf[off] = v
+                buf[off + 1] = v
+                buf[off + 2] = v
+                buf[off + 3] = 255
             }
         }
 
@@ -50,7 +47,7 @@ export function QRCode({ text, size }: QRCodeProps) {
             deleteObject(hbmpRef.current)
         }
 
-        const hbmp = createBitmap(bmpSize, bmpSize, 32, buf.buffer)
+        const hbmp = createBitmap(size, size, 32, buf.buffer)
         hbmpRef.current = hbmp
 
         const oldBmp = gui.SendMessage(hStatic, STM_SETIMAGE, IMAGE_BITMAP, hbmp) as number
