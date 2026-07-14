@@ -28,6 +28,7 @@ export default defineConfig({
     target: 'es2022',
     outDir: 'dist',
     minify: false,
+    manifest: true,
     modulePreload: false,
     rollupOptions: {
       input: 'dist-tsgo/entry.js',
