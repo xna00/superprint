@@ -207,10 +207,10 @@ export function App(_props: AppProps) {
                     title: '设置',
                     content: <SettingsTab />,
                 },
-                {
-                    title: '二维码测试',
-                    content: <Suspense fallback={null}><QRTestTab /></Suspense>,
-                },
+                // {
+                //     title: '二维码测试',
+                //     content: <Suspense fallback={null}><QRTestTab /></Suspense>,
+                // },
             ]} style={{ flexGrow: 1 }} />
         </w>
     )
