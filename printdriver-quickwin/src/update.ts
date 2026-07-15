@@ -9,6 +9,7 @@ import { api } from './api.js'
 import { cleanupWs } from './ws.js'
 import { destroyPrintWorker } from './main.js'
 import { logger } from './logger.js'
+import hashWorkerUrl from './hash-worker?worker&url'
 
 const CHECK_INTERVAL = 5 * 60 * 1000
 
@@ -27,17 +28,17 @@ function initFfi() {
   pCreateProcessW = kernel32 ? win.GetProcAddress(kernel32, 'CreateProcessW') : null
 }
 
-async function sha1File(filePath: string): Promise<string> {
-  const f = std.open(filePath, 'rb')
-  if (!f) return ''
-  try {
-    f.seek(0, 2); const size = f.tell(); f.seek(0, 0)
-    const buf = new ArrayBuffer(size); f.read(buf, 0, size);
-    const hashBuffer = await crypto.subtle.digest('SHA-1', buf)
-    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
-  } finally {
-    f.close()
-  }
+let hashWorker: os.Worker | null = null
+
+function sha1File(filePath: string): Promise<string> {
+    return new Promise((resolve) => {
+        hashWorker = new os.Worker(hashWorkerUrl)
+        hashWorker.onmessage = (e) => {
+            hashWorker = null
+            resolve(e.data.hash)
+        }
+        hashWorker.postMessage({ filePath })
+    })
 }
 
 
