@@ -2,7 +2,7 @@ import "./main.js"
 
 const baseUrl = import.meta.url.substring(0, import.meta.url.lastIndexOf('/') + 1)
 
-fetch(baseUrl + '.vite/manifest.json')
+fetch(baseUrl + 'vite_manifest.json?t=' + Date.now())
   .then(r => r.json())
   .then(m => {
     for (const [src, info] of Object.entries(m)) {

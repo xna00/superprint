@@ -38,4 +38,13 @@ function walk(dir) {
 }
 walk(dist)
 
+// 5. Move .vite/manifest.json to vite_manifest.json (avoid hidden dir being stripped by upload-artifact)
+const manifestSrc = path.join(dist, '.vite', 'manifest.json')
+const manifestDst = path.join(dist, 'vite_manifest.json')
+if (fs.existsSync(manifestSrc)) {
+  fs.copyFileSync(manifestSrc, manifestDst)
+  fs.rmSync(path.join(dist, '.vite'), { recursive: true, force: true })
+  console.log('postbuild: moved .vite/manifest.json -> vite_manifest.json')
+}
+
 console.log('postbuild: done, entry hash =', hash)
