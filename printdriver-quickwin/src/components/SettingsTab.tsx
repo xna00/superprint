@@ -7,6 +7,7 @@ import { storageGet, storageSet } from '../storage.js'
 import { BUILD_TIME } from '../config.js'
 import { checkAndUpdate } from '../update.js'
 import { getExePath } from '../utils.js'
+import { logger } from '../logger.js'
 
 const VISIBLE = gui.WindowStyle.VISIBLE
 
@@ -37,13 +38,13 @@ export function SettingsTab() {
       <w type="STATIC" ws={VISIBLE} text={"构建时间: " + BUILD_TIME} style={{ height: 22 }} />
       <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'row', gap: 4 }}>
         <Button onClick={checkAndUpdate} style={{ width: 110, height: 26 }}>检查更新</Button>
-        <Button onClick={() => { console.log('[gc] manual GC triggered'); std.gc() }} style={{ width: 110, height: 26 }}>释放内存 (GC)</Button>
+        <Button onClick={() => { logger.log('[gc] manual GC triggered'); std.gc() }} style={{ width: 110, height: 26 }}>释放内存 (GC)</Button>
         <Button onClick={() => {
           const exe = getExePath()
           const installDir = exe.substring(0, exe.lastIndexOf('\\'))
           const cacheDir = installDir + '\\_cache'
-          console.log('[cache] exe:', exe)
-          console.log('[cache] cacheDir:', cacheDir)
+          logger.log('[cache] exe:', exe)
+          logger.log('[cache] cacheDir:', cacheDir)
           const dirResult = os.readdir(cacheDir)
           const names = dirResult ? dirResult[0] : null
           if (names) {
@@ -52,7 +53,7 @@ export function SettingsTab() {
               os.remove(cacheDir + '\\' + names[i])
             }
           }
-          console.log('[cache] cleared: ' + (names ? names.length : 0) + ' files')
+          logger.log('[cache] cleared: ' + (names ? names.length : 0) + ' files')
         }} style={{ width: 110, height: 26 }}>清除缓存</Button>
       </w>
     </w>

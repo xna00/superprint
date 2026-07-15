@@ -1,6 +1,5 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
-import 'quickwin/lib/websocket.js'
 import * as gui from 'gui'
 import * as os from 'os'
 import * as std from 'std'
@@ -9,48 +8,59 @@ import { cleanupWs } from './ws.js'
 import { setPrintWorker } from './print-queue.js'
 import type { PrintWorker, WorkerInMsg } from './worker-types.js'
 import { App } from './App.js'
-import { startUpdateCheck, timer } from './update.js'
 import { storageGet } from './storage.js'
-import { InstallApp } from './components/InstallApp.js'
-import { UninstallApp } from './components/UninstallApp.js'
+import { logger } from './logger.js'
+import { startUpdateCheck, clearUpdateTimer } from './update.js'
 
 const args = scriptArgs.slice(0)
-console.log('[main] scriptArgs:', args)
+logger.log('[main] scriptArgs:', args)
 
 const SETUP_W = 400
 const SETUP_H = 220
 
 if (args.includes('--uninstall')) {
-    const root = createRoot({
-        text: '超人打印 - 卸载',
-        width: SETUP_W,
-        height: SETUP_H,
-        onEvent: ({ msg }) => {
-            if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
-                gui.PostQuitMessage(0)
-                return 0
+    import('./components/UninstallApp.js').then(({ UninstallApp }) => {
+        const root = createRoot({
+            text: '超人打印 - 卸载',
+            width: SETUP_W,
+            height: SETUP_H,
+            onEvent: ({ msg }) => {
+                if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
+                    gui.PostQuitMessage(0)
+                    return 0
+                }
             }
-        }
+        })
+        root.render(<UninstallApp onComplete={() => gui.PostQuitMessage(0)} />)
     })
-    root.render(<UninstallApp onComplete={() => gui.PostQuitMessage(0)} />)
 } else if (!args.includes('--run')) {
-    const root = createRoot({
-        text: '超人打印 - 安装',
-        width: SETUP_W,
-        height: SETUP_H,
-        onEvent: ({ msg }) => {
-            if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
-                gui.PostQuitMessage(0)
-                return 0
+    import('./components/InstallApp.js').then(({ InstallApp }) => {
+        const root = createRoot({
+            text: '超人打印 - 安装',
+            width: SETUP_W,
+            height: SETUP_H,
+            onEvent: ({ msg }) => {
+                if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
+                    gui.PostQuitMessage(0)
+                    return 0
+                }
             }
-        }
+        })
+        root.render(<InstallApp onComplete={() => gui.PostQuitMessage(0)} />)
     })
-    root.render(<InstallApp onComplete={() => gui.PostQuitMessage(0)} />)
 } else runMainApp()
 
 export let printWorker: PrintWorker | null = null
 
 import pWorkerUrl from './print-worker?worker&url'
+
+export function destroyPrintWorker() {
+    if (printWorker) {
+        printWorker.onmessage = null
+        printWorker.postMessage({ type: 'done' })
+        printWorker = null
+    }
+}
 
 function runMainApp() {
     const winW = 600
@@ -108,13 +118,8 @@ function runMainApp() {
         }
         if (msg === gui.WmMsg.DESTROY) {
                 cleanupWs()
-                if (printWorker) {
-                    printWorker.onmessage = null
-                    printWorker.postMessage({ type: 'done' })
-                }
-                if (timer !== null) {
-                    os.clearTimeout(timer)
-                }
+                destroyPrintWorker()
+                clearUpdateTimer()
                 gui.PostQuitMessage(0)
                 return 0
             }
@@ -141,12 +146,12 @@ function runMainApp() {
         std.out.flush()
     }
 
-    console.log('[main] worker URL:', pWorkerUrl)
+    logger.log('[main] worker URL:', pWorkerUrl)
     printWorker = new os.Worker(pWorkerUrl) as any as PrintWorker
     setPrintWorker(printWorker)
-    console.log('[main] print worker initialized')
+    logger.log('[main] print worker initialized')
 
     if (globalThis.checkUpdate !== false) {
-        startUpdateCheck()
+        os.setTimeout(startUpdateCheck, 1000)
     }
 }

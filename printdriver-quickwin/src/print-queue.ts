@@ -2,6 +2,7 @@ import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
 import * as os from 'os'
 import type { PrintWorker, WorkerOutMsg } from './worker-types.js'
+import { logger } from './logger.js'
 import { api } from './api.js'
 import { getDefaultPrinter } from './printer.js'
 
@@ -46,7 +47,7 @@ export function setPrintWorker(worker: PrintWorker): void {
 }
 
 function log(msg: string): void {
-    console.log('[print-queue]', msg)
+    logger.log('[print-queue]', msg)
     logFn(msg)
 }
 

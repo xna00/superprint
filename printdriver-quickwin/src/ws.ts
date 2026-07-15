@@ -1,3 +1,4 @@
+import 'quickwin/lib/websocket.js'
 import * as os from 'os'
 import { getCookie } from './storage.js'
 import { getDeviceId } from './device.js'

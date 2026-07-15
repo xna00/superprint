@@ -3,6 +3,7 @@ import 'quickwin/lib/fetch.js'
 import { createHandler } from 'api/index.js'
 import { API_BASE_URLS } from './config.js'
 import { getCookie, setCookie } from './storage.js'
+import { logger } from './logger.js'
 
 const firstBase = API_BASE_URLS[0]
 
@@ -28,7 +29,7 @@ export const api = createHandler(firstBase, {
         return res
       } catch (e) {
         lastErr = e;
-        console.log(base, "failed, try next!")
+        logger.log(base, "failed, try next!")
       }
     }
     throw lastErr

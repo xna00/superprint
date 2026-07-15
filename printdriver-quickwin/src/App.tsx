@@ -4,12 +4,15 @@ import * as os from 'os'
 import { Tab, ListBox } from 'quickwin/lib/react-qw/index.js'
 import { api } from './api.js'
 import { getDeviceId, getComputerName } from './device.js'
-import { enumLocalPrinters, getDefaultPrinter, type LocalPrinterInfo } from './printer.js'
+import { enumLocalPrinters, type LocalPrinterInfo } from './printer.js'
 import { setLogger } from './print-queue.js'
 import { connectWs } from './ws.js'
+import { logger } from './logger.js'
 import { LoginForm } from './components/LoginForm.js'
 import { PrintersTab } from './components/PrintersTab.js'
-import { SettingsTab } from './components/SettingsTab.js'
+
+
+const SettingsTab = lazy(() => import('./components/SettingsTab.js').then(m => ({ default: m.SettingsTab })))
 
 
 const VISIBLE = gui.WindowStyle.VISIBLE
@@ -37,7 +40,7 @@ export function App(_props: AppProps) {
         const local8 = new Date(now.getTime() + 8 * 3600000)
         const ts = `${local8.getUTCMonth()+1}/${local8.getUTCDate()} ${String(local8.getUTCHours()).padStart(2,'0')}:${String(local8.getUTCMinutes()).padStart(2,'0')}:${String(local8.getUTCSeconds()).padStart(2,'0')}`
         const line = `[${ts}] ${msg}`
-        console.log('[log]', line)
+        logger.log('[log]', line)
         setLogs(prev => [...prev.slice(-(MAX_LOG - 1)), line])
     }
 
@@ -58,7 +61,7 @@ export function App(_props: AppProps) {
         try {
             addLog('[api] checking user...')
             const data = await api.user.currentUser()
-            console.log('[api] user:', JSON.stringify(data))
+            logger.log('[api] user:', JSON.stringify(data))
             if (data && data.username) {
                 setUsername(data.username)
                 addLog('[api] logged in: ' + data.username)
@@ -157,15 +160,6 @@ export function App(_props: AppProps) {
             addLog('[device] name: ' + compName)
         }
 
-        const localPrinters = enumLocalPrinters()
-        setPrinters(localPrinters)
-        addLog('[printer] found ' + localPrinters.length + ' printers')
-
-        const defPrinter = getDefaultPrinter()
-        if (defPrinter) {
-            addLog('[printer] default: ' + defPrinter)
-        }
-
         os.setTimeout(checkUser, 500)
     }, [])
 
@@ -205,7 +199,7 @@ export function App(_props: AppProps) {
                 },
                 {
                     title: '设置',
-                    content: <SettingsTab />,
+                    content: <Suspense fallback={null}><SettingsTab /></Suspense>,
                 },
                 // {
                 //     title: '二维码测试',
