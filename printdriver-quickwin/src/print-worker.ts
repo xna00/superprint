@@ -31,6 +31,11 @@ const EndPage = gdip('EndPage')
 const GetDeviceCaps = gdip('GetDeviceCaps')
 const StretchDIBits = gdip('StretchDIBits')
 const ResetDCW = gdip('ResetDCW')
+const CreateCompatibleDC = gdip('CreateCompatibleDC')
+const CreateDIBSection = gdip('CreateDIBSection')
+const SelectObject = gdip('SelectObject')
+const DeleteObject = gdip('DeleteObject')
+const PlgBlt = gdip('PlgBlt')
 const GetLastError = _kernel32 ? win.GetProcAddress(_kernel32, 'GetLastError') : 0
 function gle(): number {
     return GetLastError ? ffiCall(GetLastError, [], [], FFI_TYPE_UINT32) as number : 0
@@ -137,10 +142,15 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     }
 
     const _wspool = win.LoadLibrary('winspool.drv')
+    let hPrinter = 0
+    let devmodeBuf: ArrayBuffer | null = null
+    let DocumentPropertiesW: number | null = 0
+    let ClosePrinter: number | null = 0
+
     if (_wspool) {
         const OpenPrinterW = win.GetProcAddress(_wspool, 'OpenPrinterW')
-        const DocumentPropertiesW = win.GetProcAddress(_wspool, 'DocumentPropertiesW')
-        const ClosePrinter = win.GetProcAddress(_wspool, 'ClosePrinter')
+        DocumentPropertiesW = win.GetProcAddress(_wspool, 'DocumentPropertiesW')
+        ClosePrinter = win.GetProcAddress(_wspool, 'ClosePrinter')
         if (OpenPrinterW && DocumentPropertiesW && ClosePrinter) {
             const hPrinterBuf = new ArrayBuffer(8)
             const openRet = ffiCall(
@@ -151,7 +161,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
             )
             if (openRet) {
                 const hpDv = new DataView(hPrinterBuf)
-                const hPrinter = hpDv.getUint32(0, true) + hpDv.getUint32(4, true) * 4294967296
+                hPrinter = hpDv.getUint32(0, true) + hpDv.getUint32(4, true) * 4294967296
 
                 const dmSize = ffiCall(
                     DocumentPropertiesW,
@@ -161,54 +171,65 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                 )
 
                 if (dmSize > 0) {
-                    const devmodeBuf = new ArrayBuffer(dmSize)
-                    // fMode=2 (DM_OUT_BUFFER): fill devmodeBuf with current printer defaults
-                    ffiCall(
-                        DocumentPropertiesW,
-                        [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
-                        [0, hPrinter, printerNameBuf, devmodeBuf, null, gui.DevMode.OUT_BUFFER],
-                        FFI_TYPE_SINT32
-                    )
-                    const dv = new DataView(devmodeBuf)
-                    // set DM_DUPLEX flag at offset 72 (dmFields)
-                    dv.setUint32(72, dv.getUint32(72, true) | gui.DevMode.DUPLEX, true)
-                    // dmDuplex at offset 94: 1=simplex, 2=vertical, 3=horizontal
-                    const duplexVal: number = duplex ? (tumble ? 3 : 2) : 1
-                    dv.setUint16(94, duplexVal, true)
-                    // fMode=10 = DM_IN_BUFFER(8) | DM_OUT_BUFFER(2):
-                    // use our modified devmodeBuf as input and write the result back
-                    ffiCall(
-                        DocumentPropertiesW,
-                        [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
-                        [0, hPrinter, printerNameBuf, devmodeBuf, devmodeBuf, 10],
-                        FFI_TYPE_SINT32
-                    )
-                    const resetHdc = ffiCall(
-                        ResetDCW,
-                        [FFI_TYPE_UINT64, FFI_TYPE_POINTER],
-                        [hdc, devmodeBuf],
-                        FFI_TYPE_UINT64
-                    )
-                    if (!resetHdc) {
-                        logger.log('[worker] ResetDCW failed, GLE=' + gle())
-                    }
+                    devmodeBuf = new ArrayBuffer(dmSize)
                 } else {
-                    logger.log('[worker] DocumentPropertiesW failed for "' + printerName + '", dmSize=' + dmSize + ' GLE=' + gle())
+                    logger.log('[worker] DocumentPropertiesW size query failed, dmSize=' + dmSize + ' GLE=' + gle())
+                    DocumentPropertiesW = 0
                 }
-                ffiCall(ClosePrinter, [FFI_TYPE_UINT64], [hPrinter], FFI_TYPE_SINT32)
             } else {
                 logger.log('[worker] OpenPrinterW failed for "' + printerName + '", GLE=' + gle())
             }
         }
     }
 
-    const paperW = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, HORZRES], FFI_TYPE_SINT32)
-    const paperH = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, VERTRES], FFI_TYPE_SINT32)
+    let paperW = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, HORZRES], FFI_TYPE_SINT32)
+    let paperH = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, VERTRES], FFI_TYPE_SINT32)
     const dpiX = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, LOGPIXELSX], FFI_TYPE_SINT32)
     const dpiY = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, LOGPIXELSY], FFI_TYPE_SINT32)
     logger.log('[worker] paper:', paperW, 'x', paperH, 'dpi:', dpiX, 'x', dpiY)
     if (paperW <= 0 || paperH <= 0 || dpiX <= 0 || dpiY <= 0) {
         logger.log('[worker] WARNING: invalid paper/dpi from GetDeviceCaps')
+        ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+        return false
+    }
+
+    const duplexVal: number = duplex ? (tumble ? 3 : 2) : 1
+    if (devmodeBuf && hPrinter && DocumentPropertiesW) {
+        const outRet = ffiCall(
+            DocumentPropertiesW,
+            [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
+            [0, hPrinter, printerNameBuf, devmodeBuf, null, gui.DevMode.OUT_BUFFER],
+            FFI_TYPE_SINT32
+        )
+        if (outRet > 0) {
+            const dv = new DataView(devmodeBuf)
+            dv.setUint32(72, dv.getUint32(72, true) | gui.DevMode.DUPLEX, true)
+            dv.setUint16(94, duplexVal, true)
+            const dmRet = ffiCall(
+                DocumentPropertiesW,
+                [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
+                [0, hPrinter, printerNameBuf, devmodeBuf, devmodeBuf, 10],
+                FFI_TYPE_SINT32
+            )
+            if (dmRet > 0) {
+                const resetHdc = ffiCall(
+                    ResetDCW,
+                    [FFI_TYPE_UINT64, FFI_TYPE_POINTER],
+                    [hdc, devmodeBuf],
+                    FFI_TYPE_UINT64
+                )
+                if (resetHdc) {
+                    paperW = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, HORZRES], FFI_TYPE_SINT32)
+                    paperH = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, VERTRES], FFI_TYPE_SINT32)
+                } else {
+                    logger.log('[worker] ResetDCW duplex failed, GLE=' + gle())
+                }
+            } else {
+                logger.log('[worker] DocumentPropertiesW validation failed, ret=' + dmRet + ' GLE=' + gle())
+            }
+        } else {
+            logger.log('[worker] DocumentPropertiesW init failed, ret=' + outRet + ' GLE=' + gle())
+        }
     }
 
     const docNameBuf = strToWideBuf('SuperPrint')
@@ -235,6 +256,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         logger.log('[worker] StartDocW failed, ret=' + docRet + ' GLE=' + gle())
         const ddRet = ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
         logger.log('[worker] DeleteDC (startdoc fail path) returned:', ddRet)
+        if (hPrinter && ClosePrinter) ffiCall(ClosePrinter, [FFI_TYPE_UINT64], [hPrinter], FFI_TYPE_SINT32)
         return false
     }
 
@@ -255,21 +277,83 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
             try {
                 const dib = renderPdfPageToDib(mupdf, doc, i, scale)
                 if (dib) {
-                    const bmi = makeBitmapInfo(dib.w, dib.h)
-                    const sdRet = ffiCall(StretchDIBits, [
-                        FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                        FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                        FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                        FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                        FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32,
-                        FFI_TYPE_UINT32
-                    ], [
-                        hdc, 0, 0, paperW, paperH,
-                        0, 0, dib.w, dib.h,
-                        dib.data, bmi, 0, gui.RasterOp.SRCCOPY
-                    ], FFI_TYPE_SINT32)
-                    if (sdRet <= 0) {
-                        logger.log('[worker] StretchDIBits failed for page ' + i + ', ret=' + sdRet + ' GLE=' + gle())
+                    const paperW = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, HORZRES], FFI_TYPE_SINT32)
+                    const paperH = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, VERTRES], FFI_TYPE_SINT32)
+                    const isLandscape = dib.w > dib.h
+
+                    const finalW = isLandscape ? dib.h : dib.w
+                    const finalH = isLandscape ? dib.w : dib.h
+                    const scaleX = paperW / finalW
+                    const scaleY = paperH / finalH
+                    const sc = scaleX < scaleY ? scaleX : scaleY
+                    const drawW = Math.floor(finalW * sc)
+                    const drawH = Math.floor(finalH * sc)
+                    const drawX = Math.floor((paperW - drawW) / 2)
+                    const drawY = Math.floor((paperH - drawH) / 2)
+
+                    logger.log('[worker] page ' + i + ':', dib.w + 'x' + dib.h, isLandscape ? 'landscape' : 'portrait', 'paper:', paperW + 'x' + paperH, 'draw:', drawW + 'x' + drawH, 'at', drawX + ',' + drawY)
+
+                    if (isLandscape) {
+                        const memDC = ffiCall(CreateCompatibleDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_UINT64)
+                        if (memDC) {
+                            const bmi = makeBitmapInfo(dib.w, dib.h)
+                            const ppvBitsBuf = new ArrayBuffer(8)
+                            const hBitmap = ffiCall(CreateDIBSection, [
+                                FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_UINT32,
+                                FFI_TYPE_POINTER, FFI_TYPE_UINT64, FFI_TYPE_UINT32
+                            ], [memDC, bmi, 0, ppvBitsBuf, 0, 0], FFI_TYPE_UINT64)
+                            if (hBitmap) {
+                                const bitsPtr = new DataView(ppvBitsBuf).getBigUint64(0, true)
+                                const dibBytes = new Uint8Array(dib.data)
+                                const shared = new Uint8Array(Number(bitsPtr), dibBytes.byteLength, dibBytes.byteLength)
+                                shared.set(dibBytes)
+
+                                const oldBmp = ffiCall(SelectObject, [FFI_TYPE_UINT64, FFI_TYPE_UINT64], [memDC, hBitmap], FFI_TYPE_UINT64)
+
+                                const ptsBuf = new ArrayBuffer(24)
+                                const ptsView = new DataView(ptsBuf)
+                                ptsView.setInt32(0, drawX, true)
+                                ptsView.setInt32(4, drawY + drawH, true)
+                                ptsView.setInt32(8, drawX, true)
+                                ptsView.setInt32(12, drawY, true)
+                                ptsView.setInt32(16, drawX + drawW, true)
+                                ptsView.setInt32(20, drawY + drawH, true)
+
+                                const plgRet = ffiCall(PlgBlt, [
+                                    FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_UINT64,
+                                    FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                                    FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32
+                                ], [hdc, ptsBuf, memDC, 0, 0, dib.w, dib.h, 0, 0, 0], FFI_TYPE_SINT32)
+                                if (!plgRet) {
+                                    logger.log('[worker] PlgBlt failed for page ' + i + ', GLE=' + gle())
+                                }
+
+                                ffiCall(SelectObject, [FFI_TYPE_UINT64, FFI_TYPE_UINT64], [memDC, oldBmp], FFI_TYPE_UINT64)
+                                ffiCall(DeleteObject, [FFI_TYPE_UINT64], [hBitmap], FFI_TYPE_SINT32)
+                            } else {
+                                logger.log('[worker] CreateDIBSection failed, GLE=' + gle())
+                            }
+                            ffiCall(DeleteDC, [FFI_TYPE_UINT64], [memDC], FFI_TYPE_SINT32)
+                        } else {
+                            logger.log('[worker] CreateCompatibleDC failed, GLE=' + gle())
+                        }
+                    } else {
+                        const bmi = makeBitmapInfo(dib.w, dib.h)
+                        const sdRet = ffiCall(StretchDIBits, [
+                            FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                            FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32,
+                            FFI_TYPE_UINT32
+                        ], [
+                            hdc, drawX, drawY, drawW, drawH,
+                            0, 0, dib.w, dib.h,
+                            dib.data, bmi, 0, gui.RasterOp.SRCCOPY
+                        ], FFI_TYPE_SINT32)
+                        if (sdRet <= 0) {
+                            logger.log('[worker] StretchDIBits failed for page ' + i + ', ret=' + sdRet + ' GLE=' + gle())
+                        }
                     }
                 } else {
                     logger.log('[worker] page ' + i + ' render failed')
@@ -289,6 +373,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         logger.log('[worker] calling DeleteDC (error path)')
         const ddRet = ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
         logger.log('[worker] DeleteDC (error path) returned:', ddRet, 'GLE=' + gle())
+        if (hPrinter && ClosePrinter) ffiCall(ClosePrinter, [FFI_TYPE_UINT64], [hPrinter], FFI_TYPE_SINT32)
         if (doc) try { doc.destroy() } catch {}
         return false
     }
@@ -298,6 +383,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     logger.log('[worker] calling DeleteDC (success path)')
     const ddRet = ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
     logger.log('[worker] DeleteDC (success path) returned:', ddRet, 'GLE=' + gle())
+    if (hPrinter && ClosePrinter) ffiCall(ClosePrinter, [FFI_TYPE_UINT64], [hPrinter], FFI_TYPE_SINT32)
     if (doc) try { doc.destroy() } catch {}
 
     logger.log('[worker] printPdf done')
