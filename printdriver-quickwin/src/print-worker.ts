@@ -47,7 +47,6 @@ interface DibResult {
     data: ArrayBuffer
     w: number
     h: number
-    stride: number
 }
 
 function makeBitmapInfo(w: number, h: number): ArrayBuffer {
@@ -59,28 +58,6 @@ function makeBitmapInfo(w: number, h: number): ArrayBuffer {
     bv.setUint16(12, 1, true)
     bv.setUint16(14, 24, true)
     return bmi
-}
-
-function rotatePixels90(src: Uint8Array, srcW: number, srcH: number, srcStride: number): DibResult {
-    // 逆时针旋转90°，和 C 版本 PlgBlt 方向一致
-    // src(x,y) → dst(y, srcW-1-x)
-    const dstW = srcH
-    const dstH = srcW
-    const dstStride = Math.floor((dstW * 3 + 3) / 4) * 4
-    const dst = new Uint8Array(dstH * dstStride)
-    for (let y = 0; y < srcH; y++) {
-        const srcRow = y * srcStride
-        for (let x = 0; x < srcW; x++) {
-            const dstX = y
-            const dstY = srcW - 1 - x
-            const srcOff = srcRow + x * 3
-            const dstOff = dstY * dstStride + dstX * 3
-            dst[dstOff] = src[srcOff]
-            dst[dstOff + 1] = src[srcOff + 1]
-            dst[dstOff + 2] = src[srcOff + 2]
-        }
-    }
-    return { data: dst.buffer, w: dstW, h: dstH, stride: dstStride }
 }
 
 let _mupdfPromise: Promise<MuPdfModule> | null = null
@@ -105,12 +82,16 @@ async function loadMuPdf(): Promise<MuPdfModule> {
     return _mupdfPromise
 }
 
-function renderPdfPageToDib(mupdf: MuPdfModule, doc: Document, pageIndex: number, scale: number): DibResult | null {
+function renderPdfPageToDib(mupdf: MuPdfModule, doc: Document, pageIndex: number, scale: number, rotate90: boolean): DibResult | null {
     let page: Page | null = null
     let pixmap: Pixmap | null = null
     try {
         page = doc.loadPage(pageIndex)
-        pixmap = page.toPixmap(mupdf.Matrix.scale(scale, scale), mupdf.ColorSpace.DeviceRGB, false)
+        let ctm = mupdf.Matrix.scale(scale, scale)
+        if (rotate90) {
+            ctm = mupdf.Matrix.concat(mupdf.Matrix.rotate(-90), ctm)
+        }
+        pixmap = page.toPixmap(ctm, mupdf.ColorSpace.DeviceRGB, false)
         if (!pixmap) return null
 
         const srcPixels = pixmap.getPixels()
@@ -132,7 +113,7 @@ function renderPdfPageToDib(mupdf: MuPdfModule, doc: Document, pageIndex: number
             }
         }
 
-        return { data: dib.buffer, w, h, stride: dibStride }
+        return { data: dib.buffer, w, h }
     } catch (e: unknown) {
         logger.log('[worker] renderPdfPageToDib error page=' + pageIndex + ':', e instanceof Error ? e.stack : String(e))
         return null
@@ -298,70 +279,51 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
             ffiCall(SetBrushOrgEx, [FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER], [hdc, 0, 0, null], FFI_TYPE_SINT32)
             try {
                 let t0 = Date.now()
-                const dib = renderPdfPageToDib(mupdf, doc, i, scale)
+                let page: Page | null = null
+                try {
+                    page = doc.loadPage(i)
+                    const bounds = page.getBounds()
+                    const pageW = bounds[2] - bounds[0]
+                    const pageH = bounds[3] - bounds[1]
+                    var isLandscape = pageW > pageH
+                } finally {
+                    if (page) try { page.destroy() } catch {}
+                }
+                const dib = renderPdfPageToDib(mupdf, doc, i, scale, isLandscape)
                 let t1 = Date.now()
                 if (dib) {
-                    logger.log('[worker] page ' + i + ' render: ' + (t1 - t0) + 'ms (' + dib.w + 'x' + dib.h + ')')
+                    logger.log('[worker] page ' + i + ' render: ' + (t1 - t0) + 'ms (' + dib.w + 'x' + dib.h + ')' + (isLandscape ? ' (rotated)' : ''))
                     const paperW = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, HORZRES], FFI_TYPE_SINT32)
                     const paperH = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, VERTRES], FFI_TYPE_SINT32)
-                    const isLandscape = dib.w > dib.h
 
-                    const finalW = isLandscape ? dib.h : dib.w
-                    const finalH = isLandscape ? dib.w : dib.h
-                    const scaleX = paperW / finalW
-                    const scaleY = paperH / finalH
+                    const scaleX = paperW / dib.w
+                    const scaleY = paperH / dib.h
                     const sc = scaleX < scaleY ? scaleX : scaleY
-                    const drawW = Math.floor(finalW * sc)
-                    const drawH = Math.floor(finalH * sc)
+                    const drawW = Math.floor(dib.w * sc)
+                    const drawH = Math.floor(dib.h * sc)
                     const drawX = Math.floor((paperW - drawW) / 2)
                     const drawY = Math.floor((paperH - drawH) / 2)
 
-                    logger.log('[worker] page ' + i + ':', dib.w + 'x' + dib.h, isLandscape ? 'landscape' : 'portrait', 'paper:', paperW + 'x' + paperH, 'draw:', drawW + 'x' + drawH, 'at', drawX + ',' + drawY)
+                    logger.log('[worker] page ' + i + ':', dib.w + 'x' + dib.h, 'paper:', paperW + 'x' + paperH, 'draw:', drawW + 'x' + drawH, 'at', drawX + ',' + drawY)
 
-                    if (isLandscape) {
-                        t0 = Date.now()
-                        const rotated = rotatePixels90(new Uint8Array(dib.data), dib.w, dib.h, dib.stride)
-                        t1 = Date.now()
-                        logger.log('[worker] page ' + i + ' rotate: ' + (t1 - t0) + 'ms')
-                        const bmi = makeBitmapInfo(rotated.w, rotated.h)
-                        t0 = Date.now()
-                        const sdRet = ffiCall(StretchDIBits, [
-                            FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                            FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32,
-                            FFI_TYPE_UINT32
-                        ], [
-                            hdc, drawX, drawY, drawW, drawH,
-                            0, 0, rotated.w, rotated.h,
-                            rotated.data, bmi, 0, gui.RasterOp.SRCCOPY
-                        ], FFI_TYPE_SINT32)
-                        t1 = Date.now()
-                        logger.log('[worker] page ' + i + ' stretch: ' + (t1 - t0) + 'ms')
-                        if (sdRet <= 0) {
-                            logger.log('[worker] StretchDIBits (rotated) failed for page ' + i + ', ret=' + sdRet + ' GLE=' + gle())
-                        }
-                    } else {
-                        const bmi = makeBitmapInfo(dib.w, dib.h)
-                        t0 = Date.now()
-                        const sdRet = ffiCall(StretchDIBits, [
-                            FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                            FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32,
-                            FFI_TYPE_UINT32
-                        ], [
-                            hdc, drawX, drawY, drawW, drawH,
-                            0, 0, dib.w, dib.h,
-                            dib.data, bmi, 0, gui.RasterOp.SRCCOPY
-                        ], FFI_TYPE_SINT32)
-                        t1 = Date.now()
-                        logger.log('[worker] page ' + i + ' stretch: ' + (t1 - t0) + 'ms')
-                        if (sdRet <= 0) {
-                            logger.log('[worker] StretchDIBits failed for page ' + i + ', ret=' + sdRet + ' GLE=' + gle())
-                        }
+                    const bmi = makeBitmapInfo(dib.w, dib.h)
+                    t0 = Date.now()
+                    const sdRet = ffiCall(StretchDIBits, [
+                        FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                        FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                        FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                        FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                        FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32,
+                        FFI_TYPE_UINT32
+                    ], [
+                        hdc, drawX, drawY, drawW, drawH,
+                        0, 0, dib.w, dib.h,
+                        dib.data, bmi, 0, gui.RasterOp.SRCCOPY
+                    ], FFI_TYPE_SINT32)
+                    t1 = Date.now()
+                    logger.log('[worker] page ' + i + ' stretch: ' + (t1 - t0) + 'ms')
+                    if (sdRet <= 0) {
+                        logger.log('[worker] StretchDIBits failed for page ' + i + ', ret=' + sdRet + ' GLE=' + gle())
                     }
                 } else {
                     logger.log('[worker] page ' + i + ' render failed')
