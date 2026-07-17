@@ -310,7 +310,9 @@ os.Worker.parent.onmessage = async (e: { data: WorkerInMsg }) => {
     const msg = e.data
     if (msg.type === 'print') {
         try {
+            logger.log('[worker] downloading file:', msg.fileId + '.pdf')
             const res = await api.files.getFile(msg.fileId + '.pdf')
+            logger.log('[worker] download response:', res?.status, res?.ok)
             if (!res || !res.ok) {
                 throw new Error('download failed: ' + (res?.status || 'no response'))
             }

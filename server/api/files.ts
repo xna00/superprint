@@ -18,6 +18,11 @@ export const getFile = async (fileName: string) => {
     const user = await _currentUser()
     
     const filePath = join(UPLOADS_DIR, fileName)
+    try {
+        accessSync(filePath, constants.R_OK)
+    } catch {
+        throw new ApiError(404, {}, '文件不存在', 'FILE_NOT_FOUND')
+    }
     const stream = Readable.toWeb(createReadStream(filePath))
     const ext = extname(fileName).toLowerCase()
     const mimeType = MIME_TYPES[ext] || 'application/octet-stream'

@@ -27,7 +27,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     outDir: 'dist',
-    minify: true,
+    minify: false,
     manifest: true,
     modulePreload: false,
     rollupOptions: {
