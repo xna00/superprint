@@ -31,6 +31,8 @@ const EndPage = gdip('EndPage')
 const GetDeviceCaps = gdip('GetDeviceCaps')
 const StretchDIBits = gdip('StretchDIBits')
 const ResetDCW = gdip('ResetDCW')
+const SetStretchBltMode = gdip('SetStretchBltMode')
+const SetBrushOrgEx = gdip('SetBrushOrgEx')
 const GetLastError = _kernel32 ? win.GetProcAddress(_kernel32, 'GetLastError') : 0
 function gle(): number {
     return GetLastError ? ffiCall(GetLastError, [], [], FFI_TYPE_UINT32) as number : 0
@@ -292,6 +294,8 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
             if (spRet <= 0) {
                 logger.log('[worker] StartPage failed, ret=' + spRet + ' GLE=' + gle())
             }
+            ffiCall(SetStretchBltMode, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, 4], FFI_TYPE_SINT32)
+            ffiCall(SetBrushOrgEx, [FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER], [hdc, 0, 0, null], FFI_TYPE_SINT32)
             try {
                 const dib = renderPdfPageToDib(mupdf, doc, i, scale)
                 if (dib) {
