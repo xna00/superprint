@@ -297,8 +297,11 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
             ffiCall(SetStretchBltMode, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, 4], FFI_TYPE_SINT32)
             ffiCall(SetBrushOrgEx, [FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER], [hdc, 0, 0, null], FFI_TYPE_SINT32)
             try {
+                let t0 = Date.now()
                 const dib = renderPdfPageToDib(mupdf, doc, i, scale)
+                let t1 = Date.now()
                 if (dib) {
+                    logger.log('[worker] page ' + i + ' render: ' + (t1 - t0) + 'ms (' + dib.w + 'x' + dib.h + ')')
                     const paperW = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, HORZRES], FFI_TYPE_SINT32)
                     const paperH = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, VERTRES], FFI_TYPE_SINT32)
                     const isLandscape = dib.w > dib.h
@@ -316,8 +319,12 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                     logger.log('[worker] page ' + i + ':', dib.w + 'x' + dib.h, isLandscape ? 'landscape' : 'portrait', 'paper:', paperW + 'x' + paperH, 'draw:', drawW + 'x' + drawH, 'at', drawX + ',' + drawY)
 
                     if (isLandscape) {
+                        t0 = Date.now()
                         const rotated = rotatePixels90(new Uint8Array(dib.data), dib.w, dib.h, dib.stride)
+                        t1 = Date.now()
+                        logger.log('[worker] page ' + i + ' rotate: ' + (t1 - t0) + 'ms')
                         const bmi = makeBitmapInfo(rotated.w, rotated.h)
+                        t0 = Date.now()
                         const sdRet = ffiCall(StretchDIBits, [
                             FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
                             FFI_TYPE_SINT32, FFI_TYPE_SINT32,
@@ -330,11 +337,14 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                             0, 0, rotated.w, rotated.h,
                             rotated.data, bmi, 0, gui.RasterOp.SRCCOPY
                         ], FFI_TYPE_SINT32)
+                        t1 = Date.now()
+                        logger.log('[worker] page ' + i + ' stretch: ' + (t1 - t0) + 'ms')
                         if (sdRet <= 0) {
                             logger.log('[worker] StretchDIBits (rotated) failed for page ' + i + ', ret=' + sdRet + ' GLE=' + gle())
                         }
                     } else {
                         const bmi = makeBitmapInfo(dib.w, dib.h)
+                        t0 = Date.now()
                         const sdRet = ffiCall(StretchDIBits, [
                             FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
                             FFI_TYPE_SINT32, FFI_TYPE_SINT32,
@@ -347,6 +357,8 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                             0, 0, dib.w, dib.h,
                             dib.data, bmi, 0, gui.RasterOp.SRCCOPY
                         ], FFI_TYPE_SINT32)
+                        t1 = Date.now()
+                        logger.log('[worker] page ' + i + ' stretch: ' + (t1 - t0) + 'ms')
                         if (sdRet <= 0) {
                             logger.log('[worker] StretchDIBits failed for page ' + i + ', ret=' + sdRet + ' GLE=' + gle())
                         }
