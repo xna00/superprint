@@ -31,11 +31,6 @@ const EndPage = gdip('EndPage')
 const GetDeviceCaps = gdip('GetDeviceCaps')
 const StretchDIBits = gdip('StretchDIBits')
 const ResetDCW = gdip('ResetDCW')
-const CreateCompatibleDC = gdip('CreateCompatibleDC')
-const CreateDIBSection = gdip('CreateDIBSection')
-const SelectObject = gdip('SelectObject')
-const DeleteObject = gdip('DeleteObject')
-const PlgBlt = gdip('PlgBlt')
 const GetLastError = _kernel32 ? win.GetProcAddress(_kernel32, 'GetLastError') : 0
 function gle(): number {
     return GetLastError ? ffiCall(GetLastError, [], [], FFI_TYPE_UINT32) as number : 0
@@ -50,6 +45,7 @@ interface DibResult {
     data: ArrayBuffer
     w: number
     h: number
+    stride: number
 }
 
 function makeBitmapInfo(w: number, h: number): ArrayBuffer {
@@ -61,6 +57,28 @@ function makeBitmapInfo(w: number, h: number): ArrayBuffer {
     bv.setUint16(12, 1, true)
     bv.setUint16(14, 24, true)
     return bmi
+}
+
+function rotatePixels90(src: Uint8Array, srcW: number, srcH: number, srcStride: number): DibResult {
+    // 逆时针旋转90°，和 C 版本 PlgBlt 方向一致
+    // src(x,y) → dst(y, srcW-1-x)
+    const dstW = srcH
+    const dstH = srcW
+    const dstStride = Math.floor((dstW * 3 + 3) / 4) * 4
+    const dst = new Uint8Array(dstH * dstStride)
+    for (let y = 0; y < srcH; y++) {
+        const srcRow = y * srcStride
+        for (let x = 0; x < srcW; x++) {
+            const dstX = y
+            const dstY = srcW - 1 - x
+            const srcOff = srcRow + x * 3
+            const dstOff = dstY * dstStride + dstX * 3
+            dst[dstOff] = src[srcOff]
+            dst[dstOff + 1] = src[srcOff + 1]
+            dst[dstOff + 2] = src[srcOff + 2]
+        }
+    }
+    return { data: dst.buffer, w: dstW, h: dstH, stride: dstStride }
 }
 
 let _mupdfPromise: Promise<MuPdfModule> | null = null
@@ -112,7 +130,7 @@ function renderPdfPageToDib(mupdf: MuPdfModule, doc: Document, pageIndex: number
             }
         }
 
-        return { data: dib.buffer, w, h }
+        return { data: dib.buffer, w, h, stride: dibStride }
     } catch (e: unknown) {
         logger.log('[worker] renderPdfPageToDib error page=' + pageIndex + ':', e instanceof Error ? e.stack : String(e))
         return null
@@ -294,48 +312,22 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                     logger.log('[worker] page ' + i + ':', dib.w + 'x' + dib.h, isLandscape ? 'landscape' : 'portrait', 'paper:', paperW + 'x' + paperH, 'draw:', drawW + 'x' + drawH, 'at', drawX + ',' + drawY)
 
                     if (isLandscape) {
-                        const memDC = ffiCall(CreateCompatibleDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_UINT64)
-                        if (memDC) {
-                            const bmi = makeBitmapInfo(dib.w, dib.h)
-                            const ppvBitsBuf = new ArrayBuffer(8)
-                            const hBitmap = ffiCall(CreateDIBSection, [
-                                FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_UINT32,
-                                FFI_TYPE_POINTER, FFI_TYPE_UINT64, FFI_TYPE_UINT32
-                            ], [memDC, bmi, 0, ppvBitsBuf, 0, 0], FFI_TYPE_UINT64)
-                            if (hBitmap) {
-                                const bitsPtr = new DataView(ppvBitsBuf).getBigUint64(0, true)
-                                const dibBytes = new Uint8Array(dib.data)
-                                const shared = new Uint8Array(Number(bitsPtr), dibBytes.byteLength, dibBytes.byteLength)
-                                shared.set(dibBytes)
-
-                                const oldBmp = ffiCall(SelectObject, [FFI_TYPE_UINT64, FFI_TYPE_UINT64], [memDC, hBitmap], FFI_TYPE_UINT64)
-
-                                const ptsBuf = new ArrayBuffer(24)
-                                const ptsView = new DataView(ptsBuf)
-                                ptsView.setInt32(0, drawX, true)
-                                ptsView.setInt32(4, drawY + drawH, true)
-                                ptsView.setInt32(8, drawX, true)
-                                ptsView.setInt32(12, drawY, true)
-                                ptsView.setInt32(16, drawX + drawW, true)
-                                ptsView.setInt32(20, drawY + drawH, true)
-
-                                const plgRet = ffiCall(PlgBlt, [
-                                    FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_UINT64,
-                                    FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
-                                    FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32
-                                ], [hdc, ptsBuf, memDC, 0, 0, dib.w, dib.h, 0, 0, 0], FFI_TYPE_SINT32)
-                                if (!plgRet) {
-                                    logger.log('[worker] PlgBlt failed for page ' + i + ', GLE=' + gle())
-                                }
-
-                                ffiCall(SelectObject, [FFI_TYPE_UINT64, FFI_TYPE_UINT64], [memDC, oldBmp], FFI_TYPE_UINT64)
-                                ffiCall(DeleteObject, [FFI_TYPE_UINT64], [hBitmap], FFI_TYPE_SINT32)
-                            } else {
-                                logger.log('[worker] CreateDIBSection failed, GLE=' + gle())
-                            }
-                            ffiCall(DeleteDC, [FFI_TYPE_UINT64], [memDC], FFI_TYPE_SINT32)
-                        } else {
-                            logger.log('[worker] CreateCompatibleDC failed, GLE=' + gle())
+                        const rotated = rotatePixels90(new Uint8Array(dib.data), dib.w, dib.h, dib.stride)
+                        const bmi = makeBitmapInfo(rotated.w, rotated.h)
+                        const sdRet = ffiCall(StretchDIBits, [
+                            FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                            FFI_TYPE_SINT32, FFI_TYPE_SINT32,
+                            FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32,
+                            FFI_TYPE_UINT32
+                        ], [
+                            hdc, drawX, drawY, drawW, drawH,
+                            0, 0, rotated.w, rotated.h,
+                            rotated.data, bmi, 0, gui.RasterOp.SRCCOPY
+                        ], FFI_TYPE_SINT32)
+                        if (sdRet <= 0) {
+                            logger.log('[worker] StretchDIBits (rotated) failed for page ' + i + ', ret=' + sdRet + ' GLE=' + gle())
                         }
                     } else {
                         const bmi = makeBitmapInfo(dib.w, dib.h)
