@@ -5,7 +5,7 @@ import * as std from 'std'
 const parent = os.Worker.parent
 parent.onmessage = async (e) => {
     parent.onmessage = null
-    const { filePath } = e.data
+    const { filePath } = e.data as { filePath: string }
     const f = std.open(filePath, 'rb')
     if (!f) { parent.postMessage({ hash: '' }); return }
     try {

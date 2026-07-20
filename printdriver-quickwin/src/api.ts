@@ -16,10 +16,11 @@ export const api = createHandler(firstBase, {
     let lastErr: unknown
     for (const base of API_BASE_URLS) {
       try {
+        const r = req.clone()
         const res = await fetch(base + pathAndQuery, {
-          method: req.method,
-          headers: Object.fromEntries(req.headers.entries()),
-          body: req.body ?? undefined,
+          method: r.method,
+          headers: Object.fromEntries(r.headers.entries()),
+          body: r.body,
         })
         const sc = res.headers.get('set-cookie')
         if (sc) {

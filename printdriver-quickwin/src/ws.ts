@@ -7,7 +7,7 @@ import { WS_URLS } from './config.js'
 
 let ws: WebSocket | null = null
 let lastMsgTime = 0
-let wsTimeoutTimer: number | null = null
+let wsTimeoutTimer: ReturnType<typeof os.setTimeout> | null = null
 let wsLog: ((msg: string) => void) | null = null
 const WS_TIMEOUT = 60000
 const WS_TIMEOUT_CHECK = 10000

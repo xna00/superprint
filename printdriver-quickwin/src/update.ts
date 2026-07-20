@@ -35,7 +35,7 @@ function sha1File(filePath: string): Promise<string> {
         hashWorker = new os.Worker(hashWorkerUrl)
         hashWorker.onmessage = (e) => {
             hashWorker = null
-            resolve(e.data.hash)
+            resolve((e.data as { hash: string }).hash)
         }
         hashWorker.postMessage({ filePath })
     })
@@ -75,7 +75,7 @@ async function tryFetch(urls: string[]) {
   }
 }
 
-export let timer: number | null = null
+export let timer: ReturnType<typeof os.setTimeout> | null = null
 
 export function clearUpdateTimer() {
   if (timer !== null) {

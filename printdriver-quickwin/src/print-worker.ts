@@ -362,8 +362,8 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
 
 loadMuPdf().catch((e: unknown) => logger.log('[worker] loadMuPdf error:', e instanceof Error ? e.stack : String(e)))
 
-os.Worker.parent.onmessage = async (e: { data: WorkerInMsg }) => {
-    const msg = e.data
+os.Worker.parent.onmessage = async (e) => {
+    const msg = e.data as WorkerInMsg
     if (msg.type === 'print') {
         try {
             logger.log('[worker] downloading file:', msg.fileId + '.pdf')
