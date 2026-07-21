@@ -2,8 +2,8 @@ import { useState } from 'react'
 import * as gui from 'gui'
 import * as os from 'os'
 import * as std from 'std'
-import { CheckBox, Button } from 'quickwin/lib/react-qw/index.js'
-import { storageGet, storageSet } from '../storage.js'
+import { CheckBox, Button, RadioButton } from 'quickwin/lib/react-qw/index.js'
+import { storageGet, storageSet, getRenderEngine, setRenderEngine } from '../storage.js'
 import { BUILD_TIME } from '../config.js'
 import { checkAndUpdate } from '../update.js'
 import { getExePath } from '../utils.js'
@@ -20,6 +20,12 @@ export function SettingsTab() {
     const v = storageGet('showOnStartup')
     return v !== false
   })
+  const [renderEngine, setRenderEngineState] = useState(() => getRenderEngine())
+
+  function changeRenderEngine(v: 'pdfium' | 'mupdf') {
+    setRenderEngineState(v)
+    setRenderEngine(v)
+  }
 
   return (
     <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 8, flexGrow: 1, padding: 8 }}>
@@ -35,6 +41,11 @@ export function SettingsTab() {
         label="开机自启动时弹出"
         style={{ height: 26 }}
       />
+      <w type="STATIC" ws={VISIBLE} text="PDF 渲染引擎" style={{ height: 22 }} />
+      <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'row', gap: 4 }}>
+        <RadioButton checked={renderEngine === 'pdfium'} onChange={() => changeRenderEngine('pdfium')} label="PDFium（快速）" style={{ height: 24 }} />
+        <RadioButton checked={renderEngine === 'mupdf'} onChange={() => changeRenderEngine('mupdf')} label="MuPDF（兼容）" style={{ height: 24 }} />
+      </w>
       <w type="STATIC" ws={VISIBLE} text={"构建时间: " + BUILD_TIME} style={{ height: 22 }} />
       <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'row', gap: 4 }}>
         <Button onClick={checkAndUpdate} style={{ width: 110, height: 26 }}>检查更新</Button>

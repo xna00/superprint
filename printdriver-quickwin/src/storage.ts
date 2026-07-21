@@ -44,3 +44,12 @@ export function getCookie(): string | null {
 export function setCookie(val: string): void {
   storageSet('cookie', val)
 }
+
+export function getRenderEngine(): 'pdfium' | 'mupdf' {
+  const v = storageGet('renderEngine')
+  return v === 'mupdf' ? 'mupdf' : 'pdfium'
+}
+
+export function setRenderEngine(v: 'pdfium' | 'mupdf'): void {
+  storageSet('renderEngine', v)
+}
