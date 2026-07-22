@@ -54,6 +54,7 @@ if (args.includes('--uninstall')) {
 } else runMainApp()
 
 export let printWorker: PrintWorker | null = null
+export let mainHwnd: gui.HWND | null = null
 
 import pWorkerUrl from './print-worker?worker&url'
 
@@ -162,6 +163,7 @@ function runMainApp() {
     })
 
     root.render(<App />)
+    mainHwnd = root.hwnd
     const isAutoStart = args.includes('--autostart')
     if (!isAutoStart || storageGet('showOnStartup') !== false) gui.ShowWindow(root.hwnd)
 

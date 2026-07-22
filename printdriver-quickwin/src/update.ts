@@ -1,4 +1,5 @@
 import 'quickwin/lib/polyfill.js'
+import * as gui from 'gui'
 import * as std from 'std'
 import * as os from 'os'
 import * as win from 'win'
@@ -6,8 +7,7 @@ import { ffiCall, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER } from 'ffi
 import { strToWideBuf, getExePath } from './utils.js'
 import { ENTRY_HASH } from './config.js'
 import { api } from './api.js'
-import { cleanupWs } from './ws.js'
-import { destroyPrintWorker } from './main.js'
+import { mainHwnd } from './main.js'
 import { logger } from './logger.js'
 import hashWorkerUrl from './hash-worker?worker&url'
 
@@ -141,11 +141,8 @@ export async function checkAndUpdate() {
       logger.log('[update] CreateProcessW failed, you may restart manually')
     }
     {
-
-      cleanupWs()
-      destroyPrintWorker()
+      if (mainHwnd) gui.DestroyWindow(mainHwnd)
     }
-    std.exit(0)
   }
 }
 
