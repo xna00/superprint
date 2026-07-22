@@ -66,7 +66,7 @@ function deleteFileW(path: string): boolean {
   const pGLE = win.GetProcAddress(k32, 'GetLastError')
   if (!pGLE) return false
   const err = ffiCall(pGLE, [], [], FFI_TYPE_SINT32) as number
-  return err === 2 // ERROR_FILE_NOT_FOUND
+  return err === gui.ErrorCode.FILE_NOT_FOUND
 }
 
 function removeDirW(path: string): boolean {
@@ -79,7 +79,7 @@ function removeDirW(path: string): boolean {
   const pGLE = win.GetProcAddress(k32, 'GetLastError')
   if (!pGLE) return false
   const err = ffiCall(pGLE, [], [], FFI_TYPE_SINT32) as number
-  return err === 2 // ERROR_FILE_NOT_FOUND
+  return err === gui.ErrorCode.FILE_NOT_FOUND
 }
 
 function moveFileW(oldPath: string, newPath: string): boolean {
@@ -157,8 +157,8 @@ function regDeleteRun(): boolean {
     [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
     [gui.HKey.CURRENT_USER, keyW, nameW],
     FFI_TYPE_SINT32) as number
-  // ERROR_FILE_NOT_FOUND = 2  → value doesn't exist, success
-  return hr === 0 || hr === 2
+  // ERROR_FILE_NOT_FOUND → value doesn't exist, success
+  return hr === 0 || hr === gui.ErrorCode.FILE_NOT_FOUND
 }
 
 // ---------------------------------------------------------------------------

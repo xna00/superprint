@@ -452,6 +452,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                 ffiCall(SetStretchBltMode, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, 4], FFI_TYPE_SINT32)
                 ffiCall(SetBrushOrgEx, [FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER], [hdc, 0, 0, null], FFI_TYPE_SINT32)
                 try {
+                    let isLandscape = false
                     let t0 = Date.now()
                     let page: Page | null = null
                     try {
@@ -459,7 +460,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                         const bounds = page.getBounds()
                         const pageW = bounds[2] - bounds[0]
                         const pageH = bounds[3] - bounds[1]
-                        var isLandscape = pageW > pageH
+                        isLandscape = pageW > pageH
                     } finally {
                         if (page) try { page.destroy() } catch {}
                     }

@@ -5,8 +5,9 @@ export function getExePath(): string {
   return win.GetModuleFileName() || ''
 }
 
+const _utf16le = new TextEncoder('utf-16le')
 export function strToWideBuf(str: string): ArrayBuffer {
-    return new TextEncoder('utf-16le').encode(str + '\0').buffer as ArrayBuffer
+    return _utf16le.encode(str + '\0').buffer as ArrayBuffer
 }
 
 export function decodeWideAtPtr(ptr: number): string {

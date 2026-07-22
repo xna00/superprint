@@ -8,7 +8,7 @@ import * as std from 'std'
 import { createRoot } from 'quickwin/lib/react-qw/index.js'
 import { cleanupWs } from './ws.js'
 import { setPrintWorker } from './print-queue.js'
-import type { PrintWorker, WorkerInMsg } from './worker-types.js'
+import type { PrintWorker } from './worker-types.js'
 import { App } from './App.js'
 import { storageGet } from './storage.js'
 import { logger } from './logger.js'
@@ -55,13 +55,14 @@ if (args.includes('--uninstall')) {
 
 export let printWorker: PrintWorker | null = null
 export let mainHwnd: gui.HWND | null = null
+export let hMutex: number = 0
 
 import pWorkerUrl from './print-worker?worker&url'
 
 export function destroyPrintWorker() {
     if (printWorker) {
-        printWorker.onmessage = null
         printWorker.postMessage({ type: 'done' })
+        printWorker.onmessage = null
         printWorker = null
     }
 }
@@ -71,8 +72,8 @@ function runMainApp() {
     const pCreateMutexW = k32 ? win.GetProcAddress(k32, 'CreateMutexW') : 0
     const pGetLastError = k32 ? win.GetProcAddress(k32, 'GetLastError') : 0
     if (pCreateMutexW && pGetLastError) {
-        ffiCall(pCreateMutexW, [FFI_TYPE_POINTER, FFI_TYPE_SINT32, FFI_TYPE_POINTER],
-            [null, 0, strToWideBuf('SuperPrint_SingleInstance')], FFI_TYPE_POINTER)
+        hMutex = ffiCall(pCreateMutexW, [FFI_TYPE_POINTER, FFI_TYPE_SINT32, FFI_TYPE_POINTER],
+            [null, 0, strToWideBuf('SuperPrint_SingleInstance')], FFI_TYPE_POINTER) as number
         const err = ffiCall(pGetLastError, [], [], FFI_TYPE_UINT32) as number
         if (err === 183) {
             gui.PostQuitMessage(0)
@@ -82,10 +83,10 @@ function runMainApp() {
 
     const winW = 600
     const winH = 400
-    const WM_TRAY = 0x8001
-    const WM_POWERBROADCAST = 0x0218
-    const PBT_APMRESUMESUSPEND = 0x0007
-    const PBT_APMRESUMEAUTOMATIC = 0x0012
+    const WM_TRAY = gui.WmMsg.USER + 0x401
+    const WM_POWERBROADCAST = gui.WmMsg.POWERBROADCAST
+    const PBT_APMRESUMESUSPEND = gui.PowerBroadcast.APMRESUMESUSPEND
+    const PBT_APMRESUMEAUTOMATIC = gui.PowerBroadcast.APMRESUMEAUTOMATIC
 
     const scale = gui.GetScaleFactor()
     const [scrW, scrH] = gui.GetScreenSize()
@@ -132,7 +133,7 @@ function runMainApp() {
                         gui.AppendMenu(hMenu, gui.MenuFlag.STRING, 2, '退出')
                         const cmd = gui.TrackPopupMenu(hMenu, x, y, undefined, hwnd)
                         gui.DestroyMenu(hMenu)
-                        gui.SendMessage(hwnd, 0x0000, 0, 0) // WM_NULL
+                        gui.SendMessage(hwnd, gui.WmMsg.NULL, 0, 0) // WM_NULL
                         if (cmd === 1) {
                             gui.ShowWindow(hwnd, gui.ShowWindowCmd.RESTORE)
                         } else if (cmd === 2) {

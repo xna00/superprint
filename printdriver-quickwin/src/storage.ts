@@ -3,11 +3,14 @@ import { STORAGE_FILE } from './config.js'
 import { getExePath } from './utils.js'
 
 let _cache: Record<string, unknown> | null = null
+let _storagePath: string | null = null
 
 function storagePath(): string {
+  if (_storagePath) return _storagePath
   const p = getExePath().split('\\')
   p.pop()
-  return p.join('\\') + '\\' + STORAGE_FILE
+  _storagePath = p.join('\\') + '\\' + STORAGE_FILE
+  return _storagePath
 }
 
 function load(): Record<string, unknown> {

@@ -5,6 +5,8 @@ import { strToWideBuf, decodeWideAtPtr } from './utils.js'
 import { logger } from './logger.js'
 
 let _inited = false
+let _deviceId: string | null = null
+let _deviceIdCached = false
 let RegOpenKeyExW: number | null = null
 let RegQueryValueExW: number | null = null
 let RegCloseKey: number | null = null
@@ -25,6 +27,13 @@ const HKEY_LOCAL_MACHINE = gui.HKey.LOCAL_MACHINE
 const KEY_READ = gui.RegAccess.READ
 
 export function getDeviceId(): string | null {
+    if (_deviceIdCached) return _deviceId
+    _deviceId = getDeviceIdImpl()
+    _deviceIdCached = true
+    return _deviceId
+}
+
+function getDeviceIdImpl(): string | null {
     initFfi()
     if (!RegOpenKeyExW || !RegQueryValueExW || !RegCloseKey) {
         logger.log('[device] ffi functions not available')
@@ -83,7 +92,6 @@ export function getDeviceId(): string | null {
 
     const bytesRead = sizeDv.getUint32(0, true)
     logger.log('[device] bytesRead:', bytesRead)
-    const charCount = Math.floor(bytesRead / 2)
     const result = decodeWideAtPtr(bufferPtr(dataBuf))
     logger.log('[device] result:', result)
     return result

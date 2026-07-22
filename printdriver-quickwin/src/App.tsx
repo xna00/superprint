@@ -18,11 +18,7 @@ const SettingsTab = lazy(() => import('./components/SettingsTab.js').then(m => (
 const VISIBLE = gui.WindowStyle.VISIBLE
 const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
 
-const QRTestTab = lazy(() => import('./components/QRTestTab.js').then(m => ({ default: m.QRTestTab })))
-
-interface AppProps {}
-
-export function App(_props: AppProps) {
+export function App() {
     const [appState, setAppState] = useState<'loading' | 'login' | 'main'>('loading')
     const [username, setUsername] = useState('')
     const [loginUser, setLoginUser] = useState('')
@@ -201,10 +197,6 @@ export function App(_props: AppProps) {
                     title: '设置',
                     content: <Suspense fallback={null}><SettingsTab /></Suspense>,
                 },
-                // {
-                //     title: '二维码测试',
-                //     content: <Suspense fallback={null}><QRTestTab /></Suspense>,
-                // },
             ]} style={{ flexGrow: 1 }} />
         </w>
     )

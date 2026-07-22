@@ -4,9 +4,9 @@ import qrcode from 'qrcode-generator'
 import { createBitmap, deleteObject } from '../qr.js'
 
 const VISIBLE = gui.WindowStyle.VISIBLE
-const SS_BITMAP = 0x0E
-const STM_SETIMAGE = 0x0172
-const IMAGE_BITMAP = 0
+const SS_BITMAP = gui.StaticStyleEx.BITMAP
+const STM_SETIMAGE = gui.StaticMsg.SETIMAGE
+const IMAGE_BITMAP = gui.ImageType.BITMAP
 
 interface QRCodeProps {
     text: string
