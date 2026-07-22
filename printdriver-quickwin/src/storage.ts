@@ -53,3 +53,12 @@ export function getRenderEngine(): 'pdfium' | 'mupdf' {
 export function setRenderEngine(v: 'pdfium' | 'mupdf'): void {
   storageSet('renderEngine', v)
 }
+
+export function getRenderDPI(): number {
+  const v = storageGet('renderDPI')
+  return typeof v === 'number' && v > 0 ? v : 600
+}
+
+export function setRenderDPI(v: number): void {
+  storageSet('renderDPI', v)
+}

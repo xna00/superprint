@@ -66,6 +66,9 @@ function runMainApp() {
     const winW = 600
     const winH = 400
     const WM_TRAY = 0x8001
+    const WM_POWERBROADCAST = 0x0218
+    const PBT_APMRESUMESUSPEND = 0x0007
+    const PBT_APMRESUMEAUTOMATIC = 0x0012
 
     const scale = gui.GetScaleFactor()
     const [scrW, scrH] = gui.GetScreenSize()
@@ -80,6 +83,21 @@ function runMainApp() {
         y: cy,
         noShowWindow: true,
         onEvent: ({ hwnd, msg, wParam, lParam }) => {
+            if (msg === WM_POWERBROADCAST) {
+                if (wParam === PBT_APMRESUMESUSPEND || wParam === PBT_APMRESUMEAUTOMATIC) {
+                    gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd, uID: 1 })
+                    const hIcon = gui.LoadIcon('APPLICATION')
+                    if (hIcon) {
+                        gui.ShellNotifyIcon(gui.NotifyIconCmd.ADD, {
+                            hwnd, uID: 1,
+                            flags: gui.NotifyIconFlag.MESSAGE | gui.NotifyIconFlag.ICON,
+                            callbackMessage: WM_TRAY,
+                            hIcon,
+                        })
+                    }
+                }
+                return 0
+            }
             if (msg === WM_TRAY) {
                 const evt = lParam
                 if (evt === gui.WmMsg.LBUTTONDOWN) {

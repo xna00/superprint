@@ -6,6 +6,7 @@ export interface PrintRequest {
     tumble: boolean
     jobId: number
     renderEngine: 'pdfium' | 'mupdf'
+    renderDPI: number
 }
 export interface PrintResult {
     type: 'done'

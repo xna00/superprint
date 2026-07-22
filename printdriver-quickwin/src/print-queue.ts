@@ -5,7 +5,7 @@ import type { PrintWorker, WorkerOutMsg } from './worker-types.js'
 import { logger } from './logger.js'
 import { api } from './api.js'
 import { getDefaultPrinter } from './printer.js'
-import { getRenderEngine } from './storage.js'
+import { getRenderEngine, getRenderDPI } from './storage.js'
 
 export interface PrintFileInfo {
     id: number
@@ -90,6 +90,7 @@ async function processFile(file: PrintFileInfo): Promise<boolean> {
             tumble: file.tumble,
             jobId,
             renderEngine: getRenderEngine(),
+            renderDPI: getRenderDPI(),
         })
     })
 }
