@@ -1,4 +1,4 @@
-import { logger } from './logger.js'
+import 'quickwin/lib/polyfill.js'
 import "./main.js"
 
 const baseUrl = import.meta.url.substring(0, import.meta.url.lastIndexOf('/') + 1)
@@ -10,13 +10,13 @@ fetch(baseUrl + 'vite_manifest.json?t=' + Date.now())
       const entry = info as any
       if (entry.isDynamicEntry && entry.file && entry.file.endsWith('.js')) {
         const url = baseUrl + entry.file
-        logger.log('[preload]', src, url)
+        console.log('[preload]', src, url)
         fetch(url)
-          .then(() => logger.log('[preload] done:', entry.file))
-          .catch(e => logger.log('[preload] error:', entry.file, e))
+          .then(() => console.log('[preload] done:', entry.file))
+          .catch(e => console.log('[preload] error:', entry.file, e))
       }
     }
   })
   .catch(e => {
-    logger.log('[preload] manifest error:', e)
+    console.log('[preload] manifest error:', e)
   })

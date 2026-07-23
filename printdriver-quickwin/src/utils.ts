@@ -10,8 +10,9 @@ export function getExePath(): string {
   return win.GetModuleFileName() || ''
 }
 
-const _utf16le = new TextEncoder('utf-16le')
+let _utf16le: TextEncoder | null = null
 export function strToWideBuf(str: string): ArrayBuffer {
+    if (!_utf16le) _utf16le = new TextEncoder('utf-16le')
     return _utf16le.encode(str + '\0').buffer as ArrayBuffer
 }
 
