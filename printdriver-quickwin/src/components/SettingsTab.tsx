@@ -42,18 +42,20 @@ export function SettingsTab() {
 
   return (
     <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 8, flexGrow: 1, padding: 8 }}>
-      <CheckBox
-        checked={minimizeToTray}
-        onChange={(v) => { setMinimizeToTray(v); storageSet('minimizeToTray', v) }}
-        label="关闭窗口时，最小化到托盘"
-        style={{ height: 26 }}
-      />
-      <CheckBox
-        checked={showOnStartup}
-        onChange={(v) => { setShowOnStartup(v); storageSet('showOnStartup', v) }}
-        label="开机自启动时弹出"
-        style={{ height: 26 }}
-      />
+      <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'row', gap: 4 }}>
+        <CheckBox
+          checked={minimizeToTray}
+          onChange={(v) => { setMinimizeToTray(v); storageSet('minimizeToTray', v) }}
+          label="关闭窗口时，最小化到托盘"
+          style={{ height: 22 }}
+        />
+        <CheckBox
+          checked={showOnStartup}
+          onChange={(v) => { setShowOnStartup(v); storageSet('showOnStartup', v) }}
+          label="开机自启动时弹出"
+          style={{ height: 22 }}
+        />
+      </w>
       <w type="STATIC" ws={VISIBLE} text="PDF 渲染引擎" style={{ height: 22 }} />
       <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'row', gap: 4 }}>
         <RadioButton checked={renderEngine === 'pdfium'} onChange={() => changeRenderEngine('pdfium')} label="PDFium（快速）" style={{ height: 24 }} />
