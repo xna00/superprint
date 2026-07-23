@@ -47,13 +47,13 @@ export function SettingsTab() {
           checked={minimizeToTray}
           onChange={(v) => { setMinimizeToTray(v); storageSet('minimizeToTray', v) }}
           label="关闭窗口时，最小化到托盘"
-          style={{ height: 22 }}
+          style={{ width: 160, height: 22 }}
         />
         <CheckBox
           checked={showOnStartup}
           onChange={(v) => { setShowOnStartup(v); storageSet('showOnStartup', v) }}
           label="开机自启动时弹出"
-          style={{ height: 22 }}
+          style={{ width: 120, height: 22 }}
         />
       </w>
       <w type="STATIC" ws={VISIBLE} text="PDF 渲染引擎" style={{ height: 22 }} />
