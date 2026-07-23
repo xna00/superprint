@@ -1,8 +1,6 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
 import * as gui from 'gui'
-import * as win from 'win'
-import { ffiCall, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_SINT32 } from 'ffi'
 import * as os from 'os'
 import * as std from 'std'
 import { createRoot } from 'quickwin/lib/react-qw/index.js'
@@ -13,7 +11,9 @@ import { App } from './App.js'
 import { storageGet } from './storage.js'
 import { logger } from './logger.js'
 import { startUpdateCheck, clearUpdateTimer } from './update.js'
-import { strToWideBuf } from './utils.js'
+
+export let printWorker: PrintWorker | null = null
+export let mainHwnd: gui.HWND | null = null
 
 const args = scriptArgs.slice(0)
 logger.log('[main] scriptArgs:', args)
@@ -53,10 +53,6 @@ if (args.includes('--uninstall')) {
     })
 } else runMainApp()
 
-export let printWorker: PrintWorker | null = null
-export let mainHwnd: gui.HWND | null = null
-export let hMutex: number = 0
-
 import pWorkerUrl from './print-worker?worker&url'
 
 export function destroyPrintWorker() {
@@ -67,20 +63,13 @@ export function destroyPrintWorker() {
     }
 }
 
-function runMainApp() {
-    const k32 = win.LoadLibrary('kernel32.dll')
-    const pCreateMutexW = k32 ? win.GetProcAddress(k32, 'CreateMutexW') : 0
-    const pGetLastError = k32 ? win.GetProcAddress(k32, 'GetLastError') : 0
-    if (pCreateMutexW && pGetLastError) {
-        hMutex = ffiCall(pCreateMutexW, [FFI_TYPE_POINTER, FFI_TYPE_SINT32, FFI_TYPE_POINTER],
-            [null, 0, strToWideBuf('SuperPrint_SingleInstance')], FFI_TYPE_POINTER) as number
-        const err = ffiCall(pGetLastError, [], [], FFI_TYPE_UINT32) as number
-        if (err === 183) {
-            gui.PostQuitMessage(0)
-            return
-        }
-    }
+export function cleanupMain() {
+    cleanupWs()
+    destroyPrintWorker()
+    clearUpdateTimer()
+}
 
+function runMainApp() {
     const winW = 600
     const winH = 400
     const WM_TRAY = gui.WmMsg.USER + 0x401

@@ -9,6 +9,15 @@ import { strToWideBuf, readPtr, getExePath, guidStrToBytes } from './utils.js'
 // helpers
 // ---------------------------------------------------------------------------
 
+const _k32 = win.LoadLibrary('kernel32.dll')
+function k32proc(name: string): number | null {
+  return _k32 ? win.GetProcAddress(_k32, name) : null
+}
+function gle(): number {
+  const p = k32proc('GetLastError')
+  return p ? ffiCall(p, [], [], FFI_TYPE_SINT32) as number : 0
+}
+
 function readQword(addr: number): number {
   const b0 = readByte(addr)
   const b1 = readByte(addr + 1)
@@ -41,53 +50,36 @@ function copyFile(src: string, dst: string): boolean {
 }
 
 function mkdirW(path: string): boolean {
-  const k32 = win.LoadLibrary('kernel32.dll')
-  if (!k32) return false
-  const pCDW = win.GetProcAddress(k32, 'CreateDirectoryW')
-  if (!pCDW) return false
-  const ok = ffiCall(pCDW,
+  const p = k32proc('CreateDirectoryW')
+  if (!p) return false
+  const ok = ffiCall(p,
     [FFI_TYPE_POINTER, FFI_TYPE_POINTER],
     [strToWideBuf(path), null],
     FFI_TYPE_SINT32) as number
   if (ok) return true
-  const pGLE = win.GetProcAddress(k32, 'GetLastError')
-  if (!pGLE) return false
-  const err = ffiCall(pGLE, [], [], FFI_TYPE_SINT32) as number
-  return err === gui.ErrorCode.ALREADY_EXISTS
+  return gle() === gui.ErrorCode.ALREADY_EXISTS
 }
 
 function deleteFileW(path: string): boolean {
-  const k32 = win.LoadLibrary('kernel32.dll')
-  if (!k32) return false
-  const pDFW = win.GetProcAddress(k32, 'DeleteFileW')
-  if (!pDFW) return false
-  const ok = ffiCall(pDFW, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32) as number
+  const p = k32proc('DeleteFileW')
+  if (!p) return false
+  const ok = ffiCall(p, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32) as number
   if (ok) return true
-  const pGLE = win.GetProcAddress(k32, 'GetLastError')
-  if (!pGLE) return false
-  const err = ffiCall(pGLE, [], [], FFI_TYPE_SINT32) as number
-  return err === gui.ErrorCode.FILE_NOT_FOUND
+  return gle() === gui.ErrorCode.FILE_NOT_FOUND
 }
 
 function removeDirW(path: string): boolean {
-  const k32 = win.LoadLibrary('kernel32.dll')
-  if (!k32) return false
-  const pRDW = win.GetProcAddress(k32, 'RemoveDirectoryW')
-  if (!pRDW) return false
-  const ok = ffiCall(pRDW, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32) as number
+  const p = k32proc('RemoveDirectoryW')
+  if (!p) return false
+  const ok = ffiCall(p, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32) as number
   if (ok) return true
-  const pGLE = win.GetProcAddress(k32, 'GetLastError')
-  if (!pGLE) return false
-  const err = ffiCall(pGLE, [], [], FFI_TYPE_SINT32) as number
-  return err === gui.ErrorCode.FILE_NOT_FOUND
+  return gle() === gui.ErrorCode.FILE_NOT_FOUND
 }
 
 function moveFileW(oldPath: string, newPath: string): boolean {
-  const k32 = win.LoadLibrary('kernel32.dll')
-  if (!k32) return false
-  const pMF = win.GetProcAddress(k32, 'MoveFileExW')
-  if (!pMF) return false
-  const hr = ffiCall(pMF,
+  const p = k32proc('MoveFileExW')
+  if (!p) return false
+  const hr = ffiCall(p,
     [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
     [strToWideBuf(oldPath), strToWideBuf(newPath), 1], // MOVEFILE_REPLACE_EXISTING = 1
     FFI_TYPE_SINT32) as number
@@ -95,15 +87,13 @@ function moveFileW(oldPath: string, newPath: string): boolean {
 }
 
 function spawnDetached(cmdLine: string, cwd: string): void {
-  const k32 = win.LoadLibrary('kernel32.dll')
-  if (!k32) throw new Error('加载 kernel32.dll 失败')
-  const pCP = win.GetProcAddress(k32, 'CreateProcessW')
-  if (!pCP) throw new Error('获取 CreateProcessW 失败')
+  const p = k32proc('CreateProcessW')
+  if (!p) throw new Error('加载 kernel32.dll 失败')
   const si = new ArrayBuffer(256)
   const siDv = new DataView(si)
   siDv.setUint32(0, 104, true)
   const pi = new ArrayBuffer(24)
-  const ok = ffiCall(pCP,
+  const ok = ffiCall(p,
     [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER,
      FFI_TYPE_POINTER, FFI_TYPE_SINT32, FFI_TYPE_UINT32,
      FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER,

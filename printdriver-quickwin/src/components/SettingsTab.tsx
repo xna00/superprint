@@ -8,6 +8,7 @@ import { BUILD_TIME } from '../config.js'
 import { checkAndUpdate } from '../update.js'
 import { getExePath } from '../utils.js'
 import { logger } from '../logger.js'
+import { mainHwnd, cleanupMain } from '../main.js'
 
 const VISIBLE = gui.WindowStyle.VISIBLE
 
@@ -82,6 +83,13 @@ export function SettingsTab() {
           }
           logger.log('[cache] cleared: ' + (names ? names.length : 0) + ' files')
         }} style={{ width: 110, height: 26 }}>清除缓存</Button>
+      </w>
+      <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'row', gap: 4 }}>
+        <Button onClick={() => {
+          if (mainHwnd) gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd: mainHwnd, uID: 1 })
+          cleanupMain()
+          gui.PostQuitMessage(0)
+        }} style={{ width: 110, height: 26 }}>退出</Button>
       </w>
     </w>
   )

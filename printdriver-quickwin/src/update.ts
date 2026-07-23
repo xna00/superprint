@@ -3,11 +3,11 @@ import * as gui from 'gui'
 import * as std from 'std'
 import * as os from 'os'
 import * as win from 'win'
-import { ffiCall, FFI_TYPE_UINT32, FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_POINTER } from 'ffi'
+import { ffiCall, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER } from 'ffi'
 import { strToWideBuf, getExePath } from './utils.js'
 import { ENTRY_HASH } from './config.js'
 import { api } from './api.js'
-import { mainHwnd, hMutex } from './main.js'
+import { mainHwnd, cleanupMain } from './main.js'
 import { logger } from './logger.js'
 import hashWorkerUrl from './hash-worker?worker&url'
 
@@ -140,12 +140,9 @@ export async function checkAndUpdate() {
     if (!started) {
       logger.log('[update] CreateProcessW failed, you may restart manually')
     }
-    if (hMutex) {
-      const k32 = win.LoadLibrary('kernel32.dll')
-      const pReleaseMutex = k32 ? win.GetProcAddress(k32, 'ReleaseMutex') : null
-      if (pReleaseMutex) ffiCall(pReleaseMutex, [FFI_TYPE_UINT64], [hMutex], FFI_TYPE_SINT32)
-    }
-    if (mainHwnd) gui.DestroyWindow(mainHwnd)
+    if (mainHwnd) gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd: mainHwnd, uID: 1 })
+    cleanupMain()
+    gui.PostQuitMessage(0)
   }
 }
 

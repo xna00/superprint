@@ -176,7 +176,7 @@ export function App() {
 
     return (
         <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', flexGrow: 1 }}>
-            <Tab tabs={[
+            <Tab defaultSelectedIndex={2} tabs={[
                 {
                     title: '打印机',
                     content: (
