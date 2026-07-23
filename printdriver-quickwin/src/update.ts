@@ -29,6 +29,7 @@ function initFfi() {
 }
 
 let hashWorker: os.Worker | null = null
+let _exeHash: string | null = null
 
 function sha1File(filePath: string): Promise<string> {
     return new Promise((resolve) => {
@@ -39,6 +40,12 @@ function sha1File(filePath: string): Promise<string> {
         }
         hashWorker.postMessage({ filePath })
     })
+}
+
+async function getExeHash(exePath: string): Promise<string> {
+    if (_exeHash) return _exeHash
+    _exeHash = await sha1File(exePath)
+    return _exeHash
 }
 
 
@@ -91,7 +98,7 @@ export async function checkAndUpdate() {
     return
   }
 
-  const exeHash = await sha1File(exePath)
+  const exeHash = await getExeHash(exePath)
   const entryJsHash = ENTRY_HASH
 
   logger.log('[update] checking:', { exeHash, entryJsHash })
