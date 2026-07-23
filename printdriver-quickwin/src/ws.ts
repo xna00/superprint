@@ -9,6 +9,8 @@ let ws: WebSocket | null = null
 let lastMsgTime = 0
 let wsTimeoutTimer: ReturnType<typeof os.setTimeout> | null = null
 let wsLog: ((msg: string) => void) | null = null
+let _lastAddLog: ((msg: string) => void) | null = null
+let _lastSetWsStatus: ((s: string) => void) | null = null
 const WS_TIMEOUT = 60000
 const WS_TIMEOUT_CHECK = 10000
 
@@ -40,6 +42,8 @@ export function cleanupWs() {
 
 export async function connectWs(addLog: (msg: string) => void, setWsStatus: (s: string) => void) {
     wsLog = addLog
+    _lastAddLog = addLog
+    _lastSetWsStatus = setWsStatus
     const cookie = getCookie()
     if (!cookie) {
         addLog('[ws] no cookie, skip connection')
@@ -99,4 +103,12 @@ export async function connectWs(addLog: (msg: string) => void, setWsStatus: (s: 
     }
     addLog('[ws] all URLs failed, retry in 10s')
     os.setTimeout(() => connectWs(addLog, setWsStatus), 10000)
+}
+
+export function resetWs() {
+    cleanupWs()
+    if (_lastAddLog && _lastSetWsStatus) {
+        _lastAddLog('[ws] resetting connection after wake')
+        os.setTimeout(() => connectWs(_lastAddLog!, _lastSetWsStatus!), 1000)
+    }
 }

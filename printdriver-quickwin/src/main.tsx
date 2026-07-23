@@ -6,7 +6,7 @@ import { ffiCall, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_SINT32 } from 'ffi
 import * as os from 'os'
 import * as std from 'std'
 import { createRoot } from 'quickwin/lib/react-qw/index.js'
-import { cleanupWs } from './ws.js'
+import { cleanupWs, resetWs } from './ws.js'
 import { setPrintWorker } from './print-queue.js'
 import type { PrintWorker } from './worker-types.js'
 import { App } from './App.js'
@@ -109,6 +109,7 @@ function runMainApp() {
         onEvent: ({ hwnd, msg, wParam, lParam }) => {
             if (msg === WM_POWERBROADCAST) {
                 if (wParam === PBT_APMRESUMESUSPEND || wParam === PBT_APMRESUMEAUTOMATIC) {
+                    logger.log('[main] resuming from sleep')
                     gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd, uID: 1 })
                     const hIcon = gui.LoadIcon('APPLICATION')
                     if (hIcon) {
@@ -119,6 +120,7 @@ function runMainApp() {
                             hIcon,
                         })
                     }
+                    resetWs()
                 }
                 return 0
             }
