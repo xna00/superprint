@@ -3,7 +3,7 @@ import * as os from 'os'
 import { getCookie } from './storage.js'
 import { getDeviceId } from './device.js'
 import { handleWsMessage } from './print-queue.js'
-import { WS_URLS } from './config.js'
+import { WS_URLS, WS_TIMEOUT } from './config.js'
 
 let ws: WebSocket | null = null
 let lastMsgTime = 0
@@ -11,7 +11,6 @@ let wsTimeoutTimer: ReturnType<typeof os.setTimeout> | null = null
 let wsLog: ((msg: string) => void) | null = null
 let _lastAddLog: ((msg: string) => void) | null = null
 let _lastSetWsStatus: ((s: string) => void) | null = null
-const WS_TIMEOUT = 60000
 const WS_TIMEOUT_CHECK = 10000
 
 function checkWsTimeout() {

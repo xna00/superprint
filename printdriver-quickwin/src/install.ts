@@ -5,6 +5,10 @@ import { ffiCall, readByte, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER, 
 import * as gui from 'gui'
 import { strToWideBuf, readPtr, getExePath, guidStrToBytes } from './utils.js'
 
+const INSTALL_DIR = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
+const TARGET_EXE = INSTALL_DIR + '\\QuickSuperPrint.exe'
+const START_MENU_DIR = (std.getenv('APPDATA') || '') + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
+
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
@@ -283,34 +287,27 @@ export function runUninstallStep(key: string): boolean {
 function installStepCopy(): boolean {
   const exePath = getExePath()
   if (!exePath) return false
-  const installDir = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
-  const targetExe = installDir + '\\QuickSuperPrint.exe'
-  os.mkdir(installDir)
-  return copyFile(exePath, targetExe)
+  os.mkdir(INSTALL_DIR)
+  return copyFile(exePath, TARGET_EXE)
 }
 
 function installStepRegRun(): boolean {
-  const targetExe = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint\\QuickSuperPrint.exe'
-  const cmdLine = '"' + targetExe + '" --run --autostart'
+  const cmdLine = '"' + TARGET_EXE + '" --run --autostart'
   return regSetRun(cmdLine)
 }
 
 function installStepStartMenu(): boolean {
-  const targetExe = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint\\QuickSuperPrint.exe'
-  const appData = std.getenv('APPDATA') || ''
-  const startMenuDir = appData + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
-  mkdirW(startMenuDir)
-  createShortcut(targetExe, '-c --run', startMenuDir + '\\超人打印(-c).lnk', '超人打印')
-  createShortcut(targetExe, '-c --uninstall', startMenuDir + '\\卸载(-c).lnk', '卸载超人打印')
-  createShortcut(targetExe, '--run', startMenuDir + '\\超人打印.lnk', '超人打印')
-  createShortcut(targetExe, '--uninstall', startMenuDir + '\\卸载.lnk', '卸载超人打印')
+  mkdirW(START_MENU_DIR)
+  createShortcut(TARGET_EXE, '-c --run', START_MENU_DIR + '\\超人打印(-c).lnk', '超人打印')
+  createShortcut(TARGET_EXE, '-c --uninstall', START_MENU_DIR + '\\卸载(-c).lnk', '卸载超人打印')
+  createShortcut(TARGET_EXE, '--run', START_MENU_DIR + '\\超人打印.lnk', '超人打印')
+  createShortcut(TARGET_EXE, '--uninstall', START_MENU_DIR + '\\卸载.lnk', '卸载超人打印')
   return true
 }
 
 function installStepDesktop(): boolean {
-  const targetExe = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint\\QuickSuperPrint.exe'
   const userProfile = std.getenv('USERPROFILE') || ''
-  return createShortcut(targetExe, '--run', userProfile + '\\Desktop\\超人打印.lnk', '超人打印')
+  return createShortcut(TARGET_EXE, '--run', userProfile + '\\Desktop\\超人打印.lnk', '超人打印')
 }
 
 function uninstallStepShortcuts(): boolean {
@@ -326,11 +323,10 @@ function uninstallStepShortcuts(): boolean {
 }
 
 function uninstallStepFiles(): boolean {
-  const installDir = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
-  const startMenuDir = (std.getenv('APPDATA') || '') + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
+  const userProfile = std.getenv('USERPROFILE') || ''
 
   // 1. clear _cache
-  const cacheDir = installDir + '\\_cache'
+  const cacheDir = INSTALL_DIR + '\\_cache'
   const dirResult = os.readdir(cacheDir)
   const cacheFiles = dirResult ? dirResult[0] : null
   if (cacheFiles) {
@@ -342,12 +338,12 @@ function uninstallStepFiles(): boolean {
   removeDirW(cacheDir)
 
   // 2. remove start menu folder (lnks already deleted in previous step)
-  removeDirW(startMenuDir)
+  removeDirW(START_MENU_DIR)
 
   // 3. spawn delayed bat to delete the entire SuperPrint dir (incl. running exe)
   const tmpDir = std.getenv('TEMP') || ''
   const batPath = tmpDir + '\\del_superprint.bat'
-  const batContent = '@ping 127.0.0.1 -n 9 > nul\n@rmdir /s /q "' + installDir + '"\n@del "%~f0"\n'
+  const batContent = '@ping 127.0.0.1 -n 9 > nul\n@rmdir /s /q "' + INSTALL_DIR + '"\n@del "%~f0"\n'
   const f = std.open(batPath, 'wb')
   if (f) {
     const buf = new ArrayBuffer(batContent.length)

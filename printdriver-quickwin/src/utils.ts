@@ -1,6 +1,11 @@
 import { readByte } from 'ffi'
 import * as win from 'win'
 
+/** 返回北京时间 (UTC+8) 的 Date 对象 */
+export function toCST(date?: Date): Date {
+    return new Date((date || new Date()).getTime() + 8 * 3600000)
+}
+
 export function getExePath(): string {
   return win.GetModuleFileName() || ''
 }

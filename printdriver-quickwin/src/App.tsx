@@ -8,6 +8,7 @@ import { enumLocalPrinters, type LocalPrinterInfo } from './printer.js'
 import { setLogger } from './print-queue.js'
 import { connectWs } from './ws.js'
 import { logger } from './logger.js'
+import { toCST } from './utils.js'
 import { LoginForm } from './components/LoginForm.js'
 import { PrintersTab } from './components/PrintersTab.js'
 
@@ -32,8 +33,7 @@ export function App() {
     const MAX_LOG = 100
 
     const addLog = (msg: string) => {
-        const now = new Date()
-        const local8 = new Date(now.getTime() + 8 * 3600000)
+        const local8 = toCST()
         const ts = `${local8.getUTCMonth()+1}/${local8.getUTCDate()} ${String(local8.getUTCHours()).padStart(2,'0')}:${String(local8.getUTCMinutes()).padStart(2,'0')}:${String(local8.getUTCSeconds()).padStart(2,'0')}`
         const line = `[${ts}] ${msg}`
         logger.log('[log]', line)
