@@ -36,7 +36,7 @@ const SetBrushOrgEx = gdip('SetBrushOrgEx')
 const GetLastError = _kernel32 ? win.GetProcAddress(_kernel32, 'GetLastError') : 0
 const RtlMoveMemory = _kernel32 ? win.GetProcAddress(_kernel32, 'RtlMoveMemory') : 0
 function gle(): number {
-    return GetLastError ? ffiCall(GetLastError, [], [], FFI_TYPE_UINT32) as number : 0
+    return GetLastError ? ffiCall(GetLastError, [], [], FFI_TYPE_UINT32) : 0
 }
 
 const HORZRES = gui.DeviceCap.HORZRES
@@ -189,7 +189,7 @@ function renderPdfPageWithPDFium(procs: Record<string, number>, doc: number, pag
     let page: number | null = null
     let bmp: number | null = null
     try {
-        page = ffiCall(procs['FPDF_LoadPage'], [FFI_U64, FFI_S32], [doc, pageIndex], FFI_PTR) as number | null
+        page = ffiCall(procs['FPDF_LoadPage'], [FFI_U64, FFI_S32], [doc, pageIndex], FFI_PTR)
         if (page === null || page === 0) return null
 
         const isLandscape = pageW > pageH
@@ -198,7 +198,7 @@ function renderPdfPageWithPDFium(procs: Record<string, number>, doc: number, pag
         const rotate = isLandscape ? 3 : 0
 
         // 32-bit BGRx (alpha=0): compatible with BI_RGB 32-bit, no pixel conversion needed
-        bmp = ffiCall(procs['FPDFBitmap_Create'], [FFI_S32, FFI_S32, FFI_S32], [bmpW, bmpH, 0], FFI_PTR) as number | null
+        bmp = ffiCall(procs['FPDFBitmap_Create'], [FFI_S32, FFI_S32, FFI_S32], [bmpW, bmpH, 0], FFI_PTR)
         if (bmp === null || bmp === 0) return null
 
         ffiCall(procs['FPDFBitmap_FillRect'], [FFI_U64, FFI_S32, FFI_S32, FFI_S32, FFI_S32, FFI_U32],
@@ -206,8 +206,8 @@ function renderPdfPageWithPDFium(procs: Record<string, number>, doc: number, pag
         ffiCall(procs['FPDF_RenderPageBitmap'], [FFI_U64, FFI_U64, FFI_S32, FFI_S32, FFI_S32, FFI_S32, FFI_S32, FFI_U32],
             [bmp, page, 0, 0, bmpW, bmpH, rotate, 0], FFI_VOID)
 
-        const stride = ffiCall(procs['FPDFBitmap_GetStride'], [FFI_U64], [bmp], FFI_S32) as number
-        const ptr = ffiCall(procs['FPDFBitmap_GetBuffer'], [FFI_U64], [bmp], FFI_PTR) as number | null
+        const stride = ffiCall(procs['FPDFBitmap_GetStride'], [FFI_U64], [bmp], FFI_S32)
+        const ptr = ffiCall(procs['FPDFBitmap_GetBuffer'], [FFI_U64], [bmp], FFI_PTR)
         if (ptr === null || ptr === 0) return null
 
         const pixelSize = bmpH * stride
@@ -223,8 +223,8 @@ function renderPdfPageWithPDFium(procs: Record<string, number>, doc: number, pag
 }
 
 function centerAndStretch(hdc: number, dib: DibResult, use32bit: boolean): boolean {
-    const paperW = ffiCall(GetDeviceCaps, [FFI_U64, FFI_S32], [hdc, HORZRES], FFI_S32) as number
-    const paperH = ffiCall(GetDeviceCaps, [FFI_U64, FFI_S32], [hdc, VERTRES], FFI_S32) as number
+    const paperW = ffiCall(GetDeviceCaps, [FFI_U64, FFI_S32], [hdc, HORZRES], FFI_S32)
+    const paperH = ffiCall(GetDeviceCaps, [FFI_U64, FFI_S32], [hdc, VERTRES], FFI_S32)
     const scaleX = paperW / dib.w
     const scaleY = paperH / dib.h
     const sc = scaleX < scaleY ? scaleX : scaleY
@@ -241,7 +241,7 @@ function centerAndStretch(hdc: number, dib: DibResult, use32bit: boolean): boole
         hdc, drawX, drawY, drawW, drawH,
         0, 0, dib.w, dib.h,
         dib.data, bmi, 0, gui.RasterOp.SRCCOPY,
-    ], FFI_S32) as number
+    ], FFI_S32)
     return sdRet > 0
 }
 
@@ -386,7 +386,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     if (renderEngine === 'pdfium') {
         const procs = await initPDFium()
 
-        const pdfDoc = ffiCall(procs['FPDF_LoadMemDocument'], [FFI_PTR, FFI_S32, FFI_PTR], [pdfBuf, pdfBuf.byteLength, null], FFI_PTR) as number | null
+        const pdfDoc = ffiCall(procs['FPDF_LoadMemDocument'], [FFI_PTR, FFI_S32, FFI_PTR], [pdfBuf, pdfBuf.byteLength, null], FFI_PTR)
         if (!pdfDoc) {
             logger.log('[worker] FPDF_LoadMemDocument failed')
             ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
@@ -395,12 +395,12 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
             return false
         }
         try {
-            const totalPages = ffiCall(procs['FPDF_GetPageCount'], [FFI_U64], [pdfDoc], FFI_S32) as number
+            const totalPages = ffiCall(procs['FPDF_GetPageCount'], [FFI_U64], [pdfDoc], FFI_S32)
             logger.log('[worker] PDF pages:', totalPages)
 
             for (let i = 0; i < totalPages; i++) {
                 logger.log('[worker] page ' + (i + 1) + '/' + totalPages)
-                const spRet = ffiCall(StartPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32) as number
+                const spRet = ffiCall(StartPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
                 if (spRet <= 0) logger.log('[worker] StartPage failed, ret=' + spRet + ' GLE=' + gle())
                 ffiCall(SetStretchBltMode, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, 4], FFI_TYPE_SINT32)
                 ffiCall(SetBrushOrgEx, [FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER], [hdc, 0, 0, null], FFI_TYPE_SINT32)
@@ -408,7 +408,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                     let t0 = Date.now()
                     const wBuf = new ArrayBuffer(8), hBuf = new ArrayBuffer(8)
                     const ret = ffiCall(procs['FPDF_GetPageSizeByIndex'], [FFI_U64, FFI_S32, FFI_PTR, FFI_PTR],
-                        [pdfDoc, i, wBuf, hBuf], FFI_S32) as number
+                        [pdfDoc, i, wBuf, hBuf], FFI_S32)
                     if (ret <= 0) logger.log('[worker] page ' + i + ' GetPageSizeByIndex failed')
                     const pageW = new DataView(wBuf).getFloat64(0, true)
                     const pageH = new DataView(hBuf).getFloat64(0, true)
@@ -425,7 +425,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                 } catch (e: unknown) {
                     logger.log('[worker] page ' + i + ' error:', e instanceof Error ? e.stack : String(e))
                 }
-                const epRet = ffiCall(EndPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32) as number
+                const epRet = ffiCall(EndPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
                 if (epRet <= 0) logger.log('[worker] EndPage failed, ret=' + epRet + ' GLE=' + gle())
             }
         } catch (e: unknown) {

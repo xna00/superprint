@@ -17,7 +17,7 @@ import { strToWideBuf } from './utils.js'
 
 export let printWorker: PrintWorker | null = null
 export let mainHwnd: gui.HWND | null = null
-export let hMutex: number = 0
+export let hMutex: number | null = null
 
 const args = scriptArgs.slice(0)
 logger.log('[main] scriptArgs:', args)
@@ -79,8 +79,8 @@ function runMainApp() {
     const pGetLastError = k32 ? win.GetProcAddress(k32, 'GetLastError') : 0
     if (pCreateMutexW && pGetLastError) {
         hMutex = ffiCall(pCreateMutexW, [FFI_TYPE_POINTER, FFI_TYPE_SINT32, FFI_TYPE_POINTER],
-            [null, 0, strToWideBuf('SuperPrint_SingleInstance')], FFI_TYPE_POINTER) as number
-        const err = ffiCall(pGetLastError, [], [], FFI_TYPE_UINT32) as number
+            [null, 0, strToWideBuf('SuperPrint_SingleInstance')], FFI_TYPE_POINTER)
+        const err = ffiCall(pGetLastError, [], [], FFI_TYPE_UINT32)
         if (err === 183) {
             gui.PostQuitMessage(0)
             return

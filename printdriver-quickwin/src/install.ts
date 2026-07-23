@@ -15,7 +15,7 @@ function k32proc(name: string): number | null {
 }
 function gle(): number {
   const p = k32proc('GetLastError')
-  return p ? ffiCall(p, [], [], FFI_TYPE_SINT32) as number : 0
+  return p ? ffiCall(p, [], [], FFI_TYPE_SINT32) : 0
 }
 
 function readQword(addr: number): number {
@@ -55,7 +55,7 @@ function mkdirW(path: string): boolean {
   const ok = ffiCall(p,
     [FFI_TYPE_POINTER, FFI_TYPE_POINTER],
     [strToWideBuf(path), null],
-    FFI_TYPE_SINT32) as number
+    FFI_TYPE_SINT32)
   if (ok) return true
   return gle() === gui.ErrorCode.ALREADY_EXISTS
 }
@@ -63,7 +63,7 @@ function mkdirW(path: string): boolean {
 function deleteFileW(path: string): boolean {
   const p = k32proc('DeleteFileW')
   if (!p) return false
-  const ok = ffiCall(p, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32) as number
+  const ok = ffiCall(p, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32)
   if (ok) return true
   return gle() === gui.ErrorCode.FILE_NOT_FOUND
 }
@@ -71,7 +71,7 @@ function deleteFileW(path: string): boolean {
 function removeDirW(path: string): boolean {
   const p = k32proc('RemoveDirectoryW')
   if (!p) return false
-  const ok = ffiCall(p, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32) as number
+  const ok = ffiCall(p, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32)
   if (ok) return true
   return gle() === gui.ErrorCode.FILE_NOT_FOUND
 }
@@ -82,7 +82,7 @@ function moveFileW(oldPath: string, newPath: string): boolean {
   const hr = ffiCall(p,
     [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
     [strToWideBuf(oldPath), strToWideBuf(newPath), 1], // MOVEFILE_REPLACE_EXISTING = 1
-    FFI_TYPE_SINT32) as number
+    FFI_TYPE_SINT32)
   return hr !== 0
 }
 
@@ -100,7 +100,7 @@ function spawnDetached(cmdLine: string, cwd: string): void {
      FFI_TYPE_POINTER],
     [null, strToWideBuf(cmdLine), null, null, 0, gui.ProcessCreationFlag.NO_WINDOW,
      null, strToWideBuf(cwd), si, pi],
-    FFI_TYPE_SINT32) as number
+    FFI_TYPE_SINT32)
   if (!ok) throw new Error('CreateProcessW 失败')
 }
 
@@ -122,7 +122,7 @@ function regSetRun(cmdLine: string): boolean {
   const hr = ffiCall(pCreate,
     [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
     [gui.HKey.CURRENT_USER, keyW, 0, null, 0, gui.RegAccess.SET_VALUE, null, hKeyBuf, null],
-    FFI_TYPE_SINT32) as number
+    FFI_TYPE_SINT32)
   if (hr !== 0) return false
 
   const hKey = readPtr(new DataView(hKeyBuf), 0)
@@ -131,7 +131,7 @@ function regSetRun(cmdLine: string): boolean {
   const hr2 = ffiCall(pSet,
     [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
     [hKey, nameW, 0, gui.RegType.SZ, dataW, cmdLine.length * 2 + 2],
-    FFI_TYPE_SINT32) as number
+    FFI_TYPE_SINT32)
   ffiCall(pClose, [FFI_TYPE_UINT32], [hKey], FFI_TYPE_SINT32)
   return hr2 === 0
 }
@@ -146,7 +146,7 @@ function regDeleteRun(): boolean {
   const hr = ffiCall(pDel,
     [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
     [gui.HKey.CURRENT_USER, keyW, nameW],
-    FFI_TYPE_SINT32) as number
+    FFI_TYPE_SINT32)
   // ERROR_FILE_NOT_FOUND → value doesn't exist, success
   return hr === 0 || hr === gui.ErrorCode.FILE_NOT_FOUND
 }
@@ -194,7 +194,7 @@ function createShortcut(targetPath: string, args: string, shortcutPath: string, 
   const hr = ffiCall(pInst,
     [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
     [CLSID_ShellLink, null, 1, IID_IShellLinkW, ppv],
-    FFI_TYPE_SINT32) as number
+    FFI_TYPE_SINT32)
 
   if (hr !== 0) {
     ffiCall(pUninit, [], [], FFI_TYPE_SINT32)
@@ -215,7 +215,7 @@ function createShortcut(targetPath: string, args: string, shortcutPath: string, 
   const hrQI = ffiCall(pQI,
     [FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
     [pSL, IID_IPersistFile, ppf],
-    FFI_TYPE_SINT32) as number
+    FFI_TYPE_SINT32)
 
   if (hrQI !== 0) {
     callComVoid(vt, VT_IDX_RELEASE, pSL)
@@ -229,7 +229,7 @@ function createShortcut(targetPath: string, args: string, shortcutPath: string, 
   const hrSave = ffiCall(pSave,
     [FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
     [pPF, strToWideBuf(shortcutPath), 1],
-    FFI_TYPE_SINT32) as number
+    FFI_TYPE_SINT32)
 
   callComVoid(pfVt, VT_IDX_RELEASE, pPF)
   callComVoid(vt, VT_IDX_RELEASE, pSL)

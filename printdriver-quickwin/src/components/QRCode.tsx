@@ -50,7 +50,7 @@ export function QRCode({ text, size }: QRCodeProps) {
         const hbmp = createBitmap(size, size, 32, buf.buffer)
         hbmpRef.current = hbmp
 
-        const oldBmp = gui.SendMessage(hStatic, STM_SETIMAGE, IMAGE_BITMAP, hbmp) as number
+        const oldBmp = gui.SendMessage(hStatic, STM_SETIMAGE, IMAGE_BITMAP, hbmp)
         gui.InvalidateRect(hStatic, null, true)
         if (oldBmp && oldBmp !== hbmp) {
             deleteObject(oldBmp)

@@ -22,7 +22,7 @@ export function createBitmap(width: number, height: number, bpp: number, bits: A
         [FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_UINT32, FFI_TYPE_UINT32, FFI_TYPE_POINTER],
         [width, height, 1, bpp, bits],
         FFI_TYPE_UINT64
-    ) as number
+    )
 }
 
 export function deleteObject(hObj: number): boolean {
