@@ -1,4 +1,3 @@
-import 'quickwin/lib/polyfill.js'
 import "./main.js"
 
 const baseUrl = import.meta.url.substring(0, import.meta.url.lastIndexOf('/') + 1)
