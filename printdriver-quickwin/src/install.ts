@@ -298,8 +298,10 @@ function installStepRegRun(): boolean {
 
 function installStepStartMenu(): boolean {
   mkdirW(START_MENU_DIR)
-  createShortcut(TARGET_EXE, '-c --run', START_MENU_DIR + '\\超人打印(-c).lnk', '超人打印')
-  createShortcut(TARGET_EXE, '-c --uninstall', START_MENU_DIR + '\\卸载(-c).lnk', '卸载超人打印')
+  createShortcut(TARGET_EXE, '-o CON --run', START_MENU_DIR + '\\超人打印(控制台).lnk', '超人打印')
+  createShortcut(TARGET_EXE, '-o CON --uninstall', START_MENU_DIR + '\\卸载(控制台).lnk', '卸载超人打印')
+  createShortcut(TARGET_EXE, '-o LOG --run', START_MENU_DIR + '\\超人打印(日志).lnk', '超人打印')
+  createShortcut(TARGET_EXE, '-o LOG --uninstall', START_MENU_DIR + '\\卸载(日志).lnk', '卸载超人打印')
   createShortcut(TARGET_EXE, '--run', START_MENU_DIR + '\\超人打印.lnk', '超人打印')
   createShortcut(TARGET_EXE, '--uninstall', START_MENU_DIR + '\\卸载.lnk', '卸载超人打印')
   return true
@@ -314,10 +316,14 @@ function uninstallStepShortcuts(): boolean {
   const appData = std.getenv('APPDATA') || ''
   const userProfile = std.getenv('USERPROFILE') || ''
   const startMenuDir = appData + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
-  deleteFileW(startMenuDir + '\\超人打印(-c).lnk')
-  deleteFileW(startMenuDir + '\\卸载(-c).lnk')
+  deleteFileW(startMenuDir + '\\超人打印(控制台).lnk')
+  deleteFileW(startMenuDir + '\\卸载(控制台).lnk')
+  deleteFileW(startMenuDir + '\\超人打印(日志).lnk')
+  deleteFileW(startMenuDir + '\\卸载(日志).lnk')
   deleteFileW(startMenuDir + '\\超人打印.lnk')
   deleteFileW(startMenuDir + '\\卸载.lnk')
+  deleteFileW(startMenuDir + '\\超人打印(-c).lnk')
+  deleteFileW(startMenuDir + '\\卸载(-c).lnk')
   deleteFileW(userProfile + '\\Desktop\\超人打印.lnk')
   return true
 }
