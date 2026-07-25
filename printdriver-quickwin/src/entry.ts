@@ -11,7 +11,7 @@ logger.log('[entry] scriptArgs:', scriptArgs)
 fetch(baseUrl + 'vite_manifest.json?t=' + Date.now())
   .then(r => r.json())
   .then(m => {
-    for (const [src, info] of Object.entries(m)) {
+    for (const [src, info] of Object.entries(m as Record<string, unknown>)) {
       const entry = info as any
       if (entry.isDynamicEntry && entry.file && entry.file.endsWith('.js')) {
         const url = baseUrl + entry.file
