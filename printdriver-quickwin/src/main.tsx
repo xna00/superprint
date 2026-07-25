@@ -108,8 +108,9 @@ function runMainApp() {
         noShowWindow: true,
         onEvent: ({ hwnd, msg, wParam, lParam }) => {
             if (msg === WM_POWERBROADCAST) {
+                logger.log(`[main] WM_POWERBROADCAST wParam=${wParam} (expected suspend=${PBT_APMRESUMESUSPEND} auto=${PBT_APMRESUMEAUTOMATIC})`)
                 if (wParam === PBT_APMRESUMESUSPEND || wParam === PBT_APMRESUMEAUTOMATIC) {
-                    logger.log('[main] resuming from sleep')
+                    logger.log('[main] resuming from sleep, refreshing tray icon + resetting ws')
                     gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd, uID: 1 })
                     const hIcon = gui.LoadIcon('APPLICATION')
                     if (hIcon) {
@@ -119,6 +120,9 @@ function runMainApp() {
                             callbackMessage: WM_TRAY,
                             hIcon,
                         })
+                        logger.log('[main] tray icon re-added after wake')
+                    } else {
+                        logger.log('[main] WARNING: failed to load tray icon after wake')
                     }
                     resetWs()
                 }
@@ -150,6 +154,9 @@ function runMainApp() {
                     }
                 }
                 return 0
+            }
+            if (msg !== gui.WmMsg.PAINT && msg !== gui.WmMsg.NCHITTEST && msg !== 512) {
+                logger.log(`[main] onEvent msg=${msg} wParam=${wParam} lParam=${lParam}`)
             }
             if (msg === gui.WmMsg.CLOSE) {
                 const minimizeToTray = storageGet('minimizeToTray')
@@ -196,6 +203,14 @@ function runMainApp() {
     printWorker = new os.Worker(pWorkerUrl) as any as PrintWorker
     setPrintWorker(printWorker)
     logger.log('[main] print worker initialized')
+
+    let heartbeatCount = 0
+    function heartbeat() {
+        heartbeatCount++
+        logger.log(`[heartbeat] alive #${heartbeatCount}`)
+        os.setTimeout(heartbeat, 30000)
+    }
+    os.setTimeout(heartbeat, 30000)
 
     if (globalThis.checkUpdate !== false) {
         os.setTimeout(startUpdateCheck, 1000)
