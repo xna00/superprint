@@ -302,6 +302,7 @@ function installStepStartMenu(): boolean {
   createShortcut(TARGET_EXE, '-o CON --uninstall', START_MENU_DIR + '\\卸载(控制台).lnk', '卸载超人打印')
   createShortcut(TARGET_EXE, '-o LOG --run', START_MENU_DIR + '\\超人打印(日志).lnk', '超人打印')
   createShortcut(TARGET_EXE, '-o LOG --uninstall', START_MENU_DIR + '\\卸载(日志).lnk', '卸载超人打印')
+  createShortcut(TARGET_EXE, '-d -o LOG --run', START_MENU_DIR + '\\超人打印(调试).lnk', '超人打印')
   createShortcut(TARGET_EXE, '--run', START_MENU_DIR + '\\超人打印.lnk', '超人打印')
   createShortcut(TARGET_EXE, '--uninstall', START_MENU_DIR + '\\卸载.lnk', '卸载超人打印')
   return true
@@ -320,6 +321,7 @@ function uninstallStepShortcuts(): boolean {
   deleteFileW(startMenuDir + '\\卸载(控制台).lnk')
   deleteFileW(startMenuDir + '\\超人打印(日志).lnk')
   deleteFileW(startMenuDir + '\\卸载(日志).lnk')
+  deleteFileW(startMenuDir + '\\超人打印(调试).lnk')
   deleteFileW(startMenuDir + '\\超人打印.lnk')
   deleteFileW(startMenuDir + '\\卸载.lnk')
   deleteFileW(startMenuDir + '\\超人打印(-c).lnk')
