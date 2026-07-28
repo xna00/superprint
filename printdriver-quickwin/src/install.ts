@@ -294,7 +294,7 @@ export interface InstallStep {
 }
 
 export const INSTALL_STEPS: InstallStep[] = [
-  { key: 'copy', label: '复制文件到安装目录' },
+  { key: 'copy', label: '安装程序文件' },
   { key: 'regrun', label: '注册系统开机自启' },
   { key: 'startmenu', label: '添加开始菜单快捷方式' },
   { key: 'desktop', label: '添加桌面快捷方式' },
@@ -306,13 +306,13 @@ export const UNINSTALL_STEPS: InstallStep[] = [
   { key: 'remove_files', label: '删除程序文件' },
 ]
 
-export function runInstallStep(key: string): boolean {
+export async function runInstallStep(key: string): Promise<string | null> {
   switch (key) {
-    case 'copy': return installStepCopy()
-    case 'regrun': return installStepRegRun()
-    case 'startmenu': return installStepStartMenu()
-    case 'desktop': return installStepDesktop()
-    default: return false
+    case 'copy': return await installStepCopy()
+    case 'regrun': return installStepRegRun() ? '' : null
+    case 'startmenu': return installStepStartMenu() ? '' : null
+    case 'desktop': return installStepDesktop() ? '' : null
+    default: return null
   }
 }
 
@@ -325,11 +325,32 @@ export function runUninstallStep(key: string): boolean {
   }
 }
 
-function installStepCopy(): boolean {
+const CDN_URLS = [
+  'https://superprint6.xna00.top/printdriver/QuickSuperPrint.exe',
+  'https://superprint.xna00.top/printdriver/QuickSuperPrint.exe',
+]
+
+async function installStepCopy(): Promise<string | null> {
   const exePath = getExePath()
-  if (!exePath) return false
+  if (!exePath) return null
   os.mkdir(INSTALL_DIR)
-  return copyFile(exePath, TARGET_EXE)
+  const t = Date.now()
+  for (const url of CDN_URLS) {
+    try {
+      const resp = await fetch(url + '?t=' + t)
+      if (resp.ok) {
+        const buf = await resp.arrayBuffer()
+        const f = std.open(TARGET_EXE, 'wb')
+        if (f) {
+          f.write(buf, 0, buf.byteLength)
+          f.close()
+          return ' (下载)'
+        }
+      }
+    } catch (_) {}
+  }
+  if (copyFile(exePath, TARGET_EXE)) return ' (本地)'
+  return null
 }
 
 function installStepRegRun(): boolean {
@@ -344,6 +365,7 @@ function installStepStartMenu(): boolean {
   createShortcut(TARGET_EXE, '-d -o LOG --run', START_MENU_DIR + '\\超人打印(调试).lnk', '超人打印')
   createShortcut(TARGET_EXE, '--run', START_MENU_DIR + '\\超人打印.lnk', '超人打印')
   createShortcut(TARGET_EXE, '--uninstall', START_MENU_DIR + '\\卸载.lnk', '卸载超人打印')
+  createShortcut(TARGET_EXE, '--update', START_MENU_DIR + '\\更新.lnk', '更新超人打印')
   return true
 }
 
@@ -398,10 +420,10 @@ function uninstallStepFiles(): boolean {
 // combined CLI functions
 // ---------------------------------------------------------------------------
 
-export function install(): void {
+export async function install(): Promise<void> {
   std.out.printf('[install] starting...\n'); std.out.flush()
   for (const step of INSTALL_STEPS) {
-    const ok = runInstallStep(step.key)
+    const ok = await runInstallStep(step.key)
     std.out.printf('[install] %s: %s\n', step.label, ok ? 'OK' : 'FAIL'); std.out.flush()
     if (!ok) return
   }

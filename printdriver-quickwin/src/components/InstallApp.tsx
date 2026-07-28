@@ -12,6 +12,7 @@ interface Props {
 
 export function InstallApp({ onComplete }: Props) {
     const [states, setStates] = useState<string[]>(INSTALL_STEPS.map(() => 'pending'))
+    const [stepSuffix, setStepSuffix] = useState<Record<number, string>>({})
     const [msg, setMsg] = useState('准备安装...')
     const [done, setDone] = useState(false)
 
@@ -23,9 +24,9 @@ export function InstallApp({ onComplete }: Props) {
                 setStates(s => s.map((_, j) => j === i ? 'doing' : j < i ? 'done' : 'pending'))
                 setMsg(INSTALL_STEPS[i].label + '...')
                 await new Promise<void>(r => os.setTimeout(() => r(), 0))
-                let ok: boolean
+                let result: string | null
                 try {
-                    ok = runInstallStep(INSTALL_STEPS[i].key)
+                    result = await runInstallStep(INSTALL_STEPS[i].key)
                 } catch (e) {
                     setStates(s => s.map((st, j) => j === i ? 'fail' : st))
                     setMsg(INSTALL_STEPS[i].label + ' 失败: ' + String(e))
@@ -33,8 +34,9 @@ export function InstallApp({ onComplete }: Props) {
                     return
                 }
                 if (cancelled) return
-                if (ok) {
+                if (result !== null) {
                     setStates(s => s.map((st, j) => j === i ? 'done' : st))
+                    setStepSuffix(s => ({ ...s, [i]: result! }))
                 } else {
                     setStates(s => s.map((st, j) => j === i ? 'fail' : st))
                     setMsg(INSTALL_STEPS[i].label + ' 失败')
@@ -61,7 +63,7 @@ export function InstallApp({ onComplete }: Props) {
             <w type="STATIC" ws={VISIBLE} text="超人打印 - 安装" style={{ height: 24 }} />
             {INSTALL_STEPS.map((step, i) => (
                 <w key={step.key} type="STATIC" ws={VISIBLE}
-                    text={`${prefix(states[i])} ${step.label}`}
+                    text={`${prefix(states[i])} ${step.label}${stepSuffix[i] || ''}`}
                     style={{ height: 20 }} />
             ))}
             <w type="STATIC" ws={VISIBLE} text={msg} style={{ height: 20 }} />

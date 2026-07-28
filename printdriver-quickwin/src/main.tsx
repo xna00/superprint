@@ -13,7 +13,7 @@ import { App } from './App.js'
 import { storageGet } from './storage.js'
 import { logger } from './logger.js'
 import { startUpdateCheck, clearUpdateTimer } from './update.js'
-import { strToWideBuf } from './utils.js'
+import { strToWideBuf, getExePath } from './utils.js'
 
 export let printWorker: PrintWorker | null = null
 export let mainHwnd: gui.HWND | null = null
@@ -25,7 +25,43 @@ logger.log('[main] scriptArgs:', args)
 const SETUP_W = 400
 const SETUP_H = 220
 
-if (args.includes('--uninstall')) {
+if (args.includes('--update')) {
+    const k32 = win.LoadLibrary('kernel32.dll')
+    if (k32) {
+        const pGetPid = win.GetProcAddress(k32, 'GetCurrentProcessId')
+        if (pGetPid) {
+            const myPid = ffiCall(pGetPid, [], [], FFI_TYPE_UINT32)
+            const exePath = win.GetModuleFileName() || ''
+            const exeName = exePath.split('\\').pop() || ''
+            if (exeName) {
+                const cmd = 'taskkill /f /fi "PID ne ' + myPid + '" /im ' + exeName
+                logger.log('[main] ' + cmd)
+                const p = std.popen(cmd, 'r')
+                if (p) p.close()
+            }
+        }
+    }
+    const curExe = getExePath()
+    if (curExe) {
+        try { os.remove(curExe + '.old') } catch (_) {}
+        try { os.rename(curExe, curExe + '.old') } catch (_) {}
+    }
+
+    import('./components/InstallApp.js').then(({ InstallApp }) => {
+        const root = createRoot({
+            text: '超人打印 - 更新',
+            width: SETUP_W,
+            height: SETUP_H,
+            onEvent: ({ msg }) => {
+                if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
+                    gui.PostQuitMessage(0)
+                    return 0
+                }
+            }
+        })
+        root.render(<InstallApp onComplete={() => gui.PostQuitMessage(0)} />)
+    })
+} else if (args.includes('--uninstall')) {
     // 杀掉运行中的 --run 主进程（排除自身）
     const k32 = win.LoadLibrary('kernel32.dll')
     if (k32) {
