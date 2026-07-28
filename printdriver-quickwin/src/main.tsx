@@ -2,7 +2,7 @@ import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
 import * as gui from 'gui'
 import * as win from 'win'
-import { ffiCall, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_SINT32 } from 'ffi'
+import { ffiCall, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_UINT64 } from 'ffi'
 import * as os from 'os'
 import * as std from 'std'
 import { createRoot } from 'quickwin/lib/react-qw/index.js'
@@ -25,89 +25,80 @@ logger.log('[main] scriptArgs:', args)
 const SETUP_W = 400
 const SETUP_H = 220
 
+function checkRunning(): boolean {
+    const k32 = win.LoadLibrary('kernel32.dll')
+    const pCreateMutexW = k32 ? win.GetProcAddress(k32, 'CreateMutexW') : 0
+    const pGetLastError = k32 ? win.GetProcAddress(k32, 'GetLastError') : 0
+    const pCloseHandle = k32 ? win.GetProcAddress(k32, 'CloseHandle') : 0
+    if (!pCreateMutexW || !pGetLastError) return false
+    const h = ffiCall(pCreateMutexW, [FFI_TYPE_POINTER, FFI_TYPE_SINT32, FFI_TYPE_POINTER],
+        [null, 0, strToWideBuf('SuperPrint_SingleInstance')], FFI_TYPE_POINTER)
+    const err = ffiCall(pGetLastError, [], [], FFI_TYPE_UINT32)
+    if (err === 183) {
+        gui.MessageBox('超人打印正在运行，请先退出后再操作')
+        gui.PostQuitMessage(0)
+        return true
+    }
+    if (pCloseHandle && h) ffiCall(pCloseHandle, [FFI_TYPE_UINT64], [h], FFI_TYPE_SINT32)
+    return false
+}
+
 if (args.includes('--update')) {
-    const k32 = win.LoadLibrary('kernel32.dll')
-    if (k32) {
-        const pGetPid = win.GetProcAddress(k32, 'GetCurrentProcessId')
-        if (pGetPid) {
-            const myPid = ffiCall(pGetPid, [], [], FFI_TYPE_UINT32)
-            const exePath = win.GetModuleFileName() || ''
-            const exeName = exePath.split('\\').pop() || ''
-            if (exeName) {
-                const cmd = 'taskkill /f /fi "PID ne ' + myPid + '" /im ' + exeName
-                logger.log('[main] ' + cmd)
-                const p = std.popen(cmd, 'r')
-                if (p) p.close()
-            }
+    if (!checkRunning()) {
+        const curExe = getExePath()
+        if (curExe) {
+            try { os.remove(curExe + '.old') } catch (_) {}
+            try { os.rename(curExe, curExe + '.old') } catch (_) {}
         }
-    }
-    const curExe = getExePath()
-    if (curExe) {
-        try { os.remove(curExe + '.old') } catch (_) {}
-        try { os.rename(curExe, curExe + '.old') } catch (_) {}
-    }
-
-    import('./components/InstallApp.js').then(({ InstallApp }) => {
-        const root = createRoot({
-            text: '超人打印 - 更新',
-            width: SETUP_W,
-            height: SETUP_H,
-            onEvent: ({ msg }) => {
-                if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
-                    gui.PostQuitMessage(0)
-                    return 0
+        import('./components/InstallApp.js').then(({ InstallApp }) => {
+            const root = createRoot({
+                text: '超人打印 - 更新',
+                width: SETUP_W,
+                height: SETUP_H,
+                onEvent: ({ msg }) => {
+                    if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
+                        gui.PostQuitMessage(0)
+                        return 0
+                    }
                 }
-            }
+            })
+            root.render(<InstallApp onComplete={() => gui.PostQuitMessage(0)} />)
         })
-        root.render(<InstallApp onComplete={() => gui.PostQuitMessage(0)} />)
-    })
+    }
 } else if (args.includes('--uninstall')) {
-    // 杀掉运行中的 --run 主进程（排除自身）
-    const k32 = win.LoadLibrary('kernel32.dll')
-    if (k32) {
-        const pGetPid = win.GetProcAddress(k32, 'GetCurrentProcessId')
-        if (pGetPid) {
-            const myPid = ffiCall(pGetPid, [], [], FFI_TYPE_UINT32)
-            const exePath = win.GetModuleFileName() || ''
-            const exeName = exePath.split('\\').pop() || ''
-            if (exeName) {
-                const cmd = 'taskkill /f /fi "PID ne ' + myPid + '" /im ' + exeName
-                logger.log('[main] ' + cmd)
-                const p = std.popen(cmd, 'r')
-                if (p) p.close()
-            }
-        }
+    if (!checkRunning()) {
+        import('./components/UninstallApp.js').then(({ UninstallApp }) => {
+            const root = createRoot({
+                text: '超人打印 - 卸载',
+                width: SETUP_W,
+                height: SETUP_H,
+                onEvent: ({ msg }) => {
+                    if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
+                        gui.PostQuitMessage(0)
+                        return 0
+                    }
+                }
+            })
+            root.render(<UninstallApp onComplete={() => gui.PostQuitMessage(0)} />)
+        })
     }
-
-    import('./components/UninstallApp.js').then(({ UninstallApp }) => {
-        const root = createRoot({
-            text: '超人打印 - 卸载',
-            width: SETUP_W,
-            height: SETUP_H,
-            onEvent: ({ msg }) => {
-                if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
-                    gui.PostQuitMessage(0)
-                    return 0
-                }
-            }
-        })
-        root.render(<UninstallApp onComplete={() => gui.PostQuitMessage(0)} />)
-    })
 } else if (!args.includes('--run')) {
-    import('./components/InstallApp.js').then(({ InstallApp }) => {
-        const root = createRoot({
-            text: '超人打印 - 安装',
-            width: SETUP_W,
-            height: SETUP_H,
-            onEvent: ({ msg }) => {
-                if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
-                    gui.PostQuitMessage(0)
-                    return 0
+    if (!checkRunning()) {
+        import('./components/InstallApp.js').then(({ InstallApp }) => {
+            const root = createRoot({
+                text: '超人打印 - 安装',
+                width: SETUP_W,
+                height: SETUP_H,
+                onEvent: ({ msg }) => {
+                    if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
+                        gui.PostQuitMessage(0)
+                        return 0
+                    }
                 }
-            }
+            })
+            root.render(<InstallApp onComplete={() => gui.PostQuitMessage(0)} />)
         })
-        root.render(<InstallApp onComplete={() => gui.PostQuitMessage(0)} />)
-    })
+    }
 } else runMainApp()
 
 import pWorkerUrl from './print-worker?worker&url'
