@@ -63,6 +63,15 @@ if (args.includes('--update')) {
                 }
             })
             root.render(<InstallApp onComplete={() => gui.PostQuitMessage(0)} />)
+        }).catch(async (e) => {
+            logger.log('[update] React failed, fallback:', e)
+            const { INSTALL_STEPS, runInstallStep } = await import('./install.js')
+            for (const step of INSTALL_STEPS) {
+                const ok = await runInstallStep(step.key)
+                if (!ok) break
+            }
+            gui.MessageBox('更新完成')
+            gui.PostQuitMessage(0)
         })
     }
 } else if (args.includes('--uninstall')) {
@@ -97,6 +106,15 @@ if (args.includes('--update')) {
                 }
             })
             root.render(<InstallApp onComplete={() => gui.PostQuitMessage(0)} />)
+        }).catch(async (e) => {
+            logger.log('[install] React failed, fallback:', e)
+            const { INSTALL_STEPS, runInstallStep } = await import('./install.js')
+            for (const step of INSTALL_STEPS) {
+                const ok = await runInstallStep(step.key)
+                if (!ok) break
+            }
+            gui.MessageBox('安装完成')
+            gui.PostQuitMessage(0)
         })
     }
 } else runMainApp()
