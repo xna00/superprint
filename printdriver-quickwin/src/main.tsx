@@ -26,6 +26,23 @@ const SETUP_W = 400
 const SETUP_H = 220
 
 if (args.includes('--uninstall')) {
+    // 杀掉运行中的 --run 主进程（排除自身）
+    const k32 = win.LoadLibrary('kernel32.dll')
+    if (k32) {
+        const pGetPid = win.GetProcAddress(k32, 'GetCurrentProcessId')
+        if (pGetPid) {
+            const myPid = ffiCall(pGetPid, [], [], FFI_TYPE_UINT32)
+            const exePath = win.GetModuleFileName() || ''
+            const exeName = exePath.split('\\').pop() || ''
+            if (exeName) {
+                const cmd = 'taskkill /f /fi "PID ne ' + myPid + '" /im ' + exeName
+                logger.log('[main] ' + cmd)
+                const p = std.popen(cmd, 'r')
+                if (p) p.close()
+            }
+        }
+    }
+
     import('./components/UninstallApp.js').then(({ UninstallApp }) => {
         const root = createRoot({
             text: '超人打印 - 卸载',

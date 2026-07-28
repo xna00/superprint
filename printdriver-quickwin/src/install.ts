@@ -1,7 +1,7 @@
 import * as std from 'std'
 import * as win from 'win'
 import * as os from 'os'
-import { ffiCall, readByte, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT64 } from 'ffi'
+import { ffiCall, readByte, bufferPtr as bufPtr, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT64 } from 'ffi'
 import * as gui from 'gui'
 import { strToWideBuf, readPtr, getExePath, guidStrToBytes } from './utils.js'
 
@@ -78,6 +78,47 @@ function removeDirW(path: string): boolean {
   const ok = ffiCall(p, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32)
   if (ok) return true
   return gle() === gui.ErrorCode.FILE_NOT_FOUND
+}
+
+function deleteDirContentsW(dir: string): void {
+  const findFirst = k32proc('FindFirstFileW')
+  const findNext = k32proc('FindNextFileW')
+  const findClose = k32proc('FindClose')
+  if (!findFirst || !findNext || !findClose) return
+
+  const FIND_DATA_SIZE = 592
+  const findData = new ArrayBuffer(FIND_DATA_SIZE)
+  const fdPtr = bufPtr(findData)
+  const pattern = dir + '\\*.*'
+  const hFind = ffiCall(findFirst,
+    [FFI_TYPE_POINTER, FFI_TYPE_POINTER],
+    [strToWideBuf(pattern), findData],
+    FFI_TYPE_UINT64)
+  if (!hFind) return
+
+  const NAME_OFFSET = 44
+
+  function readFileName(): string {
+    let s = ''
+    for (let i = 0; i < 260; i++) {
+      const ch = readByte(fdPtr + NAME_OFFSET + i * 2) |
+                (readByte(fdPtr + NAME_OFFSET + i * 2 + 1) << 8)
+      if (ch === 0) break
+      s += String.fromCharCode(ch)
+    }
+    return s
+  }
+
+  let name = readFileName()
+  if (name !== '.' && name !== '..') deleteFileW(dir + '\\' + name)
+
+  while (ffiCall(findNext, [FFI_TYPE_UINT64, FFI_TYPE_POINTER],
+    [hFind, findData], FFI_TYPE_SINT32)) {
+    name = readFileName()
+    if (name !== '.' && name !== '..') deleteFileW(dir + '\\' + name)
+  }
+
+  ffiCall(findClose, [FFI_TYPE_UINT64], [hFind], FFI_TYPE_SINT32)
 }
 
 function moveFileW(oldPath: string, newPath: string): boolean {
@@ -300,8 +341,6 @@ function installStepStartMenu(): boolean {
   mkdirW(START_MENU_DIR)
   createShortcut(TARGET_EXE, '-o CON --run', START_MENU_DIR + '\\超人打印(控制台).lnk', '超人打印')
   createShortcut(TARGET_EXE, '-o CON --uninstall', START_MENU_DIR + '\\卸载(控制台).lnk', '卸载超人打印')
-  createShortcut(TARGET_EXE, '-o LOG --run', START_MENU_DIR + '\\超人打印(日志).lnk', '超人打印')
-  createShortcut(TARGET_EXE, '-o LOG --uninstall', START_MENU_DIR + '\\卸载(日志).lnk', '卸载超人打印')
   createShortcut(TARGET_EXE, '-d -o LOG --run', START_MENU_DIR + '\\超人打印(调试).lnk', '超人打印')
   createShortcut(TARGET_EXE, '--run', START_MENU_DIR + '\\超人打印.lnk', '超人打印')
   createShortcut(TARGET_EXE, '--uninstall', START_MENU_DIR + '\\卸载.lnk', '卸载超人打印')
@@ -314,18 +353,9 @@ function installStepDesktop(): boolean {
 }
 
 function uninstallStepShortcuts(): boolean {
-  const appData = std.getenv('APPDATA') || ''
   const userProfile = std.getenv('USERPROFILE') || ''
-  const startMenuDir = appData + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
-  deleteFileW(startMenuDir + '\\超人打印(控制台).lnk')
-  deleteFileW(startMenuDir + '\\卸载(控制台).lnk')
-  deleteFileW(startMenuDir + '\\超人打印(日志).lnk')
-  deleteFileW(startMenuDir + '\\卸载(日志).lnk')
-  deleteFileW(startMenuDir + '\\超人打印(调试).lnk')
-  deleteFileW(startMenuDir + '\\超人打印.lnk')
-  deleteFileW(startMenuDir + '\\卸载.lnk')
-  deleteFileW(startMenuDir + '\\超人打印(-c).lnk')
-  deleteFileW(startMenuDir + '\\卸载(-c).lnk')
+  deleteDirContentsW(START_MENU_DIR)
+  removeDirW(START_MENU_DIR)
   deleteFileW(userProfile + '\\Desktop\\超人打印.lnk')
   return true
 }
