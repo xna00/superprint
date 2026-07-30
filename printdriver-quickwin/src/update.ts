@@ -16,6 +16,7 @@ const CHECK_INTERVAL = 5 * 60 * 1000
 interface CheckUpdateResult {
   exeDownloadUrls: string[]
   entryJsChanged: boolean
+  ps1DownloadUrls: string[]
 }
 
 let _inited = false
@@ -100,22 +101,34 @@ export async function checkAndUpdate() {
 
   const exeHash = await getExeHash(exePath)
   const entryJsHash = ENTRY_HASH
+  const exeDir = exePath.substring(0, exePath.lastIndexOf('\\'))
+  const ps1Hash = await sha1File(exeDir + '\\update.ps1')
 
-  logger.log('[update] checking:', { exeHash, entryJsHash })
+  logger.log('[update] checking:', { exeHash, entryJsHash, ps1Hash })
 
   let res: CheckUpdateResult | undefined
   try {
-    res = await api.version.checkDriverUpdate({ exeHash, entryJsHash })
+    res = await api.version.checkDriverUpdate({ exeHash, entryJsHash, ps1Hash })
   } catch (e) {
     logger.log('[update] check failed:', e)
     return
   }
   if (!res) return
 
-  const { exeDownloadUrls, entryJsChanged } = res
-  if (!exeDownloadUrls?.length && !entryJsChanged) {
+  const { exeDownloadUrls, entryJsChanged, ps1DownloadUrls } = res
+  if (!exeDownloadUrls?.length && !entryJsChanged && !ps1DownloadUrls?.length) {
     logger.log('[update] up to date')
     return
+  }
+
+  if (ps1DownloadUrls?.length) {
+    logger.log('[update] downloading ps1 from:', ps1DownloadUrls)
+    const resp = await tryFetch(ps1DownloadUrls)
+    if (resp) {
+      const buf = await resp.arrayBuffer()
+      const f = std.open(exeDir + '\\update.ps1', 'wb')
+      if (f) { f.write(buf, 0, buf.byteLength); f.close() }
+    }
   }
 
   let needRestart = false

@@ -49,9 +49,11 @@ if (fs.existsSync(manifestSrc)) {
 
 console.log('postbuild: done, entry hash =', hash)
 
-// 6. Copy update.ps1
+// 6. Copy update.ps1 (with UTF-8 BOM)
 const ps1Src = path.join(root, 'update.ps1')
 if (fs.existsSync(ps1Src)) {
-  fs.copyFileSync(ps1Src, path.join(dist, 'update.ps1'))
-  console.log('postbuild: copied update.ps1')
+  const bom = Buffer.from([0xEF, 0xBB, 0xBF])
+  const content = fs.readFileSync(ps1Src)
+  fs.writeFileSync(path.join(dist, 'update.ps1'), Buffer.concat([bom, content]))
+  console.log('postbuild: copied update.ps1 (with BOM)')
 }
