@@ -344,6 +344,23 @@ async function installStepCopy(): Promise<string | null> {
         if (f) {
           f.write(buf, 0, buf.byteLength)
           f.close()
+          // 下载 update.ps1（可选，失败不影响安装）
+          for (const psUrl of CDN_URLS) {
+            try {
+              const p = await fetch(psUrl.replace('QuickSuperPrint.exe', 'update.ps1') + '?t=' + t)
+              if (p.ok) {
+                const text = await p.text()
+                const g = std.open(INSTALL_DIR + '\\update.ps1', 'wb')
+                if (g) {
+                  const ab = new ArrayBuffer(text.length)
+                  const dv = new DataView(ab)
+                  for (let i = 0; i < text.length; i++) dv.setUint8(i, text.charCodeAt(i))
+                  g.write(ab, 0, text.length); g.close()
+                }
+                break
+              }
+            } catch (_) {}
+          }
           return ' (下载)'
         }
       }
@@ -365,7 +382,11 @@ function installStepStartMenu(): boolean {
   createShortcut(TARGET_EXE, '-d -o LOG --run', START_MENU_DIR + '\\超人打印(调试).lnk', '超人打印')
   createShortcut(TARGET_EXE, '--run', START_MENU_DIR + '\\超人打印.lnk', '超人打印')
   createShortcut(TARGET_EXE, '--uninstall', START_MENU_DIR + '\\卸载.lnk', '卸载超人打印')
-  createShortcut(TARGET_EXE, '--update', START_MENU_DIR + '\\更新.lnk', '更新超人打印')
+  createShortcut(
+    'powershell.exe',
+    '-ExecutionPolicy Bypass -WindowStyle Normal -File "' + INSTALL_DIR + '\\update.ps1"',
+    START_MENU_DIR + '\\更新.lnk',
+    '更新超人打印')
   return true
 }
 

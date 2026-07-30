@@ -13,7 +13,7 @@ import { App } from './App.js'
 import { storageGet } from './storage.js'
 import { logger } from './logger.js'
 import { startUpdateCheck, clearUpdateTimer } from './update.js'
-import { strToWideBuf, getExePath } from './utils.js'
+import { strToWideBuf } from './utils.js'
 
 export let printWorker: PrintWorker | null = null
 export let mainHwnd: gui.HWND | null = null
@@ -43,38 +43,7 @@ function checkRunning(): boolean {
     return false
 }
 
-if (args.includes('--update')) {
-    if (!checkRunning()) {
-        const curExe = getExePath()
-        if (curExe) {
-            try { os.remove(curExe + '.old') } catch (_) {}
-            try { os.rename(curExe, curExe + '.old') } catch (_) {}
-        }
-        import('./components/InstallApp.js').then(({ InstallApp }) => {
-            const root = createRoot({
-                text: '超人打印 - 更新',
-                width: SETUP_W,
-                height: SETUP_H,
-                onEvent: ({ msg }) => {
-                    if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
-                        gui.PostQuitMessage(0)
-                        return 0
-                    }
-                }
-            })
-            root.render(<InstallApp onComplete={() => gui.PostQuitMessage(0)} />)
-        }).catch(async (e) => {
-            logger.log('[update] React failed, fallback:', e)
-            const { INSTALL_STEPS, runInstallStep } = await import('./install.js')
-            for (const step of INSTALL_STEPS) {
-                const ok = await runInstallStep(step.key)
-                if (!ok) break
-            }
-            gui.MessageBox('更新完成')
-            gui.PostQuitMessage(0)
-        })
-    }
-} else if (args.includes('--uninstall')) {
+if (args.includes('--uninstall')) {
     if (!checkRunning()) {
         import('./components/UninstallApp.js').then(({ UninstallApp }) => {
             const root = createRoot({

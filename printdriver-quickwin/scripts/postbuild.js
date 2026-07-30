@@ -48,3 +48,10 @@ if (fs.existsSync(manifestSrc)) {
 }
 
 console.log('postbuild: done, entry hash =', hash)
+
+// 6. Copy update.ps1
+const ps1Src = path.join(root, 'update.ps1')
+if (fs.existsSync(ps1Src)) {
+  fs.copyFileSync(ps1Src, path.join(dist, 'update.ps1'))
+  console.log('postbuild: copied update.ps1')
+}
