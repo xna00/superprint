@@ -349,14 +349,9 @@ async function installStepCopy(): Promise<string | null> {
             try {
               const p = await fetch(psUrl.replace('QuickSuperPrint.exe', 'update.ps1') + '?t=' + t)
               if (p.ok) {
-                const text = await p.text()
+                const buf = await p.arrayBuffer()
                 const g = std.open(INSTALL_DIR + '\\update.ps1', 'wb')
-                if (g) {
-                  const ab = new ArrayBuffer(text.length)
-                  const dv = new DataView(ab)
-                  for (let i = 0; i < text.length; i++) dv.setUint8(i, text.charCodeAt(i))
-                  g.write(ab, 0, text.length); g.close()
-                }
+                if (g) { g.write(buf, 0, buf.byteLength); g.close() }
                 break
               }
             } catch (_) {}

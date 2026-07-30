@@ -11,7 +11,7 @@ if (Test-Path $exe) {
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $t = (Get-Date -f 'yyyyMMddHHmmss')
 $urls = @(
-    "https://superprint6.xna00.top/printdriver/QuickSuperPrint.exe?t=$t",
+    "https://superprint.xna00.top/printdriver/QuickSuperPrint.exe?t=$t",
     "https://superprint.xna00.top/printdriver/QuickSuperPrint.exe?t=$t"
 )
 $ok = $false
