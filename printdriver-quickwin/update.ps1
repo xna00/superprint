@@ -1,4 +1,5 @@
 Remove-Item "$env:TEMP\QuickSuperPrint_*.exe" -Force -ErrorAction SilentlyContinue
+Write-Host '正在下载更新...'
 $t = (Get-Date -Format 'yyyyMMddHHmmss')
 $tmp = "$env:TEMP\QuickSuperPrint_$t.exe"
 $urls = @(
@@ -12,6 +13,7 @@ try {
         try { Invoke-WebRequest -Uri $url -OutFile $tmp; $ok = $true; break } catch {}
     }
     if (-not $ok) { throw '所有下载地址均失败' }
+    Write-Host '下载完成，正在启动...'
     Start-Process -FilePath $tmp
 } catch {
     Add-Type -AssemblyName System.Windows.Forms
