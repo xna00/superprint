@@ -344,13 +344,13 @@ async function installStepCopy(): Promise<string | null> {
         if (f) {
           f.write(buf, 0, buf.byteLength)
           f.close()
-          // 下载 update.ps1（可选，失败不影响安装）
-          for (const psUrl of CDN_URLS) {
+          // 下载更新器 exe（可选，失败不影响安装）
+          for (const upUrl of CDN_URLS) {
             try {
-              const p = await fetch(psUrl.replace('QuickSuperPrint.exe', 'update.ps1') + '?t=' + t)
+              const p = await fetch(upUrl.replace('QuickSuperPrint.exe', 'update.exe') + '?t=' + t)
               if (p.ok) {
                 const buf = await p.arrayBuffer()
-                const g = std.open(INSTALL_DIR + '\\update.ps1', 'wb')
+                const g = std.open(INSTALL_DIR + '\\update.exe', 'wb')
                 if (g) { g.write(buf, 0, buf.byteLength); g.close() }
                 break
               }
@@ -378,8 +378,8 @@ function installStepStartMenu(): boolean {
   createShortcut(TARGET_EXE, '--run', START_MENU_DIR + '\\超人打印.lnk', '超人打印')
   createShortcut(TARGET_EXE, '--uninstall', START_MENU_DIR + '\\卸载.lnk', '卸载超人打印')
   createShortcut(
-    'powershell.exe',
-    '-ExecutionPolicy Bypass -WindowStyle Normal -File "' + INSTALL_DIR + '\\update.ps1"',
+    INSTALL_DIR + '\\update.exe',
+    '-o CON',
     START_MENU_DIR + '\\更新.lnk',
     '更新超人打印')
   return true

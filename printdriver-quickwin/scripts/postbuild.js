@@ -49,11 +49,18 @@ if (fs.existsSync(manifestSrc)) {
 
 console.log('postbuild: done, entry hash =', hash)
 
-// 6. Copy update.ps1 (with UTF-8 BOM)
-const ps1Src = path.join(root, 'update.ps1')
-if (fs.existsSync(ps1Src)) {
-  const bom = Buffer.from([0xEF, 0xBB, 0xBF])
-  const content = fs.readFileSync(ps1Src)
-  fs.writeFileSync(path.join(dist, 'update.ps1'), Buffer.concat([bom, content]))
-  console.log('postbuild: copied update.ps1 (with BOM)')
+// 6. Build updater exe: nowasm runtime + brotli-compressed update-entry.js (QWBR)
+const updaterExeSrc = path.join(root, 'node_modules', 'quickwin', 'win-nowasm-mingw64.exe')
+const updateEntry = path.join(dist, 'update-entry.js')
+if (fs.existsSync(updaterExeSrc) && fs.existsSync(updateEntry)) {
+  const zlib = require('zlib')
+  const br = zlib.brotliCompressSync(fs.readFileSync(updateEntry))
+  const lenBuf = Buffer.alloc(4)
+  lenBuf.writeUInt32LE(br.length)
+  const magic = Buffer.from('QWBR', 'ascii')
+  fs.writeFileSync(path.join(dist, 'update.exe'),
+    Buffer.concat([fs.readFileSync(updaterExeSrc), br, lenBuf, magic]))
+  console.log('postbuild: built update.exe (QWBR,', br.length, 'bytes)')
+} else {
+  console.log('postbuild: WARNING update.exe not built (missing nowasm exe or update-entry.js)')
 }
