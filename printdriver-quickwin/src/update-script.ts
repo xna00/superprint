@@ -10,6 +10,48 @@ function pad(n: number): string {
   return n < 10 ? '0' + n : String(n)
 }
 
+function timestamp(): string {
+  const d = new Date()
+  return '' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
+         pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds())
+}
+
+function tempExePath(tmpDir: string, t: string): string {
+  return tmpDir + '\\QuickSuperPrint_' + t + '.exe'
+}
+
+function cleanupOldTemp(tmpDir: string) {
+  const r = os.readdir(tmpDir)
+  const names = r ? r[0] : null
+  if (names) {
+    for (const n of names) {
+      if (n.startsWith('QuickSuperPrint_') && n.endsWith('.exe')) {
+        try { os.remove(tmpDir + '\\' + n) } catch (_) {}
+      }
+    }
+  }
+}
+
+async function downloadTo(urls: string[], tmp: string): Promise<boolean> {
+  for (const url of urls) {
+    try {
+      const resp = await fetch(url)
+      if (resp.ok) {
+        const buf = await resp.arrayBuffer()
+        const f = std.open(tmp, 'wb')
+        if (f) {
+          f.write(buf, 0, buf.byteLength)
+          f.close()
+          return true
+        }
+      }
+    } catch (e) {
+      std.err.printf('Download failed: %s\n', String(e))
+    }
+  }
+  return false
+}
+
 function startProcess(exePath: string): boolean {
   const k32 = win.LoadLibrary('kernel32.dll')
   const p = k32 ? win.GetProcAddress(k32, 'CreateProcessW') : null
@@ -29,49 +71,30 @@ function startProcess(exePath: string): boolean {
 
 async function main() {
   const tmpDir = std.getenv('TEMP') || '.'
+  cleanupOldTemp(tmpDir)
 
-  // cleanup old temp update exes
-  const r = os.readdir(tmpDir)
-  const names = r ? r[0] : null
-  if (names) {
-    for (const n of names) {
-      if (n.startsWith('QuickSuperPrint_') && n.endsWith('.exe')) {
-        try { os.remove(tmpDir + '\\' + n) } catch (_) {}
-      }
-    }
-  }
-
-  std.out.printf('Downloading update...\n')
-  std.out.flush()
-
-  const d = new Date()
-  const t = '' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
-            pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds())
-  const tmp = tmpDir + '\\QuickSuperPrint_' + t + '.exe'
+  const t = timestamp()
+  const tmp = tempExePath(tmpDir, t)
   const urls = [
     'https://superprint6.xna00.top/printdriver/QuickSuperPrint.exe?t=' + t,
     'https://superprint.xna00.top/printdriver/QuickSuperPrint.exe?t=' + t,
   ]
 
-  let ok = false
-  for (const url of urls) {
-    try {
-      const resp = await fetch(url)
-      if (resp.ok) {
-        const buf = await resp.arrayBuffer()
-        const f = std.open(tmp, 'wb')
-        if (f) {
-          f.write(buf, 0, buf.byteLength)
-          f.close()
-          ok = true
-          break
-        }
-      }
-    } catch (e) {
-      std.err.printf('Download failed: %s\n', String(e))
-    }
+  if (scriptArgs.includes('--selftest')) {
+    const downloaded = await downloadTo(urls, tmp)
+    const [st, err] = os.stat(tmp)
+    const ok = downloaded && err === 0 && !!st && st.size > 0
+    std.out.printf('selftest: downloaded=%s exists=%s size=%d\n',
+      downloaded ? 'true' : 'false', ok ? 'true' : 'false', st ? st.size : -1)
+    std.out.flush()
+    if (ok) { try { os.remove(tmp) } catch (_) {} }
+    std.exit(ok ? 0 : 1)
   }
-  if (!ok) {
+
+  std.out.printf('Downloading update...\n')
+  std.out.flush()
+
+  if (!(await downloadTo(urls, tmp))) {
     gui.MessageBox('所有下载地址均失败')
     std.exit(1)
   }

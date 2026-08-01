@@ -37,12 +37,6 @@ jobs:
           npm ci
           npm run build
 
-      - name: Build QuickWIN app
-        run: |
-          cd printdriver-quickwin
-          npm ci --force
-          npm run build
-
       - uses: actions/upload-artifact@v6
         with:
           name: all-build-artifacts
@@ -52,7 +46,40 @@ jobs:
             api/index.js
             api/index.d.ts
             web/dist/
-            printdriver-quickwin/dist/
+
+  build-quickwin:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Build QuickWIN app
+        run: |
+          cd printdriver-quickwin
+          npm ci --force
+          npm run build
+
+      - name: Smoke test update.exe (download + file check)
+        run: |
+          cd printdriver-quickwin
+          $p = Start-Process -FilePath dist\update.exe -ArgumentList '-o','selftest.txt','--selftest' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content selftest.txt; exit 1 }
+          if (-not (Select-String -Path selftest.txt -Pattern 'selftest: downloaded=true' -Quiet)) {
+            Get-Content selftest.txt
+            exit 1
+          }
+          Get-Content selftest.txt
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: quickwin-artifacts
+          path: printdriver-quickwin/dist/
 
   build-printdriver:
     runs-on: windows-2022
@@ -166,7 +193,7 @@ jobs:
           path: printdriver/output/
 
   assemble:
-    needs: [build-all, build-printdriver]
+    needs: [build-all, build-quickwin, build-printdriver]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     defaults:
@@ -179,6 +206,12 @@ jobs:
         with:
           name: all-build-artifacts
           path: artifacts
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: quickwin-artifacts
+          path: artifacts/quickwin
           merge-multiple: true
 
       - uses: actions/download-artifact@v8
@@ -208,8 +241,8 @@ jobs:
           fi
 
           # QuickWIN app
-          if [ -d "artifacts/printdriver-quickwin/dist" ]; then
-            cp -r artifacts/printdriver-quickwin/dist static/printdriver/
+          if [ -d "artifacts/quickwin/dist" ]; then
+            cp -r artifacts/quickwin/dist static/printdriver/
           fi
 
       - name: Create ZIP archive
