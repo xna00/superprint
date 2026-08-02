@@ -1,16 +1,16 @@
 name: Build and Upload
 
-on: [push, pull_request, workflow_dispatch]
+on: [push, workflow_dispatch]
 
 env:
   NODE_VERSION: '24'
 
 jobs:
   build-all:
-    runs-on: ubuntu-latest
+    runs-on: windows-2022
     defaults:
       run:
-        shell: bash
+        shell: pwsh
     steps:
       - uses: actions/checkout@v6
 
@@ -47,27 +47,6 @@ jobs:
             api/index.d.ts
             web/dist/
 
-  build-quickwin:
-    runs-on: windows-2022
-    defaults:
-      run:
-        shell: pwsh
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Generate API types
-        run: |
-          cd server
-          npm ci
-          npm run buildtype
-          cd ../api
-          npm ci
-          npm run copy-types
-
       - name: Build QuickWIN app
         run: |
           cd printdriver-quickwin
@@ -89,6 +68,7 @@ jobs:
           path: printdriver-quickwin/dist/
 
   build-printdriver:
+    if: github.ref == 'refs/heads/main'
     runs-on: windows-2022
     defaults:
       run:
@@ -200,7 +180,7 @@ jobs:
           path: printdriver/output/
 
   assemble:
-    needs: [build-all, build-quickwin, build-printdriver]
+    needs: [build-all, build-printdriver]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     defaults:
