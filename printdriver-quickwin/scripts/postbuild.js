@@ -4,12 +4,13 @@ const crypto = require('crypto')
 
 const root = path.join(__dirname, '..')
 const dist = path.join(root, 'dist')
+const qwDir = path.dirname(require.resolve('quickwin/package.json'))
 
 // 1. Copy main.js for dev (quickwin main.js)
 fs.copyFileSync(path.join(root, 'main.js'), path.join(dist, 'main.js'))
 
 // 2. Copy + rename + embed main.js into exe
-const exeSrc = path.join(root, 'node_modules', 'quickwin', 'win-mingw64.exe')
+const exeSrc = path.join(qwDir, 'win-mingw64.exe')
 const mainJs = fs.readFileSync(path.join(root, 'main.js'))
 if (fs.existsSync(exeSrc)) {
   const exeBuf = fs.readFileSync(exeSrc)
@@ -50,7 +51,7 @@ if (fs.existsSync(manifestSrc)) {
 console.log('postbuild: done, entry hash =', hash)
 
 // 6. Build updater exe: nowasm runtime + brotli-compressed update-entry.js (QWBR)
-const updaterExeSrc = path.join(root, 'node_modules', 'quickwin', 'win-nowasm-mingw64.exe')
+const updaterExeSrc = path.join(qwDir, 'win-nowasm-mingw64.exe')
 const updateEntry = path.join(dist, 'update-entry.js')
 if (fs.existsSync(updaterExeSrc) && fs.existsSync(updateEntry)) {
   const zlib = require('zlib')

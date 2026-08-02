@@ -8,12 +8,12 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "copy-types": "node scripts/copy-types.js",
-    "build": "npx tsgo"
+    "build": "npx tsc"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "dependencies": {
-    "@typescript/native-preview": "^7.0.0-dev.20260525.1"
+  "devDependencies": {
+    "typescript": "^7.0.2"
   }
 }

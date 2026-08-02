@@ -1,11 +1,13 @@
 server/music
 .DS_Store
+.npmrc
 .vscode
 *.local.*
 !*.local.d.ts
 server/uploads/
 server/dev.db
 node_modules/
+*/package-lock.json
 dist
 dist-tsgo
 server/static/
