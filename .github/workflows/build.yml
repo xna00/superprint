@@ -247,9 +247,10 @@ jobs:
             cp artifacts/printdriver/Setup.exe "static/Setup-${VERSION}.exe"
           fi
 
-          # QuickWIN app
-          if [ -d "artifacts/quickwin/dist" ]; then
-            cp -r artifacts/quickwin/dist static/printdriver/
+          # QuickWIN app (artifact 单路径上传已拍平到 artifacts/quickwin/ 根)
+          if ls artifacts/quickwin/QuickSuperPrint.exe 1> /dev/null 2>&1; then
+            mkdir -p static/printdriver
+            cp -r artifacts/quickwin/. static/printdriver/
           fi
 
       - name: Create ZIP archive
