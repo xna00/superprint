@@ -10,9 +10,10 @@ import type { WorkerInMsg, WorkerOutMsg } from './worker-types.js'
 import { strToWideBuf, getExePath } from './utils.js'
 import { api } from './api.js'
 import { logger } from './logger.js'
+import mupdfWasmUrl from 'quickwin/vendor/mupdf-wasm/mupdf-wasm.wasm?url'
 type MuPdfModule = typeof import('quickwin/vendor/mupdf-wasm/mupdf.js').default
 
-const wasmUrl = new URL('../node_modules/quickwin/vendor/mupdf-wasm/mupdf-wasm.wasm', import.meta.url).href
+const wasmUrl = mupdfWasmUrl
 
 const _gdi32 = win.LoadLibrary('gdi32.dll')
 const _kernel32 = win.LoadLibrary('kernel32.dll')
