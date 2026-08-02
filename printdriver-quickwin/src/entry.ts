@@ -1,3 +1,4 @@
+import './ua.js'
 import "./main.js"
 import { logger } from './logger.js'
 import * as win from 'win'
