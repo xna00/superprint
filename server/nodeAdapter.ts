@@ -112,7 +112,7 @@ const serveStatic = (pathname: string, req: IncomingMessage, res: ServerResponse
 };
 
 const server = createServer({}, (req, res) => {
-  logger.log(req.method, req.url);
+  logger.log(req.method, req.url, 'UA:', req.headers['user-agent']);
 
   assert(req.url);
   const pathname = new URL(req.url, base).pathname;
