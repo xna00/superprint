@@ -59,6 +59,15 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Generate API types
+        run: |
+          cd server
+          npm ci
+          npm run buildtype
+          cd ../api
+          npm ci
+          npm run copy-types
+
       - name: Build QuickWIN app
         run: |
           cd printdriver-quickwin
