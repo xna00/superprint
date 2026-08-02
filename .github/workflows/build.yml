@@ -78,12 +78,10 @@ jobs:
         run: |
           cd printdriver-quickwin
           $p = Start-Process -FilePath dist\update.exe -ArgumentList '-o','selftest.txt','--selftest' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { Get-Content selftest.txt; exit 1 }
-          if (-not (Select-String -Path selftest.txt -Pattern 'selftest: downloaded=true' -Quiet)) {
-            Get-Content selftest.txt
-            exit 1
-          }
-          Get-Content selftest.txt
+          Write-Host "=== selftest.txt ==="
+          if (Test-Path selftest.txt) { Get-Content selftest.txt } else { Write-Host "(selftest.txt not created, exit code $($p.ExitCode))" }
+          if ($p.ExitCode -ne 0) { exit 1 }
+          if (-not (Select-String -Path selftest.txt -Pattern 'selftest: downloaded=true' -Quiet)) { exit 1 }
 
       - uses: actions/upload-artifact@v6
         with:
