@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import * as gui from 'gui'
 import * as os from 'os'
-import * as std from 'std'
 import { CheckBox, Button, RadioButton, Input } from 'quickwin/lib/react-qw/index.js'
 import { storageGet, storageSet, getRenderEngine, setRenderEngine, getRenderDPI, setRenderDPI } from '../storage.js'
 import { BUILD_TIME } from '../config.js'
@@ -69,7 +68,6 @@ export function SettingsTab() {
       <w type="STATIC" ws={VISIBLE} text={"构建时间: " + BUILD_TIME} style={{ height: 22 }} />
       <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'row', gap: 4 }}>
         <Button onClick={async () => { setChecking(true); try { await checkAndUpdate() } finally { setChecking(false) } }} disabled={checking} style={{ width: 110, height: 26 }}>{checking ? '检查中...' : '检查更新'}</Button>
-        <Button onClick={() => { logger.log('[gc] manual GC triggered'); std.gc() }} style={{ width: 110, height: 26 }}>释放内存 (GC)</Button>
         <Button onClick={() => {
           const exe = getExePath()
           const installDir = exe.substring(0, exe.lastIndexOf('\\'))
