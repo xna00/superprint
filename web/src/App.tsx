@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { Login } from './pages/Login'
 import { PrintTaskDetail } from './pages/PrintTaskDetail'
 
 function HiddenDebugTrigger() {
@@ -86,8 +85,28 @@ const handleTokenFromUrl = () => {
   }
 }
 
+declare global {
+  interface Window {
+    WeixinJSBridge?: {
+      call: (method: string) => void
+    }
+  }
+}
+
+const closeWindow = () => {
+  if (typeof window.WeixinJSBridge !== 'undefined') {
+    window.WeixinJSBridge.call('closeWindow')
+  } else if (document.addEventListener) {
+    document.addEventListener('WeixinJSBridgeReady', () => {
+      window.WeixinJSBridge?.call('closeWindow')
+    }, false)
+  } else {
+    window.close()
+  }
+}
+
 function App() {
-  const [page, setPage] = useState<'login' | 'printTaskDetail'>('login')
+  const [page, setPage] = useState<'printTaskDetail' | 'close'>('printTaskDetail')
 
   useEffect(() => {
     handleTokenFromUrl()
@@ -99,13 +118,14 @@ function App() {
     if (path === '/printTask' && printTaskId) {
       setPage('printTaskDetail')
     } else {
-      setPage('login')
+      setPage('close')
+      setTimeout(closeWindow, 100)
     }
   }, [])
 
   return (
     <>
-      {page === 'printTaskDetail' ? <PrintTaskDetail /> : <Login />}
+      {page === 'printTaskDetail' ? <PrintTaskDetail /> : null}
       <HiddenDebugTrigger />
     </>
   )

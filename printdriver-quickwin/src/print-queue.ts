@@ -99,10 +99,7 @@ export async function handlePrintJob(computerId: string): Promise<void> {
     log('fetching print tasks...')
 
     try {
-        const tasks = await api.printTask.listPrintTasks({
-            state: 'waiting_print',
-            computerId
-        })
+        const tasks = await api.printTask.getPrintJobs()
 
         if (!tasks || tasks.length === 0) {
             log('no pending print tasks')

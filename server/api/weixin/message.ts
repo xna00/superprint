@@ -2,7 +2,7 @@ import { sendTextMessage, sendMsgMenuMessage, uploadMedia, sendFileMessage } fro
 import { downloadMedia } from './download.ts'
 import {
   findWeixinKfUserByExternalUserId,
-  findWeixinKfUserWithUser,
+  insertWeixinKfUser,
   removeWeixinKfUserByExternalUserId,
   findPrintTaskWithPrinter,
   updatePrintTaskState,
@@ -13,9 +13,9 @@ import {
   updatePrintFileState,
   findPrinterById,
   findComputerById,
-  listComputersWithPrinters,
+  listPrintersByWeixinKfUser,
   listWaitingConfirmationTasks,
-  listPrintTasksByUserId,
+  listPrintTasksByExternalUserId,
   insertPrintTask,
   findPrinterWithComputer,
   insertPrintFile,
@@ -194,9 +194,14 @@ const handleConfirmById = async (openKfId: string, externalUserId: string, print
     return
   }
 
+  if (printTask.externalUserId !== externalUserId) {
+    await sendTextMessage('无权操作此任务。', openKfId, externalUserId)
+    return
+  }
+
   updatePrintTaskState(printTaskId, 'waiting_print')
   if (printTask.printer) {
-    notifyCheckJobs(printTask.userId, printTask.printer.computerId)
+    notifyCheckJobs(printTask.printer.computerId)
   }
 
   await sendTextMessage('✅ 打印任务已确认，等待打印中。', openKfId, externalUserId)
@@ -204,12 +209,6 @@ const handleConfirmById = async (openKfId: string, externalUserId: string, print
 }
 
 const handleDeleteById = async (openKfId: string, externalUserId: string, printTaskId: number) => {
-  const kfUser = findWeixinKfUserByExternalUserId(externalUserId)
-  if (!kfUser) {
-    await sendTextMessage('用户未关联。', openKfId, externalUserId)
-    return
-  }
-
   const printTask = findPrintTaskById(printTaskId)
 
   if (!printTask) {
@@ -217,7 +216,7 @@ const handleDeleteById = async (openKfId: string, externalUserId: string, printT
     return
   }
 
-  if (printTask.userId !== kfUser.userId) {
+  if (printTask.externalUserId !== externalUserId) {
     await sendTextMessage('无权删除此任务。', openKfId, externalUserId)
     return
   }
@@ -234,12 +233,6 @@ const handleDeleteById = async (openKfId: string, externalUserId: string, printT
 }
 
 const handleRetryById = async (openKfId: string, externalUserId: string, printTaskId: number) => {
-  const kfUser = findWeixinKfUserByExternalUserId(externalUserId)
-  if (!kfUser) {
-    await sendTextMessage('用户未关联。', openKfId, externalUserId)
-    return
-  }
-
   const printTask = findPrintTaskById(printTaskId)
 
   if (!printTask) {
@@ -247,7 +240,7 @@ const handleRetryById = async (openKfId: string, externalUserId: string, printTa
     return
   }
 
-  if (printTask.userId !== kfUser.userId) {
+  if (printTask.externalUserId !== externalUserId) {
     await sendTextMessage('无权操作此任务。', openKfId, externalUserId)
     return
   }
@@ -269,7 +262,7 @@ const handleRetryById = async (openKfId: string, externalUserId: string, printTa
     if (printer) {
       const computer = findComputerById(printer.computerId)
       if (computer) {
-        notifyCheckJobs(kfUser.userId, computer.id)
+        notifyCheckJobs(computer.id)
       }
     }
 
@@ -318,25 +311,19 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
   const grouped = Object.groupBy(messages, m => m.external_userid)
 
   return Promise.all(Object.entries(grouped).map(async ([externalUserId, userMessages = []]) => {
-    const kfUser = findWeixinKfUserWithUser(externalUserId)
+    const kfUser = findWeixinKfUserByExternalUserId(externalUserId)
 
     const kfid = userMessages[0].open_kfid
 
     if (!kfUser) {
-      logger.log(`\n用户 ${externalUserId} 未关联，发送登录链接`)
-      if (kfid) {
-        const loginUrl = `https://superprint.xna00.top/?external_userid=${externalUserId}&open_kfid=${kfid}`
-        await sendTextMessage(
-          `请先登录以使用完整功能：${loginUrl}`,
-          kfid,
-          externalUserId
-        )
-        logger.log('✅ 登录链接发送成功')
-      }
-      return
+      logger.log(`\n用户 ${externalUserId} 未关联，自动创建`)
+      insertWeixinKfUser(externalUserId)
+      logger.log(`✅ 已自动创建用户 ${externalUserId}`)
     }
 
-    logger.log(`\n用户 ${externalUserId} 已关联: ${kfUser.user.username}`)
+    if (kfid) {
+      logger.log(`\n用户 ${externalUserId} 已关联`)
+    }
 
     const textMessages = userMessages.filter(m => m.msgtype === 'text')
     const mediaMessages = userMessages.filter(m => m.msgtype === 'image' || m.msgtype === 'file')
@@ -366,29 +353,20 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
 
     if (mediaMessages.length === 0) return
 
-    const computers = listComputersWithPrinters(kfUser.userId)
-    if (computers.length === 0) {
+    const printers = listPrintersByWeixinKfUser(externalUserId)
+    if (printers.length === 0) {
       await sendTextMessage(
-        '您还没有添加计算机，请先在网页端添加计算机。',
+        '请先绑定打印机。',
         kfid,
         externalUserId
       )
       return
     }
-    const defaultComputer = computers[0]
-    if (defaultComputer.printers.length === 0) {
-      await sendTextMessage(
-        '您还没有添加打印机，请先在网页端添加打印机。',
-        kfid,
-        externalUserId
-      )
-      return
-    }
+    const defaultPrinter = printers[0]
 
     let existingPrintTask = listWaitingConfirmationTasks(
-      kfUser.userId,
+      externalUserId,
       kfid,
-      externalUserId
     ).at(-1)
 
     let printTaskId: number
@@ -400,15 +378,14 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       printerId = existingPrintTask.printerId
       logger.log(`使用现有 PrintTask，ID: ${printTaskId}`)
     } else {
-      const lastTask = listPrintTasksByUserId(kfUser.userId).sort((a, b) => b.id - a.id)[0]
-      printerId = lastTask?.printerId ?? defaultComputer.printers[0].id
+      const lastTask = listPrintTasksByExternalUserId(externalUserId).sort((a, b) => b.id - a.id)[0]
+      printerId = lastTask?.printerId ?? defaultPrinter.id
       printTaskId = generateTaskId()
       insertPrintTask({
         id: printTaskId,
         state: 'waiting_confirmation',
-        userId: kfUser.userId,
-        weixinKfId: kfid,
         externalUserId: externalUserId,
+        weixinKfId: kfid,
         printerId: printerId
       })
       isNewJob = true
@@ -458,7 +435,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
 
     headContent += '\n💡 点击"查看详情"可修改打印设置'
 
-    const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, kfUser.userId)
+    const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, externalUserId)
 
     await sendMsgMenuMessage(
       headContent,
@@ -482,7 +459,7 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
   const grouped = Object.groupBy(_messages, m => m.external_userid)
 
   await Promise.all(Object.entries(grouped).map(async ([externalUserId, userMessages = []]) => {
-    const kfUser = findWeixinKfUserWithUser(externalUserId)
+    const kfUser = findWeixinKfUserByExternalUserId(externalUserId)
     const kfid = userMessages[0].open_kfid
 
     const textMessages = userMessages.filter(m => m.msgtype === 'text')
@@ -496,7 +473,7 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
         await sendTextMessage('🔍 正在识别公文，请稍候...', kfid, externalUserId)
 
         if (kfUser) {
-          const result = await processDocument(mediaId, kfid, externalUserId, kfUser.userId, kfUser.user.username)
+          const result = await processDocument(mediaId, kfid, externalUserId)
           const pdfMediaId = await uploadMedia(result.pdfPath, 'file')
           await sendFileMessage(pdfMediaId, kfid, externalUserId)
         } else {
@@ -531,7 +508,7 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
         const printTaskId = parseInt(menuId.replace('retry_', ''))
         await handleRetryById(kfid, externalUserId, printTaskId)
       } else if (kfUser) {
-        await sendTextMessage(`你好${kfUser.user.username}，${content}`, kfid, externalUserId)
+        await sendTextMessage(`你好，${content}`, kfid, externalUserId)
       } else {
         const loginUrl = `https://superprint.xna00.top/?external_userid=${externalUserId}&open_kfid=${kfid}`
         await sendTextMessage(`请先登录以使用完整功能：${loginUrl}`, kfid, externalUserId)

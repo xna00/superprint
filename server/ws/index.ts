@@ -2,8 +2,6 @@ import type { Server } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { decryptString } from "../api/utils.ts";
-import { listPrintTasksByUserIdAndState } from "../models/db.ts";
 import { logger } from "../logger.ts";
 
 declare module "ws" {
@@ -12,7 +10,7 @@ declare module "ws" {
   }
 }
 
-const wsMap: Record<number, Record<string, WebSocket | undefined> | undefined> = {};
+const wsMap: Record<string, WebSocket | undefined> = {};
 
 const HEARTBEAT_INTERVAL = 30000;
 
@@ -31,13 +29,10 @@ const getVersionInfo = (): { version: string; setupexe: string } | null => {
   }
 };
 
-const findWsInfo = (ws: WebSocket): { userId: number; computerId: string } | null => {
-  for (const [userId, computers] of Object.entries(wsMap)) {
-    if (!computers) continue;
-    for (const [computerId, socket] of Object.entries(computers)) {
-      if (socket === ws) {
-        return { userId: Number(userId), computerId };
-      }
+const findWsComputerId = (ws: WebSocket): string | null => {
+  for (const [computerId, socket] of Object.entries(wsMap)) {
+    if (socket === ws) {
+      return computerId;
     }
   }
   return null;
@@ -50,10 +45,10 @@ export const createWebSocketServer = (server: Server) => {
     const versionInfo = getVersionInfo();
     
     wss.clients.forEach((ws) => {
-      const info = findWsInfo(ws);
+      const computerId = findWsComputerId(ws);
       
       if (ws.isAlive === false) {
-        logger.log(`WebSocket 连接超时，用户ID: ${info?.userId}, 设备ID: ${info?.computerId}`);
+        logger.log(`WebSocket 连接超时，设备ID: ${computerId}`);
         ws.terminate();
         return;
       }
@@ -67,7 +62,7 @@ export const createWebSocketServer = (server: Server) => {
       }
       ws.send(JSON.stringify(heartbeatMsg));
       
-      logger.log(`WebSocket ping 已发送，用户ID: ${info?.userId}, 设备ID: ${info?.computerId}`);
+      logger.log(`WebSocket ping 已发送，设备ID: ${computerId}`);
     });
   }, HEARTBEAT_INTERVAL);
 
@@ -79,20 +74,10 @@ export const createWebSocketServer = (server: Server) => {
     ws.isAlive = true;
     ws.on("pong", () => {
       ws.isAlive = true;
-      const info = findWsInfo(ws);
-      logger.log(`WebSocket pong 已收到，用户ID: ${info?.userId}, 设备ID: ${info?.computerId}`);
+      const computerId = findWsComputerId(ws);
+      logger.log(`WebSocket pong 已收到，设备ID: ${computerId}`);
     });
 
-    const cookie = req.headers.cookie || "";
-    const tokenMatch = cookie.match(/token=([^;]+)/);
-
-    if (!tokenMatch) {
-      logger.log("WebSocket 连接未携带 token，关闭连接");
-      ws.close();
-      return;
-    }
-
-    const token = tokenMatch[1];
     const computerId = req.headers["x-computer-id"] as string | undefined;
 
     if (!computerId) {
@@ -101,61 +86,29 @@ export const createWebSocketServer = (server: Server) => {
       return;
     }
 
-    try {
-      const userId = await decryptString(token);
-      const id = parseInt(userId);
+    wsMap[computerId] = ws;
+    logger.log(`WebSocket 已连接，设备ID: ${computerId}`);
 
-      wsMap[id] ??= {};
-      wsMap[id][computerId] = ws;
-      logger.log(`WebSocket 已连接，用户ID: ${id}, 设备ID: ${computerId}`);
-
-      const waitingJobs = listPrintTasksByUserIdAndState(id, "waiting_print");
-      if (waitingJobs.length > 0) {
-        ws.send(JSON.stringify({ type: "check_jobs" }));
+    ws.on("close", () => {
+      if (wsMap[computerId] === ws) {
+        delete wsMap[computerId];
       }
+      logger.log(`WebSocket 已断开，设备ID: ${computerId}`);
+    });
 
-      ws.on("close", () => {
-        if (wsMap[id]) {
-          delete wsMap[id]![computerId];
-          if (Object.keys(wsMap[id]!).length === 0) {
-            delete wsMap[id];
-          }
-        }
-        logger.log(`WebSocket 已断开，用户ID: ${id}, 设备ID: ${computerId}`);
-      });
-
-      ws.on("error", (error) => {
-        logger.error(`WebSocket 错误，用户ID: ${id}, 设备ID: ${computerId}`, error);
-        if (wsMap[id]) {
-          delete wsMap[id]![computerId];
-          if (Object.keys(wsMap[id]!).length === 0) {
-            delete wsMap[id];
-          }
-        }
-      });
-    } catch (error) {
-      logger.error("WebSocket token 解析失败:", error);
-      ws.close();
-    }
+    ws.on("error", (error) => {
+      logger.error(`WebSocket 错误，设备ID: ${computerId}`, error);
+      if (wsMap[computerId] === ws) {
+        delete wsMap[computerId];
+      }
+    });
   });
 };
 
-export const notifyCheckJobs = (userId: number, computerId?: string) => {
-  const userSockets = wsMap[userId];
-  if (!userSockets) return;
-
-  if (computerId) {
-    const ws = userSockets[computerId];
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "check_jobs" }));
-      logger.log(`已向用户 ${userId} 设备 ${computerId} 发送 check_jobs 通知`);
-    }
-  } else {
-    for (const ws of Object.values(userSockets)) {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "check_jobs" }));
-      }
-    }
-    logger.log(`已向用户 ${userId} 的所有设备发送 check_jobs 通知`);
+export const notifyCheckJobs = (computerId: string) => {
+  const ws = wsMap[computerId];
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "check_jobs" }));
+    logger.log(`已向设备 ${computerId} 发送 check_jobs 通知`);
   }
 };

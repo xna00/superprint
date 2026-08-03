@@ -9,7 +9,6 @@ import { setLogger } from './print-queue.js'
 import { connectWs } from './ws.js'
 import { logger } from './logger.js'
 import { toCST } from './utils.js'
-import { LoginForm } from './components/LoginForm.js'
 import { PrintersTab } from './components/PrintersTab.js'
 
 
@@ -20,10 +19,7 @@ const VISIBLE = gui.WindowStyle.VISIBLE
 const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
 
 export function App() {
-    const [appState, setAppState] = useState<'loading' | 'login' | 'main'>('loading')
-    const [username, setUsername] = useState('')
-    const [loginUser, setLoginUser] = useState('')
-    const [loginPass, setLoginPass] = useState('')
+    const [appState, setAppState] = useState<'loading' | 'main'>('loading')
     const [computerId, setComputerId] = useState('')
     const [computerName, setComputerName] = useState('')
     const [printers, setPrinters] = useState<LocalPrinterInfo[]>([])
@@ -53,74 +49,33 @@ export function App() {
         }
     }, [logs])
 
-    const checkUser = async () => {
-        try {
-            addLog('[api] checking user...')
-            const data = await api.user.currentUser()
-            logger.log('[api] user:', JSON.stringify(data))
-            if (data && data.username) {
-                setUsername(data.username)
-                addLog('[api] logged in: ' + data.username)
-                setAppState('main')
-                await registerComputer()
-                await syncPrinters()
-                os.setTimeout(() => connectWs(addLog, setWsStatus), 500)
-                return
-            } else {
-                addLog('[api] not logged in')
-            }
-        } catch (e: unknown) {
-            addLog('[api] error: ' + (e instanceof Error ? e.message : String(e)))
-        }
-        setAppState('login')
-    }
-
-    const handleLogin = async () => {
-        if (!loginUser || !loginPass) {
-            addLog('[login] username and password required')
-            return
-        }
-        addLog('[login] logging in as ' + loginUser)
-        try {
-            const result = await api.auth.login({ username: loginUser, password: loginPass })
-            if (result && (result.token || result.username)) {
-                setUsername(result.username || loginUser)
-                setAppState('main')
-                addLog('[login] success')
-                await registerComputer()
-                await syncPrinters()
-                os.setTimeout(() => connectWs(addLog, setWsStatus), 500)
-            } else {
-                addLog('[login] failed: ' + JSON.stringify(result))
-            }
-        } catch (e: unknown) {
-            addLog('[login] error: ' + (e instanceof Error ? e.message : String(e)))
-        }
-    }
-
-    const registerComputer = async () => {
+    const init = async () => {
         const devId = getDeviceId()
         if (!devId) {
-            addLog('[computer] cannot get device ID')
+            addLog('[device] cannot get device ID')
+            setAppState('main')
             return
         }
         const compName = getComputerName() || 'Unknown'
+        setComputerId(devId)
+        setComputerName(compName)
+        addLog('[device] ID: ' + devId)
+        addLog('[device] name: ' + compName)
+
         try {
             addLog('[computer] registering device...')
-            const result = await api.computer.addComputer(devId, compName)
-            if (result) {
-                addLog('[computer] registered successfully')
-            } else {
-                addLog('[computer] registration failed')
-            }
-        } catch (e: unknown) {
+            await api.computer.addComputer(devId, compName)
+            addLog('[computer] registered successfully')
+        } catch (e) {
             addLog('[computer] registration error: ' + String(e))
         }
+
+        await syncPrinters(devId)
+        os.setTimeout(() => connectWs(addLog, setWsStatus), 500)
+        setAppState('main')
     }
 
-    const syncPrinters = async () => {
-        const devId = getDeviceId()
-        if (!devId) return
+    const syncPrinters = async (devId: string) => {
         const localPrinters = enumLocalPrinters()
         try {
             for (const p of localPrinters) {
@@ -144,34 +99,11 @@ export function App() {
     }
 
     useEffect(() => {
-        const devId = getDeviceId()
-        if (devId) {
-            setComputerId(devId)
-            addLog('[device] ID: ' + devId)
-        }
-
-        const compName = getComputerName()
-        if (compName) {
-            setComputerName(compName)
-            addLog('[device] name: ' + compName)
-        }
-
-        os.setTimeout(checkUser, 500)
+        os.setTimeout(init, 500)
     }, [])
 
     if (appState === 'loading') {
         return <w type="STATIC" ws={VISIBLE} text="正在加载..." style={{ flexDirection: 'column', justifyContent: 'center', flexGrow: 1 }} />
-    }
-    if (appState === 'login') {
-        return (
-            <LoginForm
-                loginUser={loginUser}
-                setLoginUser={setLoginUser}
-                loginPass={loginPass}
-                setLoginPass={setLoginPass}
-                handleLogin={handleLogin}
-            />
-        )
     }
 
     return (
@@ -183,7 +115,6 @@ export function App() {
                         <PrintersTab
                             computerId={computerId}
                             computerName={computerName}
-                            username={username}
                             wsStatus={wsStatus}
                             printers={printers}
                         />

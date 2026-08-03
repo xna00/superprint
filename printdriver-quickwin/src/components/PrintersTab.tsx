@@ -14,7 +14,7 @@ interface PrinterRow {
 interface PrintersTabProps {
     computerId: string
     computerName: string
-    username: string
+    
     wsStatus: string
     printers: LocalPrinterInfo[]
 }
@@ -24,7 +24,7 @@ const columns: Column<PrinterRow>[] = [
     { name: '状态', dataIndex: 'status' },
 ]
 
-export function PrintersTab({ computerId, computerName, username, wsStatus, printers }: PrintersTabProps) {
+export function PrintersTab({ computerId, computerName, wsStatus, printers }: PrintersTabProps) {
     const [showDeviceId, setShowDeviceId] = useState(false)
     const maskDeviceId = (id: string) =>
         id.length > 12 ? id.slice(0, 8) + '...' + id.slice(-4) : id
@@ -39,7 +39,6 @@ export function PrintersTab({ computerId, computerName, username, wsStatus, prin
                 <Button onClick={() => setShowDeviceId(v => !v)} style={{ width: 56, height: 20 }}>{showDeviceId ? '隐藏' : '显示'}</Button>
             </w>
             <w type="STATIC" ws={VISIBLE} text={'计算机: ' + computerName} style={{ height: 24 }} />
-            <w type="STATIC" ws={VISIBLE} text={'用户: ' + username} style={{ height: 24 }} />
             <w type="STATIC" ws={VISIBLE} text={'连接状态: ' + wsStatus} style={{ height: 24 }} />
             <w type="STATIC" ws={VISIBLE} text="打印机列表:" style={{ height: 24 }} />
             <ListView columns={columns} data={data} style={{ flexGrow: 1 }} />
