@@ -2,15 +2,15 @@ import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
 import { createHandler } from 'api/index.js'
 import { API_BASE_URLS } from './config.js'
-import { getCookie, setCookie } from './storage.js'
+import { getDeviceId } from './device.js'
 import { logger } from './logger.js'
 
 const firstBase = API_BASE_URLS[0]
 
 export const api = createHandler(firstBase, {
   fetch: async (req) => {
-    const cookie = getCookie()
-    if (cookie) req.headers.set('Cookie', cookie)
+    const deviceId = getDeviceId()
+    if (deviceId) req.headers.set('X-Computer-ID', deviceId)
 
     const pathAndQuery = req.url.slice(firstBase.length)
     let lastErr: unknown
@@ -22,11 +22,6 @@ export const api = createHandler(firstBase, {
           headers: Object.fromEntries(r.headers.entries()),
           body: r.body,
         })
-        const sc = res.headers.get('set-cookie')
-        if (sc) {
-          const semi = sc.indexOf(';')
-          setCookie(semi >= 0 ? sc.slice(0, semi) : sc)
-        }
         return res
       } catch (e) {
         lastErr = e;
