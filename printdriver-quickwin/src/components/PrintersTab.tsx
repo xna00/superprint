@@ -27,7 +27,7 @@ const columns: Column<PrinterRow>[] = [
 export function PrintersTab({ computerId, computerName, wsStatus, printers }: PrintersTabProps) {
     const [showDeviceId, setShowDeviceId] = useState(false)
     const maskDeviceId = (id: string) =>
-        id.length > 12 ? id.slice(0, 8) + '...' + id.slice(-4) : id
+        id.length > 6 ? id.slice(0, 6) + '...' : id
     const data: PrinterRow[] = printers.map(p => ({
         name: p.name,
         status: p.enabled ? '启用' : '禁用',
