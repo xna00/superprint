@@ -62,7 +62,7 @@ export const getAllPrinters = async () => {
       printerName: p.name,
       computerId: p.computerId,
       computerName: computer?.name ?? "",
-      disabled: p.disabled,
+      enabled: p.enabled,
     };
   });
 }

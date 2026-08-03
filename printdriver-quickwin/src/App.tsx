@@ -78,21 +78,19 @@ export function App() {
     const syncPrinters = async (devId: string) => {
         const localPrinters = enumLocalPrinters()
         try {
-            for (const p of localPrinters) {
-                await api.computer.addComputerPrinter(devId, p.name)
-            }
-            addLog('[printer] synced ' + localPrinters.length + ' printers')
+            await api.computer.syncPrinters(devId, localPrinters.map(p => ({ name: p.name, port: p.port, driver: p.driver })))
             const info = await api.computer.computerInfo(devId) as any
             if (info && info.printers) {
                 const serverMap: Record<string, boolean> = {}
                 for (const sp of info.printers) {
-                    serverMap[sp.name] = !sp.disabled
+                    serverMap[sp.name] = sp.enabled
                 }
                 setPrinters(localPrinters.map(p => ({
                     ...p,
-                    enabled: serverMap[p.name] !== undefined ? serverMap[p.name] : true,
+                    enabled: Boolean(serverMap[p.name]),
                 })))
             }
+            addLog('[printer] synced ' + localPrinters.length + ' printers')
         } catch (e) {
             addLog('[printer] sync failed: ' + String(e))
         }

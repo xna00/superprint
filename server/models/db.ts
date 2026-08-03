@@ -20,7 +20,7 @@ const PRINTER_SQL = `CREATE TABLE IF NOT EXISTS Printer (
 id INTEGER NOT NULL PRIMARY KEY,
 name TEXT NOT NULL,
 computerId TEXT NOT NULL REFERENCES Computer(id),
-disabled INTEGER NOT NULL CHECK (disabled IN (0, 1))
+enabled INTEGER NOT NULL CHECK (enabled IN (1, 0))
 )`;
 
 const PRINT_TASK_SQL = `CREATE TABLE IF NOT EXISTS PrintTask (
@@ -80,7 +80,7 @@ export type PrintTaskState = PrintTaskRow["state"];
 export type PrintFileState = PrintFileRow["state"];
 
 export type ComputerBase = ComputerRow;
-export type PrinterBase = Omit<PrinterRow, "disabled"> & { disabled: boolean };
+export type PrinterBase = Omit<PrinterRow, "enabled"> & { enabled: boolean };
 export type PrintFileBase = Omit<PrintFileRow, "duplex" | "tumble"> & {
   duplex: boolean;
   tumble: boolean;
@@ -173,8 +173,8 @@ export const updateComputerName = (id: string, name: string) => {
 
 export const insertPrinter = (name: string, computerId: string) => {
   db.prepare(
-    `INSERT OR ABORT INTO Printer (name, computerId, disabled) VALUES (@name, @computerId, @disabled)`,
-  ).run({ name, computerId, disabled: 0 });
+    `INSERT OR ABORT INTO Printer (name, computerId, enabled) VALUES (@name, @computerId, @enabled)`,
+  ).run({ name, computerId, enabled: 1 });
 };
 
 export const findPrinterByComputerIdAndName = (
@@ -187,14 +187,14 @@ export const findPrinterByComputerIdAndName = (
     )
     .get({ computerId, name });
 
-export const setPrinterDisabled = (
+export const setPrinterEnabled = (
   computerId: string,
   name: string,
-  disabled: boolean,
+  enabled: boolean,
 ) => {
   db.prepare(
-    `UPDATE OR ABORT Printer SET disabled = @disabled WHERE Printer.computerId = @computerId AND Printer.name = @name`,
-  ).run({ computerId, name, disabled: disabled ? 1 : 0 });
+    `UPDATE OR ABORT Printer SET enabled = @enabled WHERE Printer.computerId = @computerId AND Printer.name = @name`,
+  ).run({ computerId, name, enabled: enabled ? 1 : 0 });
 };
 
 export const findPrinterById = (id: number): PrinterBase | undefined => {
@@ -203,7 +203,7 @@ export const findPrinterById = (id: number): PrinterBase | undefined => {
       `SELECT ALL * FROM Printer WHERE Printer.id = @id ORDER BY 1 LIMIT -1 OFFSET 0`,
     )
     .get({ id });
-  return row && { ...row, disabled: Boolean(row.disabled) };
+  return row && { ...row, enabled: Boolean(row.enabled) };
 };
 
 export const findPrinterWithComputer = (
@@ -222,7 +222,11 @@ export const listPrintersByComputerId = (computerId: string): PrinterBase[] =>
       `SELECT ALL * FROM Printer WHERE Printer.computerId = @computerId ORDER BY 1 LIMIT -1 OFFSET 0`,
     )
     .all({ computerId })
-    .map((p) => ({ ...p, disabled: Boolean(p.disabled) }));
+    .map((p) => ({ ...p, enabled: Boolean(p.enabled) }));
+
+export const removePrinterById = (id: number) => {
+  db.prepare(`DELETE FROM Printer WHERE Printer.id = @id`).run({ id });
+};
 
 // ── WeixinKfUserPrinter ──
 
@@ -231,10 +235,10 @@ export const listPrintersByWeixinKfUser = (
 ): PrinterBase[] => {
   const rows = db
     .prepare(
-      `SELECT ALL Printer.id AS id, Printer.name AS name, Printer.computerId AS computerId, Printer.disabled AS disabled FROM Printer INNER JOIN WeixinKfUserPrinter ON WeixinKfUserPrinter.printerId = Printer.id WHERE WeixinKfUserPrinter.weixinKfUserId = @externalUserId ORDER BY Printer.id LIMIT -1 OFFSET 0`,
+      `SELECT ALL Printer.id AS id, Printer.name AS name, Printer.computerId AS computerId, Printer.enabled AS enabled FROM Printer INNER JOIN WeixinKfUserPrinter ON WeixinKfUserPrinter.printerId = Printer.id WHERE WeixinKfUserPrinter.weixinKfUserId = @externalUserId ORDER BY Printer.id LIMIT -1 OFFSET 0`,
     )
     .all({ externalUserId });
-  return rows.map(p => ({ ...p, disabled: Boolean(p.disabled) }));
+  return rows.map(p => ({ ...p, enabled: Boolean(p.enabled) }));
 };
 
 export const linkPrinterToWeixinKfUser = (
@@ -324,6 +328,13 @@ export const listPrintTasksByExternalUserId = (externalUserId: string): PrintTas
       `SELECT ALL * FROM PrintTask WHERE PrintTask.externalUserId = @externalUserId ORDER BY 1 LIMIT -1 OFFSET 0`,
     )
     .all({ externalUserId });
+
+export const listPrintTasksByPrinterId = (printerId: number): PrintTaskRow[] =>
+  db
+    .prepare(
+      `SELECT ALL * FROM PrintTask WHERE PrintTask.printerId = @printerId ORDER BY 1 LIMIT -1 OFFSET 0`,
+    )
+    .all({ printerId });
 
 export const updatePrintTaskPrinterId = (id: number, printerId: number) => {
   db.prepare(

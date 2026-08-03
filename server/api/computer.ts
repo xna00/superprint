@@ -4,56 +4,57 @@ import {
   removeComputerById,
   updateComputerName,
   findPrinterByComputerIdAndName,
-  setPrinterDisabled,
+  setPrinterEnabled,
   insertPrinter,
+  removePrinterById,
   listPrintersByComputerId,
+  listPrintTasksByPrinterId,
 } from "../models/db.ts";
-import { ApiError, decryptString } from "./utils.ts";
+import { ApiError } from "./utils.ts";
 import { getInfo } from "./global.ts";
 
-const getExternalUserId = async () => {
+const VIRTUAL_PORTS = new Set(['PORTPROMPT:']);
+
+const getComputerId = () => {
   const info = getInfo();
-  const cookie = info.request.headers.get("cookie") || "";
-  const tokenMatch = cookie.match(/token=([^;]+)/);
-  if (!tokenMatch) throw new ApiError(401, {}, "未登录！");
-  return await decryptString(tokenMatch[1]);
+  const computerId = info.request.headers.get("x-computer-id");
+  if (!computerId) {
+    throw new ApiError(401, {}, "未授权设备");
+  }
+  return computerId;
+};
+
+const getExistingComputerId = () => {
+  const computerId = getComputerId();
+  if (!findComputerById(computerId)) {
+    throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
+  }
+  return computerId;
 };
 
 export const addComputer = async (id: string, name: string) => {
-  await getExternalUserId();
+  getComputerId();
   insertComputer(id, name);
   return { success: true };
 };
 
 export const removeComputer = async (id: string) => {
-  await getExternalUserId();
-  const computer = findComputerById(id);
-  if (!computer) {
-    throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
-  }
+  getExistingComputerId();
   removeComputerById(id);
   return { success: true };
 };
 
 export const setComputerName = async (id: string, name: string) => {
-  await getExternalUserId();
-  const computer = findComputerById(id);
-  if (!computer) {
-    throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
-  }
+  getExistingComputerId();
   updateComputerName(id, name);
   return { success: true };
 };
 
 export const addComputerPrinter = async (computerId: string, printerName: string) => {
-  await getExternalUserId();
-  const computer = findComputerById(computerId);
-  if (!computer) {
-    throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
-  }
+  getExistingComputerId();
   const existingPrinter = findPrinterByComputerIdAndName(computerId, printerName);
   if (existingPrinter) {
-    setPrinterDisabled(computerId, printerName, false);
+    setPrinterEnabled(computerId, printerName, true);
     return { success: true, restored: true };
   }
   insertPrinter(printerName, computerId);
@@ -61,21 +62,39 @@ export const addComputerPrinter = async (computerId: string, printerName: string
 };
 
 export const removeComputerPrinter = async (computerId: string, printerName: string) => {
-  await getExternalUserId();
-  const computer = findComputerById(computerId);
-  if (!computer) {
-    throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
-  }
-  setPrinterDisabled(computerId, printerName, true);
+  getExistingComputerId();
+  setPrinterEnabled(computerId, printerName, false);
   return { success: true };
 };
 
 export const computerInfo = async (computerId: string) => {
-  await getExternalUserId();
-  const computer = findComputerById(computerId);
-  if (!computer) {
-    throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
-  }
-  const printers = listPrintersByComputerId(computerId).filter((p) => !p.disabled);
+  getExistingComputerId();
+  const printers = listPrintersByComputerId(computerId);
+  const computer = findComputerById(computerId)!;
   return { ...computer, printers };
+};
+
+export const syncPrinters = async (computerId: string, localPrinters: { name: string; port: string; driver: string }[]) => {
+  getExistingComputerId();
+  const serverPrinters = listPrintersByComputerId(computerId).filter((p) => p.enabled);
+  const serverNames = new Set(serverPrinters.map(p => p.name));
+  const localNames = new Set(localPrinters.map(p => p.name));
+
+  for (const lp of localPrinters) {
+    if (serverNames.has(lp.name)) continue;
+    if (VIRTUAL_PORTS.has(lp.port)) continue;
+    insertPrinter(lp.name, computerId);
+  }
+
+  for (const sp of serverPrinters) {
+    if (localNames.has(sp.name)) continue;
+    const refCount = listPrintTasksByPrinterId(sp.id).length;
+    if (refCount > 0) {
+      setPrinterEnabled(computerId, sp.name, false);
+    } else {
+      removePrinterById(sp.id);
+    }
+  }
+
+  return { success: true };
 };
