@@ -4,7 +4,14 @@ import UZIP from "uzip"
 import { recognizeDocument, type RecognizedDocument } from "./ai.ts"
 import { downloadMedia, convertOfficeToPdf, convertPdfToXps } from "./weixin/download.ts"
 import { generateTaskId } from "./weixin/message.ts"
-import { PrintTask, PrintFile, Computer, Printer } from "../models/index.ts"
+import {
+  findPrintTaskWithPrinter,
+  findPrinterWithComputer,
+  insertPrintFile,
+  insertPrintTask,
+  listComputersWithPrinters,
+  listWaitingConfirmationTasks,
+} from "../models/db.ts"
 import { sendMsgMenuMessage } from "./weixin/send.ts"
 import { addTokenToUrl } from "./utils.ts"
 import { logger } from "../logger.ts";
@@ -137,34 +144,34 @@ export const processDocument = async (
     logger.warn('PDF 预览文件生成失败')
   }
 
-  const existingTask = PrintTask.findOne({ userId: userId, weixinKfId: kfid, externalUserId: externalUserId, state: "waiting_confirmation" })
+  const existingTask = listWaitingConfirmationTasks(userId, kfid, externalUserId)[0]
   let printTaskId: number
 
   if (existingTask) {
     printTaskId = existingTask.id
   } else {
     printTaskId = generateTaskId()
-    const computers = Computer.findBy({ userId }, { printers: true })
+    const computers = listComputersWithPrinters(userId)
     const printer = computers[0]?.printers?.find((p: any) => !p.disabled)
     if (!printer) {
       throw new Error('未绑定打印机')
     }
-    PrintTask.insert([{ id: printTaskId, state: "waiting_confirmation", userId, weixinKfId: kfid, externalUserId: externalUserId, printerId: printer.id }])
+    insertPrintTask({ id: printTaskId, state: "waiting_confirmation", userId, weixinKfId: kfid, externalUserId: externalUserId, printerId: printer.id })
   }
 
-  const printFileResult = PrintFile.insert([{
+  const printFileId = insertPrintFile({
     state: "waiting_print",
     printTaskId,
     fileId: docxFileId,
     filename: `公文_${recognized.title || '未识别'}.docx`,
     duplex: true,
     tumble: false
-  }])
+  })
 
   try {
-    const task = PrintTask.findOne({ id: printTaskId }, { printer: true })
+    const task = findPrintTaskWithPrinter(printTaskId)
     if (task?.printer) {
-      const printer = Printer.findOne({ id: (task.printer as any).id }, { computer: true })
+      const printer = findPrinterWithComputer(task.printer.id)
       const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, userId)
       await sendMsgMenuMessage(
         `📄 公文处理完成\n\n文号: ${recognized.document_number}\n单位: ${recognized.issuing_unit}\n标题: ${recognized.title}\n\n计算机: ${(printer as any)?.computer?.name}\n打印机: ${(printer as any)?.name}`,
@@ -184,7 +191,7 @@ export const processDocument = async (
   return {
     recognized,
     printTaskId,
-    printFileId: printFileResult.lastInsertRowid as number,
+    printFileId,
     fileId: docxFileId,
     pdfPath: pdfPath || ''
   }

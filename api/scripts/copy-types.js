@@ -14,6 +14,8 @@ const REPLACEMENTS = [
   [/import type \{ Server \} from "node:http";?\n?/g, ''],
   [/import \{ type StatementResultingChanges \} from 'node:sqlite';?\n?/g, ''],
   [/\bStatementResultingChanges\b/g, 'any'],
+  [/import \{ DatabaseSync \} from "node:sqlite";?\n?/g, ''],
+  [/\bDatabaseSync\b/g, 'any'],
   [/ResponseInit\["headers"\]/g, 'any'],
   [/\bOutgoingHttpHeaders\b/g, 'any'],
 ]

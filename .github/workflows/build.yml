@@ -13,6 +13,8 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
       - uses: actions/setup-node@v6
         with:
@@ -67,6 +69,8 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
       - name: Cache innosetup
         id: cache-innosetup
@@ -180,6 +184,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
       - uses: actions/download-artifact@v8
         with:

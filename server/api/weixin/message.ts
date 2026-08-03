@@ -1,6 +1,26 @@
 import { sendTextMessage, sendMsgMenuMessage, uploadMedia, sendFileMessage } from './send.ts'
 import { downloadMedia } from './download.ts'
-import { WeixinKfUser, PrintTask, PrintFile, Printer, Computer } from '../../models/index.ts'
+import {
+  findWeixinKfUserByExternalUserId,
+  findWeixinKfUserWithUser,
+  removeWeixinKfUserByExternalUserId,
+  findPrintTaskWithPrinter,
+  updatePrintTaskState,
+  findPrintTaskById,
+  removePrintFilesByPrintTaskId,
+  removePrintTaskById,
+  listPrintFilesByPrintTaskIdAndState,
+  updatePrintFileState,
+  findPrinterById,
+  findComputerById,
+  listComputersWithPrinters,
+  listWaitingConfirmationTasks,
+  listPrintTasksByUserId,
+  insertPrintTask,
+  findPrinterWithComputer,
+  insertPrintFile,
+  listPrintFilesByPrintTaskId,
+} from '../../models/db.ts'
 import { notifyCheckJobs } from '../../ws/index.ts'
 import { addTokenToUrl } from '../utils.ts'
 import { processDocument, processDocumentSimple } from '../docProcess.ts'
@@ -142,10 +162,10 @@ const sendHelp = async (openKfId: string, externalUserId: string) => {
 }
 
 const handleLogout = async (openKfId: string, externalUserId: string) => {
-  const kfUser = WeixinKfUser.findOne({ externalUserId })
+  const kfUser = findWeixinKfUserByExternalUserId(externalUserId)
 
   if (kfUser) {
-    WeixinKfUser.remove({ externalUserId })
+    removeWeixinKfUserByExternalUserId(externalUserId)
     await sendTextMessage(
       '✅ 已成功退出登录，您的微信账号已解除绑定。',
       openKfId,
@@ -162,7 +182,7 @@ const handleLogout = async (openKfId: string, externalUserId: string) => {
 }
 
 const handleConfirmById = async (openKfId: string, externalUserId: string, printTaskId: number) => {
-  const printTask = PrintTask.findOne({ id: printTaskId }, { printer: true })
+  const printTask = findPrintTaskWithPrinter(printTaskId)
 
   if (!printTask) {
     await sendTextMessage('未找到对应的打印任务。', openKfId, externalUserId)
@@ -174,7 +194,7 @@ const handleConfirmById = async (openKfId: string, externalUserId: string, print
     return
   }
 
-  PrintTask.update({ id: printTaskId }, { state: 'waiting_print' })
+  updatePrintTaskState(printTaskId, 'waiting_print')
   if (printTask.printer) {
     notifyCheckJobs(printTask.userId, printTask.printer.computerId)
   }
@@ -184,13 +204,13 @@ const handleConfirmById = async (openKfId: string, externalUserId: string, print
 }
 
 const handleDeleteById = async (openKfId: string, externalUserId: string, printTaskId: number) => {
-  const kfUser = WeixinKfUser.findOne({ externalUserId })
+  const kfUser = findWeixinKfUserByExternalUserId(externalUserId)
   if (!kfUser) {
     await sendTextMessage('用户未关联。', openKfId, externalUserId)
     return
   }
 
-  const printTask = PrintTask.findOne({ id: printTaskId })
+  const printTask = findPrintTaskById(printTaskId)
 
   if (!printTask) {
     await sendTextMessage('未找到对应的打印任务。', openKfId, externalUserId)
@@ -203,8 +223,8 @@ const handleDeleteById = async (openKfId: string, externalUserId: string, printT
   }
 
   try {
-    PrintFile.remove({ printTaskId: printTaskId })
-    PrintTask.remove({ id: printTaskId })
+    removePrintFilesByPrintTaskId(printTaskId)
+    removePrintTaskById(printTaskId)
     await sendTextMessage('✅ 打印任务已删除。', openKfId, externalUserId)
     logger.log(`✅ 已删除打印任务 ID: ${printTaskId}`)
   } catch (error) {
@@ -214,13 +234,13 @@ const handleDeleteById = async (openKfId: string, externalUserId: string, printT
 }
 
 const handleRetryById = async (openKfId: string, externalUserId: string, printTaskId: number) => {
-  const kfUser = WeixinKfUser.findOne({ externalUserId })
+  const kfUser = findWeixinKfUserByExternalUserId(externalUserId)
   if (!kfUser) {
     await sendTextMessage('用户未关联。', openKfId, externalUserId)
     return
   }
 
-  const printTask = PrintTask.findOne({ id: printTaskId })
+  const printTask = findPrintTaskById(printTaskId)
 
   if (!printTask) {
     await sendTextMessage('未找到对应的打印任务。', openKfId, externalUserId)
@@ -232,7 +252,7 @@ const handleRetryById = async (openKfId: string, externalUserId: string, printTa
     return
   }
 
-  const failedFiles = PrintFile.findBy({ printTaskId: printTaskId, state: 'failed' })
+  const failedFiles = listPrintFilesByPrintTaskIdAndState(printTaskId, 'failed')
   
   if (failedFiles.length === 0) {
     await sendTextMessage('没有失败的文件需要重试。', openKfId, externalUserId)
@@ -241,13 +261,13 @@ const handleRetryById = async (openKfId: string, externalUserId: string, printTa
 
   try {
     for (const file of failedFiles) {
-      PrintFile.update({ id: file.id }, { state: 'waiting_print' })
+      updatePrintFileState(file.id, 'waiting_print')
     }
-    PrintTask.update({ id: printTaskId }, { state: 'waiting_print' })
+    updatePrintTaskState(printTaskId, 'waiting_print')
 
-    const printer = Printer.findOne({ id: printTask.printerId })
+    const printer = findPrinterById(printTask.printerId)
     if (printer) {
-      const computer = Computer.findOne({ id: printer.computerId })
+      const computer = findComputerById(printer.computerId)
       if (computer) {
         notifyCheckJobs(kfUser.userId, computer.id)
       }
@@ -298,9 +318,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
   const grouped = Object.groupBy(messages, m => m.external_userid)
 
   return Promise.all(Object.entries(grouped).map(async ([externalUserId, userMessages = []]) => {
-    const kfUser = WeixinKfUser.findOne({
-      externalUserId
-    }, { user: true })
+    const kfUser = findWeixinKfUserWithUser(externalUserId)
 
     const kfid = userMessages[0].open_kfid
 
@@ -348,7 +366,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
 
     if (mediaMessages.length === 0) return
 
-    const computers = Computer.findBy({ userId: kfUser.userId }, { printers: true })
+    const computers = listComputersWithPrinters(kfUser.userId)
     if (computers.length === 0) {
       await sendTextMessage(
         '您还没有添加计算机，请先在网页端添加计算机。',
@@ -367,12 +385,11 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       return
     }
 
-    let existingPrintTask = PrintTask.findBy({
-      userId: kfUser.userId,
-      weixinKfId: kfid,
-      externalUserId: externalUserId,
-      state: 'waiting_confirmation'
-    }).pop()
+    let existingPrintTask = listWaitingConfirmationTasks(
+      kfUser.userId,
+      kfid,
+      externalUserId
+    ).at(-1)
 
     let printTaskId: number
     let isNewJob = false
@@ -383,22 +400,22 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       printerId = existingPrintTask.printerId
       logger.log(`使用现有 PrintTask，ID: ${printTaskId}`)
     } else {
-      const lastTask = PrintTask.findBy({userId: kfUser.userId}, {printFiles: false, printer: false, user: false}).sort((a, b) => b.id - a.id)[0]
+      const lastTask = listPrintTasksByUserId(kfUser.userId).sort((a, b) => b.id - a.id)[0]
       printerId = lastTask?.printerId ?? defaultComputer.printers[0].id
       printTaskId = generateTaskId()
-      PrintTask.insert([{
+      insertPrintTask({
         id: printTaskId,
         state: 'waiting_confirmation',
         userId: kfUser.userId,
         weixinKfId: kfid,
         externalUserId: externalUserId,
         printerId: printerId
-      }])
+      })
       isNewJob = true
       logger.log(`PrintTask 已创建，ID: ${printTaskId}`)
     }
 
-    const printer = Printer.findBy({id: printerId}, {computer: true}).at(0)!
+    const printer = findPrinterWithComputer(printerId)!
     if (!printer) {
       await sendTextMessage('未找到可用的打印机，请检查打印机配置。', kfid, externalUserId)
       return
@@ -411,19 +428,18 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         return
 
       }
-      const fileResult = PrintFile.insert([{
+      const fileId = insertPrintFile({
         state: 'waiting_print',
         printTaskId: printTaskId,
         fileId: result.fileId,
         filename: result.filename,
         duplex: true,
         tumble: isPresentationFile(result.filename)
-      }])
-      const fileId = fileResult.lastInsertRowid
+      })
       logger.log(`PrintFile 已创建，ID: ${fileId}, 文件: ${result.filename}`)
     }))
 
-    const allFiles = PrintFile.findBy({ printTaskId })
+    const allFiles = listPrintFilesByPrintTaskId(printTaskId)
 
     let headContent = isNewJob
       ? `📄 打印工作已创建\n\n`
@@ -466,7 +482,7 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
   const grouped = Object.groupBy(_messages, m => m.external_userid)
 
   await Promise.all(Object.entries(grouped).map(async ([externalUserId, userMessages = []]) => {
-    const kfUser = WeixinKfUser.findOne({ externalUserId }, { user: true })
+    const kfUser = findWeixinKfUserWithUser(externalUserId)
     const kfid = userMessages[0].open_kfid
 
     const textMessages = userMessages.filter(m => m.msgtype === 'text')

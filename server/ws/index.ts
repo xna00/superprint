@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { decryptString } from "../api/utils.ts";
-import { PrintTask } from "../models/index.ts";
+import { listPrintTasksByUserIdAndState } from "../models/db.ts";
 import { logger } from "../logger.ts";
 
 declare module "ws" {
@@ -109,10 +109,7 @@ export const createWebSocketServer = (server: Server) => {
       wsMap[id][computerId] = ws;
       logger.log(`WebSocket 已连接，用户ID: ${id}, 设备ID: ${computerId}`);
 
-      const waitingJobs = PrintTask.findBy({
-        userId: id,
-        state: "waiting_print",
-      });
+      const waitingJobs = listPrintTasksByUserIdAndState(id, "waiting_print");
       if (waitingJobs.length > 0) {
         ws.send(JSON.stringify({ type: "check_jobs" }));
       }

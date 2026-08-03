@@ -1,67 +1,75 @@
-import { Computer, Printer } from "../models/index.ts";
+import {
+  insertComputer,
+  findComputerById,
+  removeComputerById,
+  updateComputerName,
+  findPrinterByComputerIdAndName,
+  setPrinterDisabled,
+  insertPrinter,
+  listPrintersByComputerId,
+} from "../models/db.ts";
 import { _currentUser } from "./user.ts";
 import { ApiError } from "./utils.ts";
 
 export const addComputer = async (id: string, name: string) => {
   const user = await _currentUser();
-  Computer.insert([{ id, name, userId: user.id }]);
+  insertComputer(id, name, user.id);
   return { success: true };
 };
 
 export const removeComputer = async (id: string) => {
   const user = await _currentUser();
-  const computer = Computer.findOne({ id });
+  const computer = findComputerById(id);
   if (!computer || computer.userId !== user.id) {
     throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
   }
-  Computer.remove({ id });
+  removeComputerById(id);
   return { success: true };
 };
 
 export const setComputerName = async (id: string, name: string) => {
   const user = await _currentUser();
-  const computer = Computer.findOne({ id });
+  const computer = findComputerById(id);
   if (!computer || computer.userId !== user.id) {
     throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
   }
-  Computer.update({ id }, { name });
+  updateComputerName(id, name);
   return { success: true };
 };
 
 export const addComputerPrinter = async (computerId: string, printerName: string) => {
   const user = await _currentUser();
-  const computer = Computer.findOne({ id: computerId });
+  const computer = findComputerById(computerId);
   if (!computer || computer.userId !== user.id) {
     throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
   }
   
-  const existingPrinter = Printer.findOne({ computerId, name: printerName });
+  const existingPrinter = findPrinterByComputerIdAndName(computerId, printerName);
   if (existingPrinter) {
-    Printer.update({ computerId, name: printerName }, { disabled: false });
+    setPrinterDisabled(computerId, printerName, false);
     return { success: true, restored: true };
   }
   
-  Printer.insert([{ name: printerName, computerId, disabled: false }]);
+  insertPrinter(printerName, computerId);
   return { success: true, restored: false };
 };
 
 export const removeComputerPrinter = async (computerId: string, printerName: string) => {
   const user = await _currentUser();
-  const computer = Computer.findOne({ id: computerId });
+  const computer = findComputerById(computerId);
   if (!computer || computer.userId !== user.id) {
     throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
   }
-  Printer.update({ computerId, name: printerName }, { disabled: true });
+  setPrinterDisabled(computerId, printerName, true);
   return { success: true };
 };
 
 export const computerInfo = async (computerId: string) => {
   const user = await _currentUser();
-  const computer = Computer.findOne({ id: computerId }, { printers: true });
+  const computer = findComputerById(computerId);
   if (!computer || computer.userId !== user.id) {
     throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
   }
-  // 手动过滤掉禁用的打印机
-  computer.printers = computer.printers.filter((p: any) => !p.disabled);
-  return computer;
+  const printers = listPrintersByComputerId(computerId).filter((p) => !p.disabled);
+  return { ...computer, printers };
 };

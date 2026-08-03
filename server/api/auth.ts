@@ -1,4 +1,11 @@
-import { User, WeixinKfUser, type UserBase, type UserInsert } from "../models/index.ts";
+import {
+  findUserByUsernamePassword,
+  insertUser,
+  findWeixinKfUserByExternalUserId,
+  insertWeixinKfUser,
+  updateWeixinKfUserUserId,
+  type UserInsert,
+} from "../models/db.ts";
 import { getInfo } from "./global.ts";
 import {
   ApiError,
@@ -15,29 +22,29 @@ export const login = async (user: Omit<UserInsert, 'id'> & {
   openKfId?: string 
 }) => {
   const info = getInfo()
-  const u = User.findOne({
-    username: user.username,
-    password: user.password,
-  });
+  const u = findUserByUsernamePassword(
+    user.username,
+    user.password,
+  );
   if (!u) {
     throw new ApiError(400, {}, "用户名或密码错误！");
   }
 
   if (user.weixinKfExternalUserId) {
-    const existingKfUser = WeixinKfUser.findOne({ 
-      externalUserId: user.weixinKfExternalUserId 
-    })
+    const existingKfUser = findWeixinKfUserByExternalUserId(
+      user.weixinKfExternalUserId,
+    )
     
     if (!existingKfUser) {
-      WeixinKfUser.insert([{
-        externalUserId: user.weixinKfExternalUserId,
-        userId: u.id,
-      }])
+      insertWeixinKfUser(
+        user.weixinKfExternalUserId,
+        u.id,
+      )
       logger.log('关联微信客服账号:', user.weixinKfExternalUserId)
     } else if (existingKfUser.userId !== u.id) {
-      WeixinKfUser.update(
-        { externalUserId: user.weixinKfExternalUserId },
-        { userId: u.id }
+      updateWeixinKfUserUserId(
+        user.weixinKfExternalUserId,
+        u.id
       )
       logger.log('更新微信客服账号关联:', user.weixinKfExternalUserId)
     }
@@ -74,6 +81,6 @@ export const login = async (user: Omit<UserInsert, 'id'> & {
 export const register = (
   u: UserInsert
 ) => {
-  User.insert([u]);
+  insertUser(u.username, u.password, u.email ?? null);
   return succeed;
 };

@@ -1,4 +1,4 @@
-import { User } from "../models/index.ts";
+import { findUserById } from "../models/db.ts";
 import { getInfo } from "./global.ts";
 import type { Info } from "./global.ts";
 import { ApiError, decryptString } from "./utils.ts";
@@ -17,7 +17,7 @@ export const _currentUser = async (info: Info = getInfo()) => {
     const userId = await decryptString(token);
     const id = parseInt(userId);
     
-    const u = User.findOne({ id });
+    const u = findUserById(id);
 
     if (u) {
       return u;

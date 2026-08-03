@@ -1,4 +1,30 @@
-import { Computer, Printer, PrintTask, PrintFile, WeixinKfUser, type PrintTaskBase, type PrintFileBase } from "../models/index.ts"
+import {
+  findComputerById,
+  listComputersWithPrinters,
+  listPrintersByComputerId,
+  listPrintTasksWithDetails,
+  findPrintTaskById,
+  findPrintTaskWithPrinter,
+  findPrintTaskWithDetails,
+  findPrinterById,
+  findPrinterWithComputer,
+  findPrintFileById,
+  updatePrintTaskPrinterId,
+  updatePrintTaskState,
+  updatePrintFileOptions,
+  updatePrintFileState,
+  listPrintFilesByPrintTaskId,
+  listPrintFilesByPrintTaskIdAndState,
+  listWaitingConfirmationTasks,
+  insertPrintTask,
+  insertPrintFile,
+  removePrintFilesByPrintTaskId,
+  removePrintTaskById,
+  findWeixinKfUserByUserId,
+  type PrintTaskBase,
+  type PrintFileBase,
+  type PrintTaskState,
+} from "../models/db.ts"
 import { _currentUser } from "./user.ts"
 import { ApiError, addTokenToUrl } from "./utils.ts"
 import { notifyCheckJobs } from "../ws/index.ts"
@@ -15,24 +41,23 @@ const WEIXIN_KF_ID = 'wkHnU4FQAAnkssZ2Y0t7gAKpQxcw7gjQ'
 
 export const listPrintTasks = async (query?: { computerId?: string; state?: string }) => {
     const user = await _currentUser()
-    const criteria: { userId: number; state?: string; printerId?: number[] } = { userId: user.id }
-    if (query?.state) criteria.state = query.state
+    const opts: { state?: PrintTaskState; printerIds?: number[] } = {}
+    if (query?.state) opts.state = query.state as PrintTaskState
 
     if (query?.computerId) {
-        const computer = Computer.findOne({ id: query.computerId }, { printers: true })
+        const computer = findComputerById(query.computerId)
         if (computer) {
-            const printerIds = computer.printers.map(p => p.id)
-            criteria.printerId = printerIds
+            const printerIds = listPrintersByComputerId(computer.id).map(p => p.id)
+            opts.printerIds = printerIds
         }
     }
-    
-    const printTasks = PrintTask.findBy(criteria, { printFiles: true, printer: true })
-    return printTasks
+
+    return listPrintTasksWithDetails(user.id, opts)
 }
 
 export const getAllPrinters = async () => {
     const user = await _currentUser()
-    const computers = Computer.findBy({ userId: user.id }, { printers: true })
+    const computers = listComputersWithPrinters(user.id)
     const allPrinters = computers.flatMap(c => c.printers.map(p => ({
         printerId: p.id,
         printerName: p.name,
@@ -45,7 +70,7 @@ export const getAllPrinters = async () => {
 
 export const getPrintTaskDetail = async (printTaskId: number) => {
     const user = await _currentUser()
-    const printTask = PrintTask.findOne({ id: printTaskId }, { printFiles: true, printer: true })
+    const printTask = findPrintTaskWithDetails(printTaskId)
 
     if (!printTask || printTask.userId !== user.id) {
         throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
@@ -56,7 +81,7 @@ export const getPrintTaskDetail = async (printTaskId: number) => {
 
 export const updatePrintTask = async (printTaskId: number, printerId: number) => {
     const user = await _currentUser()
-    const printTask = PrintTask.findOne({ id: printTaskId }, { printer: true })
+    const printTask = findPrintTaskWithPrinter(printTaskId)
 
     if (!printTask || printTask.userId !== user.id) {
         throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
@@ -66,24 +91,24 @@ export const updatePrintTask = async (printTaskId: number, printerId: number) =>
         throw new ApiError(400, {}, '只能修改待确认状态的任务', 'INVALID_STATE')
     }
 
-    const printer = Printer.findOne({ id: printerId })
+    const printer = findPrinterById(printerId)
     if (!printer) {
         throw new ApiError(404, {}, '打印机不存在', 'ENTITY_NOT_FOUND')
     }
 
-    PrintTask.update({ id: printTaskId }, { printerId })
+    updatePrintTaskPrinterId(printTaskId, printerId)
     return { success: true }
 }
 
 export const updatePrintFile = async (fileId: number, duplex: boolean, tumble: boolean) => {
     const user = await _currentUser()
-    const file = PrintFile.findOne({ id: fileId })
+    const file = findPrintFileById(fileId)
 
     if (!file) {
         throw new ApiError(404, {}, '文件不存在', 'ENTITY_NOT_FOUND')
     }
 
-    const task = PrintTask.findOne({ id: file.printTaskId })
+    const task = findPrintTaskById(file.printTaskId)
 
     if (!task || task.userId !== user.id) {
         throw new ApiError(403, {}, '无权操作', 'FORBIDDEN')
@@ -98,13 +123,13 @@ export const updatePrintFile = async (fileId: number, duplex: boolean, tumble: b
         convertPdfToXps(pdfPath, duplex, tumble)
     }
 
-    PrintFile.update({ id: fileId }, { duplex, tumble })
+    updatePrintFileOptions(fileId, duplex, tumble)
     return { success: true }
 }
 
 export const confirmPrintTask = async (printTaskId: number) => {
     const user = await _currentUser()
-    const printTask = PrintTask.findOne({ id: printTaskId }, { printer: true })
+    const printTask = findPrintTaskWithPrinter(printTaskId)
 
     if (!printTask || printTask.userId !== user.id) {
         throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
@@ -114,7 +139,7 @@ export const confirmPrintTask = async (printTaskId: number) => {
         throw new ApiError(400, {}, '只能确认待确认状态的任务', 'INVALID_STATE')
     }
 
-    PrintTask.update({ id: printTaskId }, { state: 'waiting_print' })
+    updatePrintTaskState(printTaskId, 'waiting_print')
     
     if (printTask.printer) {
         notifyCheckJobs(user.id, printTask.printer.computerId)
@@ -125,25 +150,25 @@ export const confirmPrintTask = async (printTaskId: number) => {
 
 export const fileSucceed = async (id: number) => {
     const user = await _currentUser()
-    const file = PrintFile.findOne({ id: id })
+    const file = findPrintFileById(id)
 
     if (!file) {
         throw new ApiError(404, {}, '文件不存在', 'ENTITY_NOT_FOUND')
     }
 
-    const task = PrintTask.findOne({ id: file.printTaskId })
+    const task = findPrintTaskById(file.printTaskId)
 
     if (!task || task.userId !== user.id) {
         throw new ApiError(403, {}, '无权操作', 'FORBIDDEN')
     }
 
-    PrintFile.update({ id: id }, { state: 'completed' })
+    updatePrintFileState(id, 'completed')
 
-    const allFiles = PrintFile.findBy({ printTaskId: task.id })
+    const allFiles = listPrintFilesByPrintTaskId(task.id)
     const allCompleted = allFiles.every(f => f.state === 'completed')
 
     if (allCompleted) {
-        PrintTask.update({ id: task.id }, { state: 'completed' })
+        updatePrintTaskState(task.id, 'completed')
     }
 
     return { success: true }
@@ -173,30 +198,30 @@ const sendPrintFailureNotification = async (task: PrintTaskBase, failedFiles: Pr
 
 export const fileFailed = async (id: number) => {
     const user = await _currentUser()
-    const file = PrintFile.findOne({ id: id })
+    const file = findPrintFileById(id)
 
     if (!file) {
         throw new ApiError(404, {}, '文件不存在', 'ENTITY_NOT_FOUND')
     }
 
-    const task = PrintTask.findOne({ id: file.printTaskId })
+    const task = findPrintTaskById(file.printTaskId)
 
     if (!task || task.userId !== user.id) {
         throw new ApiError(403, {}, '无权操作', 'FORBIDDEN')
     }
 
-    PrintFile.update({ id: id }, { state: 'failed' })
+    updatePrintFileState(id, 'failed')
 
-    const allFiles = PrintFile.findBy({ printTaskId: task.id })
+    const allFiles = listPrintFilesByPrintTaskId(task.id)
     const hasWaiting = allFiles.some(f => f.state === 'waiting_print')
     const allCompleted = allFiles.every(f => f.state === 'completed')
     const hasFailed = allFiles.some(f => f.state === 'failed')
 
     if (!hasWaiting) {
         if (allCompleted) {
-            PrintTask.update({ id: task.id }, { state: 'completed' })
+            updatePrintTaskState(task.id, 'completed')
         } else if (hasFailed) {
-            PrintTask.update({ id: task.id }, { state: 'failed' })
+            updatePrintTaskState(task.id, 'failed')
             const failedFiles = allFiles.filter(f => f.state === 'failed')
             await sendPrintFailureNotification(task, failedFiles)
         }
@@ -207,27 +232,27 @@ export const fileFailed = async (id: number) => {
 
 export const retryFailedFiles = async (printTaskId: number) => {
     const user = await _currentUser()
-    const task = PrintTask.findOne({ id: printTaskId })
+    const task = findPrintTaskById(printTaskId)
 
     if (!task || task.userId !== user.id) {
         throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
     }
 
-    const failedFiles = PrintFile.findBy({ printTaskId: task.id, state: 'failed' })
+    const failedFiles = listPrintFilesByPrintTaskIdAndState(printTaskId, 'failed')
     
     if (failedFiles.length === 0) {
         throw new ApiError(400, {}, '没有失败的文件', 'NO_FAILED_FILES')
     }
 
     for (const file of failedFiles) {
-        PrintFile.update({ id: file.id }, { state: 'waiting_print' })
+        updatePrintFileState(file.id, 'waiting_print')
     }
 
-    PrintTask.update({ id: task.id }, { state: 'waiting_print' })
+    updatePrintTaskState(task.id, 'waiting_print')
 
-    const printer = Printer.findOne({ id: task.printerId })
+    const printer = findPrinterById(task.printerId)
     if (printer) {
-        const computer = Computer.findOne({ id: printer.computerId })
+        const computer = findComputerById(printer.computerId)
         if (computer) {
             notifyCheckJobs(user.id, computer.id)
         }
@@ -238,14 +263,14 @@ export const retryFailedFiles = async (printTaskId: number) => {
 
 export const deletePrintTask = async (printTaskId: number) => {
     const user = await _currentUser()
-    const printTask = PrintTask.findOne({ id: printTaskId })
+    const printTask = findPrintTaskById(printTaskId)
 
     if (!printTask || printTask.userId !== user.id) {
         throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
     }
 
-    PrintFile.remove({ printTaskId: printTaskId })
-    PrintTask.remove({ id: printTaskId })
+    removePrintFilesByPrintTaskId(printTaskId)
+    removePrintTaskById(printTaskId)
 
     return { success: true }
 }
@@ -286,38 +311,38 @@ export const _outUploadPrintFile = async (req: Request): Promise<Response> => {
         }
     }
 
-    const kfUser = WeixinKfUser.findOne({ userId: user.id })
+    const kfUser = findWeixinKfUserByUserId(user.id)
     const externalUserId = kfUser?.externalUserId ?? ""
 
-    const existingTask = PrintTask.findOne({ userId: user.id, weixinKfId: WEIXIN_KF_ID, externalUserId: externalUserId, state: "waiting_confirmation" })
+    const existingTask = listWaitingConfirmationTasks(user.id, WEIXIN_KF_ID, externalUserId)[0]
     let printTaskId: number
 
     if (existingTask) {
         printTaskId = existingTask.id
     } else {
         printTaskId = generateTaskId()
-        const computers = Computer.findBy({ userId: user.id }, { printers: true })
+        const computers = listComputersWithPrinters(user.id)
         const printer = computers[0]?.printers?.find(p => !p.disabled)
         if (!printer) {
             return Response.json({ error: "未绑定打印机" }, { status: 400 })
         }
-        PrintTask.insert([{ id: printTaskId, state: "waiting_confirmation", userId: user.id, weixinKfId: WEIXIN_KF_ID, externalUserId: externalUserId, printerId: printer.id }])
+        insertPrintTask({ id: printTaskId, state: "waiting_confirmation", weixinKfId: WEIXIN_KF_ID, externalUserId: externalUserId, userId: user.id, printerId: printer.id })
     }
 
-    const printFileResult = PrintFile.insert([{
+    const printFileId = insertPrintFile({
         state: "waiting_print",
         printTaskId,
         fileId,
         filename: file.name,
         duplex,
         tumble: tumble || isPresentationFile(ext)
-    }])
+    })
 
     if (externalUserId) {
         try {
-            const task = PrintTask.findOne({ id: printTaskId }, { printer: true })
+            const task = findPrintTaskWithPrinter(printTaskId)
             if (task?.printer) {
-                const printer = Printer.findOne({ id: task.printer.id }, { computer: true })
+                const printer = findPrinterWithComputer(task.printer.id)
                 const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, user.id)
                 await sendMsgMenuMessage(
                     `📄 打印任务已创建\n\n计算机: ${printer?.computer.name}\n打印机: ${printer?.name}\n文件: ${file.name}\n\n💡 点击"查看详情"可修改打印设置`,
@@ -338,7 +363,7 @@ export const _outUploadPrintFile = async (req: Request): Promise<Response> => {
     return Response.json({
         success: true,
         printTaskId,
-        printFileId: printFileResult.lastInsertRowid,
+        printFileId,
         fileId,
         filename: file.name
     })
