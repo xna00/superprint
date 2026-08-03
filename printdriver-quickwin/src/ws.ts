@@ -1,6 +1,5 @@
 import 'quickwin/lib/websocket.js'
 import * as os from 'os'
-import { getCookie } from './storage.js'
 import { getDeviceId } from './device.js'
 import { handleWsMessage } from './print-queue.js'
 import { WS_URLS, WS_TIMEOUT } from './config.js'
@@ -50,12 +49,6 @@ export function cleanupWs() {
 export async function connectWs(addLog: (msg: string) => void, setWsStatus: (s: string) => void) {
     _lastAddLog = addLog
     _lastSetWsStatus = setWsStatus
-    const cookie = getCookie()
-    if (!cookie) {
-        addLog('[ws] no cookie, skip connection')
-        logger.log('[ws] connectWs: no cookie, abort')
-        return
-    }
     const devId = getDeviceId()
     if (!devId) {
         addLog('[ws] no device ID, skip connection')
@@ -72,7 +65,6 @@ export async function connectWs(addLog: (msg: string) => void, setWsStatus: (s: 
             const t0 = Date.now()
             const w = new WebSocket(wsUrl, {
                 headers: {
-                    'Cookie': cookie,
                     'X-Computer-ID': devId
                 }
             })
