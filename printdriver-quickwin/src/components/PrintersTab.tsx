@@ -4,6 +4,7 @@ import { ListView, type Column, Button } from 'quickwin/lib/react-qw/index.js'
 import type { LocalPrinterInfo } from '../printer.js'
 
 const VISIBLE = gui.WindowStyle.VISIBLE
+const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
 
 interface PrinterRow {
     name: string
@@ -32,8 +33,8 @@ export function PrintersTab({ computerId, computerName, username, wsStatus, prin
         status: p.enabled ? '启用' : '禁用',
     }))
     return (
-        <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'column', gap: 4, flexGrow: 1, padding: 8 }}>
-            <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'row', gap: 4, height: 24 }}>
+        <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', gap: 4, flexGrow: 1, padding: 8 }}>
+            <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'row', gap: 4, height: 24 }}>
                 <w type="STATIC" ws={VISIBLE} text={'设备ID: ' + (showDeviceId ? computerId : maskDeviceId(computerId))} style={{ width: 'auto' }} />
                 <Button onClick={() => setShowDeviceId(v => !v)} style={{ width: 56, height: 20 }}>{showDeviceId ? '隐藏' : '显示'}</Button>
             </w>
