@@ -7,7 +7,7 @@ interface PrinterOption {
   printerName: string
   computerId: string
   computerName: string
-  disabled: boolean
+  enabled: boolean
 }
 
 interface PrintFile {
@@ -173,7 +173,7 @@ export function PrintTaskDetail() {
                 disabled={saving}
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               >
-                {printers.filter(p => !p.disabled).map(p => (
+                {printers.filter(p => p.enabled).map(p => (
                   <option key={p.printerId} value={p.printerId}>
                     {p.computerName} - {p.printerName}
                   </option>
