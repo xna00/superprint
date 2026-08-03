@@ -77,20 +77,27 @@ export function App() {
 
     const syncPrinters = async (devId: string) => {
         const localPrinters = enumLocalPrinters()
+        addLog('[printer] local printers: ' + localPrinters.length + ' -> ' + JSON.stringify(localPrinters.map(p => p.name)))
         try {
-            await api.computer.syncPrinters(devId, localPrinters.map(p => ({ name: p.name, port: p.port, driver: p.driver })))
-            const info = await api.computer.computerInfo(devId) as any
+            const syncRes = await api.computer.syncPrinters(devId, localPrinters.map(p => ({ name: p.name, port: p.port, driver: p.driver })))
+            addLog('[printer] syncPrinters response: ' + JSON.stringify(syncRes))
+            const info = await api.computer.computerInfo(devId)
+            addLog('[printer] computerInfo response: ' + JSON.stringify(info))
             if (info && info.printers) {
                 const serverMap: Record<string, boolean> = {}
                 for (const sp of info.printers) {
                     serverMap[sp.name] = sp.enabled
                 }
-                setPrinters(localPrinters.map(p => ({
+                addLog('[printer] serverMap: ' + JSON.stringify(serverMap))
+                const mapped = localPrinters.map(p => ({
                     ...p,
                     enabled: Boolean(serverMap[p.name]),
-                })))
+                }))
+                addLog('[printer] mapped printers: ' + JSON.stringify(mapped.map(p => ({ name: p.name, enabled: p.enabled }))))
+                setPrinters(mapped)
+            } else {
+                addLog('[printer] computerInfo returned no printers field')
             }
-            addLog('[printer] synced ' + localPrinters.length + ' printers')
         } catch (e) {
             addLog('[printer] sync failed: ' + String(e))
         }

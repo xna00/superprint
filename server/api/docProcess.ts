@@ -172,7 +172,7 @@ export const processDocument = async (
       const printer = findPrinterWithComputer(task.printer.id)
       const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, externalUserId)
       await sendMsgMenuMessage(
-        `📄 公文处理完成\n\n文号: ${recognized.document_number}\n单位: ${recognized.issuing_unit}\n标题: ${recognized.title}\n\n计算机: ${(printer as any)?.computer?.name}\n打印机: ${(printer as any)?.name}`,
+        `📄 公文处理完成\n\n文号: ${recognized.document_number}\n单位: ${recognized.issuing_unit}\n标题: ${recognized.title}\n\n计算机: ${printer?.computer?.name}\n打印机: ${printer?.name}`,
         [
           { id: `confirm_${printTaskId}`, content: "确认打印" },
           { id: `delete_${printTaskId}`, content: "删除任务" },

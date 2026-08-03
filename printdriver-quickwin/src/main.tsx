@@ -186,9 +186,6 @@ function runMainApp() {
                 }
                 return 0
             }
-            if (msg !== gui.WmMsg.PAINT && msg !== gui.WmMsg.NCHITTEST && msg !== 512) {
-                logger.log(`[main] onEvent msg=${msg} wParam=${wParam} lParam=${lParam}`)
-            }
             if (msg === gui.WmMsg.CLOSE) {
                 const minimizeToTray = storageGet('minimizeToTray')
                 if (minimizeToTray !== false) {

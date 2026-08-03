@@ -21,11 +21,11 @@ const renderPdfToJpegs = (pdfPath: string, dpi: number = 300): string[] => {
   
   const a4PdfPath = join(tempDir, 'a4.pdf')
   const cmd1 = `pdftocairo -pdf -paper A4 -expand "${pdfPath}" "${a4PdfPath}"`
-  execSync(cmd1, { stdio: 'ignore', shell: true } as any)
+  execSync(cmd1, { stdio: 'ignore', shell: '/bin/sh' })
   
   const prefix = join(tempDir, 'page')
   const cmd2 = `pdftocairo -jpeg -r ${dpi} -jpegopt quality=85 "${a4PdfPath}" "${prefix}"`
-  execSync(cmd2, { stdio: 'ignore', shell: true } as any)
+  execSync(cmd2, { stdio: 'ignore', shell: '/bin/sh' })
   
   const files = readdirSync(tempDir)
     .filter(f => f.endsWith('.jpg'))
@@ -146,7 +146,7 @@ export const convertOfficeToPdf = (filePath: string): string | null => {
 
   try {
     const cmd = `libreoffice --headless --convert-to pdf --outdir "${outputDir}" "${absolutePath}"`
-    execSync(cmd, { stdio: 'ignore', shell: true } as any)
+    execSync(cmd, { stdio: 'ignore', shell: '/bin/sh' })
 
     const pdfPath = filePath.replace(/\.[^.]+$/, '.pdf')
     if (existsSync(pdfPath)) {

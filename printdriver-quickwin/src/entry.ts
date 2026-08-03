@@ -1,6 +1,7 @@
 import './ua.js'
 import "./main.js"
 import { logger } from './logger.js'
+type ManifestEntry = { isDynamicEntry?: boolean; file?: string }
 import * as win from 'win'
 
 const exePath = win.GetModuleFileName() || 'unknown'
@@ -13,7 +14,7 @@ fetch(baseUrl + 'vite_manifest.json?t=' + Date.now())
   .then(r => r.json())
   .then(m => {
     for (const [src, info] of Object.entries(m as Record<string, unknown>)) {
-      const entry = info as any
+      const entry = info as ManifestEntry
       if (entry.isDynamicEntry && entry.file && entry.file.endsWith('.js')) {
         const url = baseUrl + entry.file
         console.log('[preload]', src, url)

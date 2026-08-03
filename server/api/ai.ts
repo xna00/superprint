@@ -11,6 +11,9 @@ const MODEL_NAME = 'glm-4v-flash'
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads')
 
+type GLMChoice = { message?: { content?: string } };
+type GLMResponse = { choices?: GLMChoice[] };
+
 export type RecognizedDocument = {
   document_number: string
   issuing_unit: string
@@ -140,7 +143,7 @@ const recognizeFromImageUrl = async (imageUrl: string): Promise<RecognizedDocume
     throw new Error(`GLM API 错误 ${response.status}: ${error}`)
   }
 
-  const result = await response.json() as any
+  const result = await response.json() as GLMResponse
   const content = result.choices?.[0]?.message?.content || ''
 
   // 解析 JSON 响应
