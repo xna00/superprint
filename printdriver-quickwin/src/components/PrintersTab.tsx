@@ -9,6 +9,7 @@ const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
 interface PrinterRow {
     name: string
     status: string
+    action: string
 }
 
 interface PrintersTabProps {
@@ -17,20 +18,29 @@ interface PrintersTabProps {
     
     wsStatus: string
     printers: LocalPrinterInfo[]
+    onTogglePrinter: (printerName: string, enable: boolean) => void
 }
 
-const columns: Column<PrinterRow>[] = [
-    { name: '打印机名', dataIndex: 'name' },
-    { name: '状态', dataIndex: 'status' },
-]
-
-export function PrintersTab({ computerId, computerName, wsStatus, printers }: PrintersTabProps) {
+export function PrintersTab({ computerId, computerName, wsStatus, printers, onTogglePrinter }: PrintersTabProps) {
+    const columns: Column<PrinterRow>[] = [
+        { name: '打印机名', dataIndex: 'name' },
+        { name: '状态', dataIndex: 'status' },
+        {
+            name: '操作',
+            dataIndex: 'action',
+            width: 60,
+            align: 'center',
+            cellStyle: { color: 0xFF0000, underline: true },
+            onCellClick: (record) => onTogglePrinter(record.name, record.action === '启用'),
+        },
+    ]
     const [showDeviceId, setShowDeviceId] = useState(false)
     const maskDeviceId = (id: string) =>
         id.length > 6 ? id.slice(0, 6) + '...' : id
     const data: PrinterRow[] = printers.map(p => ({
         name: p.name,
         status: p.enabled ? '启用' : '禁用',
+        action: p.enabled ? '禁用' : '启用',
     }))
     return (
         <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', gap: 4, flexGrow: 1, padding: 8 }}>

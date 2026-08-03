@@ -103,6 +103,19 @@ export function App() {
         }
     }
 
+    const togglePrinter = async (printerName: string, enable: boolean) => {
+        try {
+            if (enable) {
+                await api.computer.addComputerPrinter(computerId, printerName)
+            } else {
+                await api.computer.removeComputerPrinter(computerId, printerName)
+            }
+            await syncPrinters(computerId)
+        } catch (e) {
+            addLog('[printer] toggle failed: ' + String(e))
+        }
+    }
+
     useEffect(() => {
         os.setTimeout(init, 500)
     }, [])
@@ -122,6 +135,7 @@ export function App() {
                             computerName={computerName}
                             wsStatus={wsStatus}
                             printers={printers}
+                            onTogglePrinter={togglePrinter}
                         />
                     )
                 },
