@@ -35,7 +35,7 @@ export function PrintersTab({ computerId, computerName, username, wsStatus, prin
     return (
         <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', gap: 4, flexGrow: 1, padding: 8 }}>
             <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'row', gap: 4, height: 24 }}>
-                <w type="STATIC" ws={VISIBLE} text={'设备ID: ' + (showDeviceId ? computerId : maskDeviceId(computerId))} style={{ flexGrow: 1 }} />
+                <w type="STATIC" ws={VISIBLE} text={'设备ID: ' + (showDeviceId ? computerId : maskDeviceId(computerId))} style={{ width: 'auto' }} />
                 <Button onClick={() => setShowDeviceId(v => !v)} style={{ width: 56, height: 20 }}>{showDeviceId ? '隐藏' : '显示'}</Button>
             </w>
             <w type="STATIC" ws={VISIBLE} text={'计算机: ' + computerName} style={{ height: 24 }} />
