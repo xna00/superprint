@@ -55,16 +55,12 @@ const verifyComputerForTask = (computerId: string, task: { printerId: number }) 
 export const getAllPrinters = async () => {
   const externalUserId = await getExternalUserId();
   const printers = listPrintersByWeixinKfUser(externalUserId);
-  return printers.map(p => {
-    const computer = findComputerById(p.computerId);
-    return {
-      printerId: p.id,
-      printerName: p.name,
-      computerId: p.computerId,
-      computerName: computer?.name ?? "",
-      enabled: p.enabled,
-    };
-  });
+  return printers.map(p => ({
+    printerId: p.id,
+    printerName: p.name,
+    computerName: p.computerName,
+    enabled: p.enabled,
+  }));
 }
 
 export const getPrintTaskDetail = async (printTaskId: number) => {

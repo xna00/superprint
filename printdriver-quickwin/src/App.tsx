@@ -110,7 +110,17 @@ export function App() {
             } else {
                 await api.computer.removeComputerPrinter(computerId, printerName)
             }
-            await syncPrinters(computerId)
+            const info = await api.computer.computerInfo(computerId)
+            if (info && info.printers) {
+                const serverMap: Record<string, boolean> = {}
+                for (const sp of info.printers) {
+                    serverMap[sp.name] = sp.enabled
+                }
+                setPrinters(prev => prev.map(p => ({
+                    ...p,
+                    enabled: Boolean(serverMap[p.name]),
+                })))
+            }
         } catch (e) {
             addLog('[printer] toggle failed: ' + String(e))
         }

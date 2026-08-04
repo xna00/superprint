@@ -5,7 +5,6 @@ import { PdfPreview } from '../components/PdfPreview'
 interface PrinterOption {
   printerId: number
   printerName: string
-  computerId: string
   computerName: string
   enabled: boolean
 }

@@ -20,7 +20,9 @@ const PRINTER_SQL = `CREATE TABLE IF NOT EXISTS Printer (
 id INTEGER NOT NULL PRIMARY KEY,
 name TEXT NOT NULL,
 computerId TEXT NOT NULL REFERENCES Computer(id),
-enabled INTEGER NOT NULL CHECK (enabled IN (1, 0))
+enabled INTEGER NOT NULL CHECK (enabled IN (1, 0)),
+
+UNIQUE (name, computerId)
 )`;
 
 const PRINT_TASK_SQL = `CREATE TABLE IF NOT EXISTS PrintTask (
@@ -81,6 +83,8 @@ export type PrintFileState = PrintFileRow["state"];
 
 export type ComputerBase = ComputerRow;
 export type PrinterBase = Omit<PrinterRow, "enabled"> & { enabled: boolean };
+export type PrinterListItem = Omit<PrinterBase, "computerId">;
+export type PrinterWithComputerName = PrinterListItem & { computerName: string };
 export type PrintFileBase = Omit<PrintFileRow, "duplex" | "tumble"> & {
   duplex: boolean;
   tumble: boolean;
@@ -216,10 +220,10 @@ export const findPrinterWithComputer = (
   return { ...printer, computer };
 };
 
-export const listPrintersByComputerId = (computerId: string): PrinterBase[] =>
+export const listPrintersByComputerId = (computerId: string): PrinterListItem[] =>
   db
     .prepare(
-      `SELECT ALL * FROM Printer WHERE Printer.computerId = @computerId ORDER BY 1 LIMIT -1 OFFSET 0`,
+      `SELECT ALL Printer.id AS id, Printer.name AS name, Printer.enabled AS enabled FROM Printer WHERE Printer.computerId = @computerId ORDER BY 1 LIMIT -1 OFFSET 0`,
     )
     .all({ computerId })
     .map((p) => ({ ...p, enabled: Boolean(p.enabled) }));
@@ -232,10 +236,10 @@ export const removePrinterById = (id: number) => {
 
 export const listPrintersByWeixinKfUser = (
   externalUserId: string,
-): PrinterBase[] => {
+): PrinterWithComputerName[] => {
   const rows = db
     .prepare(
-      `SELECT ALL Printer.id AS id, Printer.name AS name, Printer.computerId AS computerId, Printer.enabled AS enabled FROM Printer INNER JOIN WeixinKfUserPrinter ON WeixinKfUserPrinter.printerId = Printer.id WHERE WeixinKfUserPrinter.weixinKfUserId = @externalUserId ORDER BY Printer.id LIMIT -1 OFFSET 0`,
+      `SELECT ALL Printer.id AS id, Printer.name AS name, Printer.enabled AS enabled, Computer.name AS computerName FROM Printer INNER JOIN WeixinKfUserPrinter ON WeixinKfUserPrinter.printerId = Printer.id INNER JOIN Computer ON Computer.id = Printer.computerId WHERE WeixinKfUserPrinter.weixinKfUserId = @externalUserId ORDER BY Printer.id LIMIT -1 OFFSET 0`,
     )
     .all({ externalUserId });
   return rows.map(p => ({ ...p, enabled: Boolean(p.enabled) }));

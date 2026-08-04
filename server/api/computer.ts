@@ -76,7 +76,7 @@ export const computerInfo = async (computerId: string) => {
 
 export const syncPrinters = async (computerId: string, localPrinters: { name: string; port: string; driver: string }[]) => {
   getExistingComputerId();
-  const serverPrinters = listPrintersByComputerId(computerId).filter((p) => p.enabled);
+  const serverPrinters = listPrintersByComputerId(computerId);
   const serverNames = new Set(serverPrinters.map(p => p.name));
   const localNames = new Set(localPrinters.map(p => p.name));
 
