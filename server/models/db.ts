@@ -10,7 +10,11 @@ kfBaseLink TEXT
 )`;
 
 const WEIXIN_KF_USER_SQL = `CREATE TABLE IF NOT EXISTS WeixinKfUser (
-externalUserId TEXT NOT NULL PRIMARY KEY
+externalUserId TEXT NOT NULL PRIMARY KEY,
+nickname TEXT,
+avatar TEXT,
+gender INTEGER CHECK(gender IN (0, 1, 2)),
+unionid TEXT
 )`;
 
 const COMPUTER_SQL = `CREATE TABLE IF NOT EXISTS Computer (
@@ -173,6 +177,18 @@ export const removeWeixinKfUserByExternalUserId = (externalUserId: string) => {
   ).run({ externalUserId });
 };
 
+export const updateWeixinKfUserInfo = (
+  externalUserId: string,
+  nickname: string | null,
+  avatar: string | null,
+  gender: 0 | 1 | 2 | null,
+  unionid: string | null,
+) => {
+  db.prepare(
+    `UPDATE OR ABORT WeixinKfUser SET nickname = @nickname, avatar = @avatar, gender = @gender, unionid = @unionid WHERE WeixinKfUser.externalUserId = @externalUserId`,
+  ).run({ externalUserId, nickname, avatar, gender, unionid });
+};
+
 // ── Computer ──
 
 export const insertComputer = (id: string, name: string) => {
@@ -325,6 +341,17 @@ export const unlinkPrinterFromWeixinKfUser = (
   db.prepare(
     `DELETE FROM WeixinKfUserPrinter WHERE WeixinKfUserPrinter.weixinKfUserId = @weixinKfUserId AND WeixinKfUserPrinter.printerId = @printerId`,
   ).run({ weixinKfUserId: externalUserId, printerId });
+};
+
+export const listWeixinKfUsersByPrinterId = (
+  printerId: number,
+): { externalUserId: string; nickname: string | null; avatar: string | null }[] => {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT WeixinKfUser.externalUserId AS externalUserId, WeixinKfUser.nickname AS nickname, WeixinKfUser.avatar AS avatar FROM WeixinKfUser INNER JOIN WeixinKfUserPrinter ON WeixinKfUserPrinter.weixinKfUserId = WeixinKfUser.externalUserId WHERE WeixinKfUserPrinter.printerId = @printerId ORDER BY WeixinKfUser.externalUserId LIMIT -1 OFFSET 0`,
+    )
+    .all({ printerId });
+  return rows;
 };
 
 // ── PrintTask ──

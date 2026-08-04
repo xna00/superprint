@@ -21,6 +21,7 @@ export interface LocalPrinterInfo {
     port: string
     driver: string
     enabled: boolean
+    id: number | null
 }
 
 export function enumLocalPrinters(): LocalPrinterInfo[] {
@@ -58,7 +59,7 @@ export function enumLocalPrinters(): LocalPrinterInfo[] {
         if (!name) continue
         const port = decodeWideAtPtr(readPtr(dv, off + 24))
         const driver = decodeWideAtPtr(readPtr(dv, off + 32))
-        printers.push({ name, port, driver, enabled: false })
+        printers.push({ name, port, driver, enabled: false, id: null })
     }
 
     return printers

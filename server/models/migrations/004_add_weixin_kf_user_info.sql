@@ -1,0 +1,4 @@
+ALTER TABLE WeixinKfUser ADD COLUMN nickname TEXT;
+ALTER TABLE WeixinKfUser ADD COLUMN avatar TEXT;
+ALTER TABLE WeixinKfUser ADD COLUMN gender INTEGER;
+ALTER TABLE WeixinKfUser ADD COLUMN unionid TEXT;

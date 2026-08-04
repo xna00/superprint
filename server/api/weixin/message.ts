@@ -4,6 +4,7 @@ import {
   findWeixinKfUserByExternalUserId,
   insertWeixinKfUser,
   removeWeixinKfUserByExternalUserId,
+  updateWeixinKfUserInfo,
   findPrintTaskWithPrinter,
   updatePrintTaskState,
   findPrintTaskById,
@@ -30,6 +31,7 @@ import { processDocument, processDocumentSimple } from '../docProcess.ts'
 import { handlePdfConvertMessages } from '../pdfConvert.ts'
 import { handlePdfToWordMessages } from '../pdfToWord.ts'
 import { PRINT_MAN_KF_OPEN_ID, DOCUMENT_KF_OPEN_ID } from './link.ts'
+import { getAccessToken } from './token.ts'
 import { logger } from "../../logger.ts";
 
 export const generateTaskId = (): number => {
@@ -531,6 +533,47 @@ const messageHandlerMap: Partial<Record<string, (messages: NonEventMessage[]) =>
   'wkHnU4FQAAgFJKiO2JHdsWVrKIM3157Q': handlePdfToWordMessages,
 }
 
+const batchgetCustomerInfo = async (externalUserId: string) => {
+  try {
+    const accessToken = await getAccessToken()
+    const url = `https://qyapi.weixin.qq.com/cgi-bin/kf/customer/batchget?access_token=${accessToken}`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ external_userid_list: [externalUserId] }),
+    })
+    const data = await response.json() as {
+      errcode: number
+      errmsg: string
+      customer_list?: {
+        external_userid: string
+        nickname: string
+        avatar: string
+        gender: number
+        unionid: string
+      }[]
+      invalid_external_userid?: string[]
+    }
+    if (data.errcode !== 0) {
+      logger.error(`获取客户信息失败: ${data.errmsg} (errcode: ${data.errcode})`)
+      return
+    }
+    const customer = data.customer_list?.[0]
+    if (customer) {
+      updateWeixinKfUserInfo(
+        externalUserId,
+        customer.nickname || null,
+        customer.avatar || null,
+        typeof customer.gender === 'number' ? customer.gender as 0 | 1 | 2 : null,
+        customer.unionid || null,
+      )
+      logger.log(`✅ 已更新客户信息: ${externalUserId} nickname=${customer.nickname}`)
+    }
+  } catch (error) {
+    logger.error(`获取客户信息异常: ${error}`)
+  }
+}
+
 const handleEnterSessionEvents = async (events: (Message & { msgtype: 'event' })[]) => {
   for (const m of events) {
     try {
@@ -565,6 +608,7 @@ const handleEnterSessionEvents = async (events: (Message & { msgtype: 'event' })
         logger.log(`✅ 用户 ${externalUserId} 经客服 ${openKfId} 绑定打印机 ${printer.name} (#${printerId})`)
         await sendTextMessage(`✅ 已绑定打印机「${printer.name}」，现在可以直接发送文件打印`, openKfId, externalUserId)
       }
+      batchgetCustomerInfo(externalUserId)
     } catch (error) {
       logger.error('处理进入会话事件失败:', error)
     }

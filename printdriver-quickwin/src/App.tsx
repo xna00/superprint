@@ -69,16 +69,17 @@ export function App() {
             const info = await api.computer.computerInfo(devId)
             pushLog('[printer] computerInfo response: ' + JSON.stringify(info))
             if (info && info.printers) {
-                const serverMap: Record<string, boolean> = {}
+                const serverMap: Record<string, { enabled: boolean; id: number }> = {}
                 for (const sp of info.printers) {
-                    serverMap[sp.name] = sp.enabled
+                    serverMap[sp.name] = { enabled: sp.enabled, id: sp.id }
                 }
                 pushLog('[printer] serverMap: ' + JSON.stringify(serverMap))
                 const mapped = localPrinters.map(p => ({
                     ...p,
-                    enabled: Boolean(serverMap[p.name]),
+                    enabled: serverMap[p.name]?.enabled ?? false,
+                    id: serverMap[p.name]?.id ?? null,
                 }))
-                pushLog('[printer] mapped printers: ' + JSON.stringify(mapped.map(p => ({ name: p.name, enabled: p.enabled }))))
+                pushLog('[printer] mapped printers: ' + JSON.stringify(mapped.map(p => ({ name: p.name, enabled: p.enabled, id: p.id }))))
                 setPrinters(mapped)
             } else {
                 pushLog('[printer] computerInfo returned no printers field')
@@ -97,13 +98,14 @@ export function App() {
             }
             const info = await api.computer.computerInfo(computerId)
             if (info && info.printers) {
-                const serverMap: Record<string, boolean> = {}
+                const serverMap: Record<string, { enabled: boolean; id: number }> = {}
                 for (const sp of info.printers) {
-                    serverMap[sp.name] = sp.enabled
+                    serverMap[sp.name] = { enabled: sp.enabled, id: sp.id }
                 }
                 setPrinters(prev => prev.map(p => ({
                     ...p,
-                    enabled: Boolean(serverMap[p.name]),
+                    enabled: serverMap[p.name]?.enabled ?? false,
+                    id: serverMap[p.name]?.id ?? null,
                 })))
             }
         } catch (e) {

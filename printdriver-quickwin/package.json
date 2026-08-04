@@ -19,6 +19,7 @@
   "dependencies": {
     "@types/react": "^19.2.17",
     "api": "*",
+    "jpeg-js": "^0.4.4",
     "qrcode-generator": "^2.0.4",
     "quickwin": "^2026.8.4-141954",
     "react": "^19.2.7",

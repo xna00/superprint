@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../logger.ts";
+import { findComputerById } from "../models/db.ts";
 
 declare module "ws" {
   interface WebSocket {
@@ -10,7 +11,12 @@ declare module "ws" {
   }
 }
 
-const wsMap: Record<string, WebSocket | undefined> = {};
+type WsEntry = {
+  ws: WebSocket;
+  name: string;
+};
+
+const wsMap: Record<string, WsEntry | undefined> = {};
 
 const HEARTBEAT_INTERVAL = 30000;
 
@@ -29,13 +35,18 @@ const getVersionInfo = (): { version: string; setupexe: string } | null => {
   }
 };
 
-const findWsComputerId = (ws: WebSocket): string | null => {
-  for (const [computerId, socket] of Object.entries(wsMap)) {
-    if (socket === ws) {
-      return computerId;
+const findWsInfo = (ws: WebSocket): { id: string; name: string } | null => {
+  for (const [computerId, entry] of Object.entries(wsMap)) {
+    if (entry?.ws === ws) {
+      return { id: computerId, name: entry.name };
     }
   }
   return null;
+};
+
+const logPrefix = (info: { id: string; name: string } | null): string => {
+  if (!info) return '设备ID: null';
+  return `计算机: ${info.name} (${info.id.slice(0, 6)}...)`;
 };
 
 export const createWebSocketServer = (server: Server) => {
@@ -45,10 +56,10 @@ export const createWebSocketServer = (server: Server) => {
     const versionInfo = getVersionInfo();
     
     wss.clients.forEach((ws) => {
-      const computerId = findWsComputerId(ws);
+      const wsInfo = findWsInfo(ws);
       
       if (ws.isAlive === false) {
-        logger.log(`WebSocket 连接超时，设备ID: ${computerId}`);
+        logger.log(`WebSocket 连接超时，${logPrefix(wsInfo)}`);
         ws.terminate();
         return;
       }
@@ -62,7 +73,7 @@ export const createWebSocketServer = (server: Server) => {
       }
       ws.send(JSON.stringify(heartbeatMsg));
       
-      logger.log(`WebSocket ping 已发送，设备ID: ${computerId}`);
+      logger.log(`WebSocket ping 已发送，${logPrefix(wsInfo)}`);
     });
   }, HEARTBEAT_INTERVAL);
 
@@ -72,11 +83,6 @@ export const createWebSocketServer = (server: Server) => {
 
   wss.on("connection", async (ws, req) => {
     ws.isAlive = true;
-    ws.on("pong", () => {
-      ws.isAlive = true;
-      const computerId = findWsComputerId(ws);
-      logger.log(`WebSocket pong 已收到，设备ID: ${computerId}`);
-    });
 
     const computerId = req.headers["x-computer-id"] as string | undefined;
 
@@ -86,19 +92,29 @@ export const createWebSocketServer = (server: Server) => {
       return;
     }
 
-    wsMap[computerId] = ws;
-    logger.log(`WebSocket 已连接，设备ID: ${computerId}`);
+    const computer = findComputerById(computerId)
+    const computerName = computer?.name ?? '未知'
+    wsMap[computerId] = { ws, name: computerName };
+    logger.log(`WebSocket 已连接，${logPrefix({ id: computerId, name: computerName })}`);
+
+    ws.on("pong", () => {
+      ws.isAlive = true;
+      const wsInfo = findWsInfo(ws);
+      logger.log(`WebSocket pong 已收到，${logPrefix(wsInfo)}`);
+    });
 
     ws.on("close", () => {
-      if (wsMap[computerId] === ws) {
+      const entry = wsMap[computerId];
+      if (entry?.ws === ws) {
         delete wsMap[computerId];
       }
-      logger.log(`WebSocket 已断开，设备ID: ${computerId}`);
+      logger.log(`WebSocket 已断开，${logPrefix({ id: computerId, name: computerName })}`);
     });
 
     ws.on("error", (error) => {
-      logger.error(`WebSocket 错误，设备ID: ${computerId}`, error);
-      if (wsMap[computerId] === ws) {
+      const wsInfo = findWsInfo(ws);
+      logger.error(`WebSocket 错误，${logPrefix(wsInfo)}`, error);
+      if (wsMap[computerId]?.ws === ws) {
         delete wsMap[computerId];
       }
     });
@@ -106,9 +122,9 @@ export const createWebSocketServer = (server: Server) => {
 };
 
 export const notifyCheckJobs = (computerId: string) => {
-  const ws = wsMap[computerId];
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "check_jobs" }));
+  const entry = wsMap[computerId];
+  if (entry && entry.ws.readyState === WebSocket.OPEN) {
+    entry.ws.send(JSON.stringify({ type: "check_jobs" }));
     logger.log(`已向设备 ${computerId} 发送 check_jobs 通知`);
   }
 };

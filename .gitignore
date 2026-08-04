@@ -6,6 +6,7 @@ server/music
 !*.local.d.ts
 server/uploads/
 server/dev.db
+server/data.db
 node_modules/
 */package-lock.json
 dist

@@ -4,12 +4,15 @@ import {
   removeComputerById,
   updateComputerName,
   findPrinterByComputerIdAndName,
+  findPrinterById,
   setPrinterEnabled,
   insertPrinter,
   removePrinterById,
   listPrintersByComputerId,
   listPrintTasksByPrinterId,
   ensurePrinterBindKey,
+  listWeixinKfUsersByPrinterId,
+  unlinkPrinterFromWeixinKfUser,
 } from "../models/db.ts";
 import { ApiError } from "./utils.ts";
 import { getInfo } from "./global.ts";
@@ -85,6 +88,26 @@ export const getPrinterKfLink = async (printerName: string) => {
   const bindKey = ensurePrinterBindKey(printer.id);
   const baseLink = await getKfBaseLink(PRINT_MAN_KF_OPEN_ID);
   return { link: `${baseLink}&scene_param=${encodeURIComponent(bindKey)}` };
+};
+
+export const listPrinterUsers = async (printerId: number) => {
+  const computerId = getExistingComputerId();
+  const printer = findPrinterById(printerId);
+  if (!printer || printer.computerId !== computerId) {
+    throw new ApiError(404, {}, "打印机不存在", "ENTITY_NOT_FOUND");
+  }
+  const users = listWeixinKfUsersByPrinterId(printerId);
+  return { users };
+};
+
+export const removePrinterUser = async (printerId: number, externalUserId: string) => {
+  const computerId = getExistingComputerId();
+  const printer = findPrinterById(printerId);
+  if (!printer || printer.computerId !== computerId) {
+    throw new ApiError(404, {}, "打印机不存在", "ENTITY_NOT_FOUND");
+  }
+  unlinkPrinterFromWeixinKfUser(externalUserId, printerId);
+  return { success: true };
 };
 
 export const syncPrinters = async (computerId: string, localPrinters: { name: string; port: string; driver: string }[]) => {
