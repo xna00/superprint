@@ -1,15 +1,14 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import * as gui from 'gui'
 import * as os from 'os'
-import { Tab, ListBox } from 'quickwin/lib/react-qw/index.js'
+import { Tab } from 'quickwin/lib/react-qw/index.js'
 import { api } from './api.js'
 import { getDeviceId, getComputerName } from './device.js'
 import { enumLocalPrinters, type LocalPrinterInfo } from './printer.js'
-import { setLogger } from './print-queue.js'
 import { connectWs } from './ws.js'
-import { logger } from './logger.js'
-import { toCST } from './utils.js'
+import { pushLog } from './log-store.js'
 import { PrintersTab } from './components/PrintersTab.js'
+import { LogsPanel } from './components/LogsPanel.js'
 
 
 const SettingsTab = lazy(() => import('./components/SettingsTab.js').then(m => ({ default: m.SettingsTab })))
@@ -24,92 +23,68 @@ export function App() {
     const [computerName, setComputerName] = useState('')
     const [printers, setPrinters] = useState<LocalPrinterInfo[]>([])
     const [wsStatus, setWsStatus] = useState('未连接')
-    const [logs, setLogs] = useState<string[]>([])
-    const logListRef = useRef<gui.HWND>(null)
-    const MAX_LOG = 100
-
-    const addLog = (msg: string) => {
-        const local8 = toCST()
-        const ts = `${local8.getUTCMonth()+1}/${local8.getUTCDate()} ${String(local8.getUTCHours()).padStart(2,'0')}:${String(local8.getUTCMinutes()).padStart(2,'0')}:${String(local8.getUTCSeconds()).padStart(2,'0')}`
-        const line = `[${ts}] ${msg}`
-        logger.log('[log]', line)
-        setLogs(prev => [...prev.slice(-(MAX_LOG - 1)), line])
-    }
-
-    useEffect(() => {
-        setLogger(addLog)
-    }, [])
-
-    useEffect(() => {
-        if (!logListRef.current) return
-        const lbHwnd = gui.GetWindow(logListRef.current, gui.GetWindowCmd.CHILD)
-        if (lbHwnd) {
-            const count = gui.SendMessage(lbHwnd, gui.LbMsg.GETCOUNT, 0, 0)
-            gui.SendMessage(lbHwnd, gui.LbMsg.SETTOPINDEX, Math.max(0, count - 1), 0)
-        }
-    }, [logs])
 
     const init = async () => {
         const devId = getDeviceId()
         if (!devId) {
-            addLog('[device] cannot get device ID')
+            pushLog('[device] cannot get device ID')
             setAppState('main')
             return
         }
         const compName = getComputerName() || 'Unknown'
         setComputerId(devId)
         setComputerName(compName)
-        addLog('[device] ID: ' + devId)
-        addLog('[device] name: ' + compName)
+        pushLog('[device] ID: ' + devId)
+        pushLog('[device] name: ' + compName)
 
         try {
-            addLog('[computer] registering device...')
+            pushLog('[computer] registering device...')
             await api.computer.addComputer(devId, compName)
-            addLog('[computer] registered successfully')
+            pushLog('[computer] registered successfully')
         } catch (e) {
-            addLog('[computer] registration error: ' + String(e))
+            pushLog('[computer] registration error: ' + String(e))
         }
 
         try {
             const info = await api.computer.computerInfo(devId)
             if (info?.name) {
                 setComputerName(info.name)
-                addLog('[computer] server name: ' + info.name)
+                pushLog('[computer] server name: ' + info.name)
             }
         } catch (e) {
-            addLog('[computer] fetch name failed: ' + String(e))
+            pushLog('[computer] fetch name failed: ' + String(e))
         }
 
         await syncPrinters(devId)
-        os.setTimeout(() => connectWs(addLog, setWsStatus), 500)
+        os.setTimeout(() => connectWs(pushLog, setWsStatus), 500)
         setAppState('main')
     }
 
     const syncPrinters = async (devId: string) => {
         const localPrinters = enumLocalPrinters()
-        addLog('[printer] local printers: ' + localPrinters.length + ' -> ' + JSON.stringify(localPrinters.map(p => p.name)))
+        pushLog('[printer] local printers: ' + localPrinters.length + ' -> ' + JSON.stringify(localPrinters.map(p => p.name)))
         try {
             const syncRes = await api.computer.syncPrinters(devId, localPrinters.map(p => ({ name: p.name, port: p.port, driver: p.driver })))
-            addLog('[printer] syncPrinters response: ' + JSON.stringify(syncRes))
+            pushLog('[printer] syncPrinters response: ' + JSON.stringify(syncRes))
             const info = await api.computer.computerInfo(devId)
-            addLog('[printer] computerInfo response: ' + JSON.stringify(info))
+            pushLog('[printer] computerInfo response: ' + JSON.stringify(info))
             if (info && info.printers) {
                 const serverMap: Record<string, boolean> = {}
                 for (const sp of info.printers) {
                     serverMap[sp.name] = sp.enabled
                 }
-                addLog('[printer] serverMap: ' + JSON.stringify(serverMap))
+                pushLog('[printer] serverMap: ' + JSON.stringify(serverMap))
                 const mapped = localPrinters.map(p => ({
                     ...p,
                     enabled: Boolean(serverMap[p.name]),
                 }))
-                addLog('[printer] mapped printers: ' + JSON.stringify(mapped.map(p => ({ name: p.name, enabled: p.enabled }))))
+                pushLog('[printer] mapped printers: ' + JSON.stringify(mapped.map(p => ({ name: p.name, enabled: p.enabled }))))
                 setPrinters(mapped)
             } else {
-                addLog('[printer] computerInfo returned no printers field')
+                pushLog('[printer] computerInfo returned no printers field')
             }
         } catch (e) {
-            addLog('[printer] sync failed: ' + String(e))
+            pushLog('[printer] sync failed: ' + String(e))
         }
     }
 
@@ -132,7 +107,7 @@ export function App() {
                 })))
             }
         } catch (e) {
-            addLog('[printer] toggle failed: ' + String(e))
+            pushLog('[printer] toggle failed: ' + String(e))
         }
     }
 
@@ -141,9 +116,9 @@ export function App() {
             await api.computer.setComputerName(computerId, name)
             const info = await api.computer.computerInfo(computerId)
             setComputerName(info?.name ?? name)
-            addLog('[computer] name saved: ' + name)
+            pushLog('[computer] name saved: ' + name)
         } catch (e) {
-            addLog('[computer] save name failed: ' + String(e))
+            pushLog('[computer] save name failed: ' + String(e))
         }
     }
 
@@ -179,7 +154,7 @@ export function App() {
                 },
                 {
                     title: '日志',
-                    content: <ListBox ref={logListRef} items={logs} scrollToBottom={true} style={{ flexGrow: 1 }} />
+                    content: <LogsPanel />
                 },
                 {
                     title: '设置',
