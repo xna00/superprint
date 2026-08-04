@@ -145,7 +145,7 @@ export function App() {
                             computerId={computerId}
                             computerName={computerName}
                             wsStatus={wsStatus}
-                            printers={printers}
+                            printers={printers.toSorted((a, b) => Number(b.enabled) - Number(a.enabled))}
                             onTogglePrinter={togglePrinter}
                             onSaveComputerName={saveComputerName}
                             onResetComputerName={resetComputerName}

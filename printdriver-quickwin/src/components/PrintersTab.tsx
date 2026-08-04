@@ -89,11 +89,11 @@ export function PrintersTab({ computerId, computerName, wsStatus, printers, onTo
     return (
         <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', gap: 4, flexGrow: 1, padding: 8 }}>
             <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'row', gap: 4, height: 24 }}>
-                <w type="STATIC" ws={VISIBLE} text={'设备ID: ' + (showDeviceId ? computerId : maskDeviceId(computerId))} style={{ width: 'auto' }} />
+                <w type="STATIC" ws={VISIBLE} text={'计算机ID: ' + (showDeviceId ? computerId : maskDeviceId(computerId))} style={{ width: 'auto' }} />
                 <Button onClick={() => setShowDeviceId(v => !v)} style={{ width: 56, height: 20 }}>{showDeviceId ? '隐藏' : '显示'}</Button>
             </w>
             <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'row', gap: 4, height: 24 }}>
-                <w type="STATIC" ws={VISIBLE} text={'计算机: '} style={{ width: 'auto' }} />
+                <w type="STATIC" ws={VISIBLE} text={'计算机名: '} style={{ width: 'auto' }} />
                 <Input value={nameDraft} onChange={setNameDraft} style={{ width: 160, height: 20 }} />
                 <Button onClick={() => onSaveComputerName(nameDraft.trim())} style={{ width: 50, height: 20 }}>保存</Button>
                 <Button onClick={() => onResetComputerName()} style={{ width: 50, height: 20 }}>重置</Button>
