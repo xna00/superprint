@@ -70,6 +70,16 @@ export function App() {
             addLog('[computer] registration error: ' + String(e))
         }
 
+        try {
+            const info = await api.computer.computerInfo(devId)
+            if (info?.name) {
+                setComputerName(info.name)
+                addLog('[computer] server name: ' + info.name)
+            }
+        } catch (e) {
+            addLog('[computer] fetch name failed: ' + String(e))
+        }
+
         await syncPrinters(devId)
         os.setTimeout(() => connectWs(addLog, setWsStatus), 500)
         setAppState('main')
@@ -126,6 +136,22 @@ export function App() {
         }
     }
 
+    const saveComputerName = async (name: string) => {
+        try {
+            await api.computer.setComputerName(computerId, name)
+            const info = await api.computer.computerInfo(computerId)
+            setComputerName(info?.name ?? name)
+            addLog('[computer] name saved: ' + name)
+        } catch (e) {
+            addLog('[computer] save name failed: ' + String(e))
+        }
+    }
+
+    const resetComputerName = async () => {
+        const name = getComputerName() || 'Unknown'
+        await saveComputerName(name)
+    }
+
     useEffect(() => {
         os.setTimeout(init, 500)
     }, [])
@@ -136,7 +162,7 @@ export function App() {
 
     return (
         <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', flexGrow: 1 }}>
-            <Tab defaultSelectedIndex={2} tabs={[
+            <Tab defaultSelectedIndex={0} tabs={[
                 {
                     title: '打印机',
                     content: (
@@ -146,6 +172,8 @@ export function App() {
                             wsStatus={wsStatus}
                             printers={printers}
                             onTogglePrinter={togglePrinter}
+                            onSaveComputerName={saveComputerName}
+                            onResetComputerName={resetComputerName}
                         />
                     )
                 },
