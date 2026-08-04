@@ -20,12 +20,16 @@ import {
   findPrinterWithComputer,
   insertPrintFile,
   listPrintFilesByPrintTaskId,
+  findPrinterIdByBindKey,
+  linkPrinterToWeixinKfUser,
+  isPrinterLinkedToWeixinKfUser,
 } from '../../models/db.ts'
 import { notifyCheckJobs } from '../../ws/index.ts'
 import { addTokenToUrl } from '../utils.ts'
 import { processDocument, processDocumentSimple } from '../docProcess.ts'
 import { handlePdfConvertMessages } from '../pdfConvert.ts'
 import { handlePdfToWordMessages } from '../pdfToWord.ts'
+import { PRINT_MAN_KF_OPEN_ID, DOCUMENT_KF_OPEN_ID } from './link.ts'
 import { logger } from "../../logger.ts";
 
 export const generateTaskId = (): number => {
@@ -521,14 +525,58 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
  * open_kfid 处理函数映射表
  */
 const messageHandlerMap: Partial<Record<string, (messages: NonEventMessage[]) => Promise<void>>> = {
-  'wkHnU4FQAAnkssZ2Y0t7gAKpQxcw7gjQ': handleMessagesByPrintMan,
-  'wkHnU4FQAAIMj9uECzdKwOI_kRP_IGDQ': handleDocProcessMessages,
+  [PRINT_MAN_KF_OPEN_ID]: handleMessagesByPrintMan,
+  [DOCUMENT_KF_OPEN_ID]: handleDocProcessMessages,
   'wkHnU4FQAAAO-EtO4HBU2vWdk213Gwjg': handlePdfConvertMessages,
   'wkHnU4FQAAgFJKiO2JHdsWVrKIM3157Q': handlePdfToWordMessages,
 }
 
+const handleEnterSessionEvents = async (events: (Message & { msgtype: 'event' })[]) => {
+  for (const m of events) {
+    try {
+      const event = m.event
+      if (event.event_type !== 'enter_session') continue
+
+      const sceneParam = event.scene_param
+      const externalUserId = event.external_userid
+      const openKfId = event.open_kfid
+      if (!sceneParam || !externalUserId || !openKfId) continue
+
+      const printerId = findPrinterIdByBindKey(sceneParam)
+      if (!printerId) {
+        logger.log(`进入会话未匹配打印机: externalUserId=${externalUserId} sceneParam=${sceneParam}`)
+        continue
+      }
+
+      if (!findWeixinKfUserByExternalUserId(externalUserId)) {
+        insertWeixinKfUser(externalUserId)
+      }
+
+      const printer = findPrinterById(printerId)
+      const alreadyLinked = isPrinterLinkedToWeixinKfUser(externalUserId, printerId, openKfId)
+      let result = { changes: 0 }
+      if (!alreadyLinked) {
+        result = linkPrinterToWeixinKfUser(externalUserId, printerId, openKfId)
+      }
+      if (openKfId === PRINT_MAN_KF_OPEN_ID && !isPrinterLinkedToWeixinKfUser(externalUserId, printerId, DOCUMENT_KF_OPEN_ID)) {
+        linkPrinterToWeixinKfUser(externalUserId, printerId, DOCUMENT_KF_OPEN_ID)
+      }
+      if (result.changes > 0 && printer) {
+        logger.log(`✅ 用户 ${externalUserId} 经客服 ${openKfId} 绑定打印机 ${printer.name} (#${printerId})`)
+        await sendTextMessage(`✅ 已绑定打印机「${printer.name}」，现在可以直接发送文件打印`, openKfId, externalUserId)
+      }
+    } catch (error) {
+      logger.error('处理进入会话事件失败:', error)
+    }
+  }
+}
+
 export const handleMessages = async (_messages: Message[]) => {
+  const events = _messages.filter((m): m is Message & { msgtype: 'event' } => m.msgtype === 'event')
   const messages = _messages.filter(m => m.msgtype !== 'event')
+  if (events.length > 0) {
+    await handleEnterSessionEvents(events)
+  }
   logger.log(`共 ${messages.length} 条消息, 来自 ${Object.keys(Object.groupBy(messages, m => m.external_userid)).length} 个用户`)
   const grouped = Object.groupBy(messages, m => m.open_kfid)
   return Promise.all(Object.entries(grouped).map(([openKfId, userMessages = []]) => {

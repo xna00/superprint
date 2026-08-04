@@ -1,0 +1,3 @@
+ALTER TABLE Printer ADD COLUMN bindKey TEXT;
+ALTER TABLE WeixinKf ADD COLUMN kfBaseLink TEXT;
+ALTER TABLE WeixinKfUserPrinter ADD COLUMN kfid TEXT;

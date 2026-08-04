@@ -1,10 +1,12 @@
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert";
+import { randomBytes } from "node:crypto";
 import { TypedDb, type SchemaFks, type ResolveFks } from "../typed-sql/typed-sql.ts";
 
 const WEIXIN_KF_SQL = `CREATE TABLE IF NOT EXISTS WeixinKf (
 id TEXT NOT NULL PRIMARY KEY,
-messageCursor TEXT NOT NULL
+messageCursor TEXT NOT NULL,
+kfBaseLink TEXT
 )`;
 
 const WEIXIN_KF_USER_SQL = `CREATE TABLE IF NOT EXISTS WeixinKfUser (
@@ -21,6 +23,7 @@ id INTEGER NOT NULL PRIMARY KEY,
 name TEXT NOT NULL,
 computerId TEXT NOT NULL REFERENCES Computer(id),
 enabled INTEGER NOT NULL CHECK (enabled IN (1, 0)),
+bindKey TEXT,
 
 UNIQUE (name, computerId)
 )`;
@@ -46,8 +49,9 @@ tumble INTEGER NOT NULL CHECK (tumble IN (0, 1))
 const WEIXIN_KF_USER_PRINTER_SQL = `CREATE TABLE IF NOT EXISTS WeixinKfUserPrinter (
 weixinKfUserId TEXT NOT NULL REFERENCES WeixinKfUser(externalUserId),
 printerId INTEGER NOT NULL REFERENCES Printer(id),
+kfid TEXT,
 
-PRIMARY KEY (weixinKfUserId, printerId)
+PRIMARY KEY (weixinKfUserId, printerId, kfid)
 )`;
 
 const ALL_DDL = [
@@ -82,7 +86,7 @@ export type PrintTaskState = PrintTaskRow["state"];
 export type PrintFileState = PrintFileRow["state"];
 
 export type ComputerBase = ComputerRow;
-export type PrinterBase = Omit<PrinterRow, "enabled"> & { enabled: boolean };
+export type PrinterBase = Omit<PrinterRow, "enabled" | "bindKey"> & { enabled: boolean };
 export type PrinterListItem = Omit<PrinterBase, "computerId">;
 export type PrinterWithComputerName = PrinterListItem & { computerName: string };
 export type PrintFileBase = Omit<PrintFileRow, "duplex" | "tumble"> & {
@@ -94,6 +98,17 @@ export type PrintTaskBase = PrintTaskRow;
 const raw = new DatabaseSync("file:./dev.db");
 
 export const db = new TypedDb<Tables>(raw);
+
+export const exec = (sql: string) => {
+  raw.exec(sql);
+};
+
+export const all = <T>(sql: string, params: unknown[] = []): T[] =>
+  raw.prepare(sql).all(...(params as any)) as T[];
+
+export const run = (sql: string, params: unknown[] = []) => {
+  raw.prepare(sql).run(...(params as any));
+};
 
 export const init = () => {
   for (const sql of ALL_DDL) {
@@ -110,10 +125,20 @@ export const findWeixinKfById = (id: string): WeixinKfRow | undefined =>
     )
     .get({ id });
 
-export const insertWeixinKf = (id: string, messageCursor: string) => {
+export const insertWeixinKf = (
+  id: string,
+  messageCursor: string,
+  kfBaseLink?: string,
+) => {
   db.prepare(
-    `INSERT OR ABORT INTO WeixinKf (id, messageCursor) VALUES (@id, @messageCursor)`,
-  ).run({ id, messageCursor });
+    `INSERT OR ABORT INTO WeixinKf (id, messageCursor, kfBaseLink) VALUES (@id, @messageCursor, @kfBaseLink)`,
+  ).run({ id, messageCursor, kfBaseLink: kfBaseLink ?? null });
+};
+
+export const updateWeixinKfBaseLink = (id: string, kfBaseLink: string) => {
+  db.prepare(
+    `UPDATE OR ABORT WeixinKf SET kfBaseLink = @kfBaseLink WHERE WeixinKf.id = @id`,
+  ).run({ id, kfBaseLink });
 };
 
 export const updateWeixinKfMessageCursor = (
@@ -204,11 +229,39 @@ export const setPrinterEnabled = (
 export const findPrinterById = (id: number): PrinterBase | undefined => {
   const row = db
     .prepare(
-      `SELECT ALL * FROM Printer WHERE Printer.id = @id ORDER BY 1 LIMIT -1 OFFSET 0`,
+      `SELECT ALL Printer.id AS id, Printer.name AS name, Printer.computerId AS computerId, Printer.enabled AS enabled FROM Printer WHERE Printer.id = @id ORDER BY 1 LIMIT -1 OFFSET 0`,
     )
     .get({ id });
   return row && { ...row, enabled: Boolean(row.enabled) };
 };
+
+export const getPrinterBindKey = (id: number): string | undefined =>
+  db
+    .prepare(
+      `SELECT ALL Printer.bindKey AS bindKey FROM Printer WHERE Printer.id = @id ORDER BY 1 LIMIT -1 OFFSET 0`,
+    )
+    .get({ id })?.bindKey ?? undefined;
+
+export const updatePrinterBindKey = (id: number, bindKey: string) => {
+  db.prepare(
+    `UPDATE OR ABORT Printer SET bindKey = @bindKey WHERE Printer.id = @id`,
+  ).run({ id, bindKey });
+};
+
+export const ensurePrinterBindKey = (id: number): string => {
+  const existing = getPrinterBindKey(id);
+  if (existing) return existing;
+  const bindKey = randomBytes(16).toString("hex");
+  updatePrinterBindKey(id, bindKey);
+  return bindKey;
+};
+
+export const findPrinterIdByBindKey = (bindKey: string): number | undefined =>
+  db
+    .prepare(
+      `SELECT ALL Printer.id AS id FROM Printer WHERE Printer.bindKey = @bindKey ORDER BY 1 LIMIT -1 OFFSET 0`,
+    )
+    .get({ bindKey })?.id;
 
 export const findPrinterWithComputer = (
   id: number,
@@ -245,13 +298,24 @@ export const listPrintersByWeixinKfUser = (
   return rows.map(p => ({ ...p, enabled: Boolean(p.enabled) }));
 };
 
+export const isPrinterLinkedToWeixinKfUser = (
+  externalUserId: string,
+  printerId: number,
+  kfid: string,
+): boolean => {
+  return db.prepare(
+    `SELECT ALL weixinKfUserId FROM WeixinKfUserPrinter WHERE weixinKfUserId = @weixinKfUserId AND printerId = @printerId AND kfid = @kfid ORDER BY 1 LIMIT -1 OFFSET 0`,
+  ).all({ weixinKfUserId: externalUserId, printerId, kfid }).length > 0;
+};
+
 export const linkPrinterToWeixinKfUser = (
   externalUserId: string,
   printerId: number,
+  kfid: string,
 ) => {
-  db.prepare(
-    `INSERT OR ABORT INTO WeixinKfUserPrinter (weixinKfUserId, printerId) VALUES (@weixinKfUserId, @printerId)`,
-  ).run({ weixinKfUserId: externalUserId, printerId });
+  return db.prepare(
+    `INSERT OR ABORT INTO WeixinKfUserPrinter (weixinKfUserId, printerId, kfid) VALUES (@weixinKfUserId, @printerId, @kfid)`,
+  ).run({ weixinKfUserId: externalUserId, printerId, kfid });
 };
 
 export const unlinkPrinterFromWeixinKfUser = (
@@ -283,16 +347,16 @@ export const findPrintTaskById = (id: number): PrintTaskRow | undefined =>
 
 export const findPrintTaskWithPrinter = (
   id: number,
-): (PrintTaskRow & { printer: PrinterRow }) | undefined => {
+): (PrintTaskRow & { printer: PrinterBase }) | undefined => {
   const task = findPrintTaskById(id);
   if (!task) return undefined;
   const printer = db
     .prepare(
-      `SELECT ALL * FROM Printer WHERE Printer.id = @id ORDER BY 1 LIMIT -1 OFFSET 0`,
+      `SELECT ALL Printer.id AS id, Printer.name AS name, Printer.computerId AS computerId, Printer.enabled AS enabled FROM Printer WHERE Printer.id = @id ORDER BY 1 LIMIT -1 OFFSET 0`,
     )
     .get({ id: task.printerId });
   assert(printer);
-  return { ...task, printer };
+  return { ...task, printer: { ...printer, enabled: Boolean(printer.enabled) } };
 };
 
 export const findPrintTaskWithDetails = (
