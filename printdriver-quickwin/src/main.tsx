@@ -126,7 +126,7 @@ function runMainApp() {
     const PBT_APMRESUMEAUTOMATIC = gui.PowerBroadcast.APMRESUMEAUTOMATIC
 
     const root = createRoot({
-        text: 'SuperPrint',
+        text: '超人打印',
         width: winW,
         height: winH,
         noShowWindow: true,
