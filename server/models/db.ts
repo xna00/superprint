@@ -292,7 +292,7 @@ export const listPrintersByWeixinKfUser = (
 ): PrinterWithComputerName[] => {
   const rows = db
     .prepare(
-      `SELECT ALL Printer.id AS id, Printer.name AS name, Printer.enabled AS enabled, Computer.name AS computerName FROM Printer INNER JOIN WeixinKfUserPrinter ON WeixinKfUserPrinter.printerId = Printer.id INNER JOIN Computer ON Computer.id = Printer.computerId WHERE WeixinKfUserPrinter.weixinKfUserId = @externalUserId ORDER BY Printer.id LIMIT -1 OFFSET 0`,
+      `SELECT DISTINCT Printer.id AS id, Printer.name AS name, Printer.enabled AS enabled, Computer.name AS computerName FROM Printer INNER JOIN WeixinKfUserPrinter ON WeixinKfUserPrinter.printerId = Printer.id INNER JOIN Computer ON Computer.id = Printer.computerId WHERE WeixinKfUserPrinter.weixinKfUserId = @externalUserId ORDER BY Printer.id LIMIT -1 OFFSET 0`,
     )
     .all({ externalUserId });
   return rows.map(p => ({ ...p, enabled: Boolean(p.enabled) }));
