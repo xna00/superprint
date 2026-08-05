@@ -16,7 +16,7 @@ import {
   findComputerById,
   listPrintersByWeixinKfUser,
   listWaitingConfirmationTasks,
-  listPrintTasksByExternalUserId,
+  listPrintTasksByExternalUserIdAndKfid,
   insertPrintTask,
   findPrinterWithComputer,
   insertPrintFile,
@@ -359,7 +359,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
 
     if (mediaMessages.length === 0) return
 
-    const printers = listPrintersByWeixinKfUser(externalUserId)
+    const printers = listPrintersByWeixinKfUser(externalUserId, kfid)
     if (printers.length === 0) {
       await sendTextMessage(
         '请先绑定打印机。',
@@ -368,7 +368,8 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       )
       return
     }
-    const defaultPrinter = printers[0]
+
+    const printerIds = new Set(printers.map(p => p.id))
 
     let existingPrintTask = listWaitingConfirmationTasks(
       externalUserId,
@@ -384,8 +385,9 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       printerId = existingPrintTask.printerId
       logger.log(`使用现有 PrintTask，ID: ${printTaskId}`)
     } else {
-      const lastTask = listPrintTasksByExternalUserId(externalUserId).sort((a, b) => b.id - a.id)[0]
-      printerId = lastTask?.printerId ?? defaultPrinter.id
+      const tasks = listPrintTasksByExternalUserIdAndKfid(externalUserId, kfid)
+      const lastTask = tasks.find(t => printerIds.has(t.printerId))
+      printerId = lastTask?.printerId ?? printers.find(p => p.enabled)?.id ?? printers[0].id
       printTaskId = generateTaskId()
       insertPrintTask({
         id: printTaskId,

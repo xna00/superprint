@@ -149,8 +149,8 @@ export const processDocument = async (
     printTaskId = existingTask.id
   } else {
     printTaskId = generateTaskId()
-    const printers = listPrintersByWeixinKfUser(externalUserId)
-    const printer = printers.find((p: any) => !p.disabled)
+    const printers = listPrintersByWeixinKfUser(externalUserId, kfid)
+    const printer = printers.find(p => p.enabled)
     if (!printer) {
       throw new Error('请先绑定打印机')
     }

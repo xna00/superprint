@@ -59,7 +59,7 @@ export function PrintTaskDetail() {
     try {
       const [detail, printerList] = await Promise.all([
         api.printTask.getPrintTaskDetail(parseInt(printTaskId!)),
-        api.printTask.getAllPrinters()
+        api.printTask.getAllPrinters(parseInt(printTaskId!))
       ])
       setData(detail)
       setPrinters(printerList)

@@ -52,9 +52,12 @@ const verifyComputerForTask = (computerId: string, task: { printerId: number }) 
   }
 };
 
-export const getAllPrinters = async () => {
+export const getAllPrinters = async (printTaskId: number) => {
   const externalUserId = await getExternalUserId();
-  const printers = listPrintersByWeixinKfUser(externalUserId);
+  const task = findPrintTaskById(printTaskId);
+  if (!task) throw new ApiError(404, {}, '打印任务不存在');
+  if (task.externalUserId !== externalUserId) throw new ApiError(403, {}, '无权操作');
+  const printers = listPrintersByWeixinKfUser(externalUserId, task.weixinKfId);
   return printers.map(p => ({
     printerId: p.id,
     printerName: p.name,

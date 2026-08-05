@@ -305,12 +305,13 @@ export const removePrinterById = (id: number) => {
 
 export const listPrintersByWeixinKfUser = (
   externalUserId: string,
+  kfid: string,
 ): PrinterWithComputerName[] => {
   const rows = db
     .prepare(
-      `SELECT DISTINCT Printer.id AS id, Printer.name AS name, Printer.enabled AS enabled, Computer.name AS computerName FROM Printer INNER JOIN WeixinKfUserPrinter ON WeixinKfUserPrinter.printerId = Printer.id INNER JOIN Computer ON Computer.id = Printer.computerId WHERE WeixinKfUserPrinter.weixinKfUserId = @externalUserId ORDER BY Printer.id LIMIT -1 OFFSET 0`,
+      `SELECT DISTINCT Printer.id AS id, Printer.name AS name, Printer.enabled AS enabled, Computer.name AS computerName FROM Printer INNER JOIN WeixinKfUserPrinter ON WeixinKfUserPrinter.printerId = Printer.id AND WeixinKfUserPrinter.kfid = @kfid INNER JOIN Computer ON Computer.id = Printer.computerId WHERE WeixinKfUserPrinter.weixinKfUserId = @externalUserId ORDER BY Printer.id LIMIT -1 OFFSET 0`,
     )
-    .all({ externalUserId });
+    .all({ externalUserId, kfid } as any);
   return rows.map(p => ({ ...p, enabled: Boolean(p.enabled) }));
 };
 
@@ -423,6 +424,13 @@ export const listPrintTasksByExternalUserId = (externalUserId: string): PrintTas
       `SELECT ALL * FROM PrintTask WHERE PrintTask.externalUserId = @externalUserId ORDER BY 1 LIMIT -1 OFFSET 0`,
     )
     .all({ externalUserId });
+
+export const listPrintTasksByExternalUserIdAndKfid = (externalUserId: string, kfid: string): PrintTaskRow[] =>
+  db
+    .prepare(
+      `SELECT ALL * FROM PrintTask WHERE PrintTask.externalUserId = @externalUserId AND PrintTask.weixinKfId = @kfid ORDER BY 1 DESC LIMIT -1 OFFSET 0`,
+    )
+    .all({ externalUserId, kfid });
 
 export const listPrintTasksByPrinterId = (printerId: number): PrintTaskRow[] =>
   db

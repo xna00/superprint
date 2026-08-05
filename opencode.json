@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "sensenova",
+      "options": {
+        "baseURL": "https://token.sensenova.cn/v1",
+        "apiKey": "sk-DZB88G5oJhXViowOTisIBgxr3JevikSE"
+      },
+      "models": {
+        "sensenova-6.7-flash-lite": {
+          "name": "sensenova-6.7-flash-lite"
+        },
+        "sensenova-u1-fast": {
+          "name": "sensenova-u1-fast"
+        },
+        "deepseek-v4-flash": {
+          "name": "deepseek-v4-flash"
+        }
+      }
+    }
+  }
+}
