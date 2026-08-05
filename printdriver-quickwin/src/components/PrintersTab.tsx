@@ -33,7 +33,7 @@ interface PrintersTabProps {
 
 async function fetchAvatar(url: string, size: number): Promise<ArrayBuffer | null> {
     try {
-        const res = await fetch(url)
+        const res = await fetch(url.replace(/\/0$/, '/64'))
         const blob = await res.arrayBuffer()
         const raw = jpeg.decode(new Uint8Array(blob), { useTArray: true, formatAsRGBA: true })
         const canvas = new Uint8Array(size * size * 4)
