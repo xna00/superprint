@@ -41,16 +41,17 @@ type UploadMediaResponse = {
 
 export const uploadMedia = async (
   filePath: string,
-  mediaType: 'image' | 'voice' | 'video' | 'file' = 'file'
+  mediaType: 'image' | 'voice' | 'video' | 'file' = 'file',
+  filename?: string
 ): Promise<string> => {
   const accessToken = await getAccessToken()
   const url = `https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token=${accessToken}&type=${mediaType}`
 
   const fileBuffer = readFileSync(filePath)
-  const filename = filePath.split('/').pop() || 'file'
+  const displayName = filename || filePath.split('/').pop() || 'file'
 
   const formData = new FormData()
-  formData.append('media', new Blob([fileBuffer]), filename)
+  formData.append('media', new Blob([fileBuffer]), displayName)
 
   const response = await fetch(url, {
     method: 'POST',

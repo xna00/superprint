@@ -134,6 +134,7 @@ const getExtensionFromContentType = (contentType: string | null): string => {
 export type DownloadResult = {
   fileId: string
   filename: string
+  converted: boolean
 }
 
 export const downloadMedia = async (
@@ -177,14 +178,14 @@ export const downloadMedia = async (
   if (isOfficeFile(extLower)) {
     const pdfPath = convertOfficeToPdf(filePath)
     if (pdfPath) {
-      return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf') }
+      return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf'), converted: true }
     }
   } else if (['.jpg', '.jpeg', '.png', '.gif'].includes(extLower)) {
     const pdfPath = await convertImageToPdf(filePath)
-    return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf') }
+    return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf'), converted: true }
   }
 
-  return { fileId: hash, filename }
+  return { fileId: hash, filename, converted: false }
 }
 
 export const getFilePath = (fileId: string): string | null => {

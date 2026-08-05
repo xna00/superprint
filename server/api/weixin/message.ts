@@ -2,7 +2,7 @@ import { sendTextMessage, sendMsgMenuMessage, uploadMedia, sendFileMessage } fro
 
 const AUTO_CONFIRM_TIMEOUT = 60_000
 const autoConfirmTimers = new Map<number, ReturnType<typeof setTimeout>>()
-import { downloadMedia } from './download.ts'
+import { downloadMedia, getFilePath } from './download.ts'
 import {
   findWeixinKfUserByExternalUserId,
   insertWeixinKfUser,
@@ -287,6 +287,8 @@ const isPresentationFile = (filename: string): boolean => {
 
 const processMediaMessage = async (
   message: Message,
+  kfid: string,
+  externalUserId: string,
   duplex: boolean = true,
   tumble: boolean = false
 ): Promise<{ fileId: string; filename: string; type: 'image' | 'pdf' } | null> => {
@@ -303,6 +305,15 @@ const processMediaMessage = async (
     if (!officeExts.includes(ext)) {
       logger.log(`不支持的文件类型: ${fileResult.filename}`)
       return null
+    }
+
+    if (fileResult.converted) {
+      const pdfPath = getFilePath(fileResult.fileId)
+      if (pdfPath) {
+        const originalName = fileResult.filename.replace(/\.[^.]+$/, '')
+        const previewMediaId = await uploadMedia(pdfPath, 'file', `[预览]${originalName}.pdf`)
+        await sendFileMessage(previewMediaId, kfid, externalUserId)
+      }
     }
 
     return { ...fileResult, type: 'pdf' }
@@ -407,7 +418,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     }
 
     await Promise.all(mediaMessages.map(async m => {
-      const result = await processMediaMessage(m)
+      const result = await processMediaMessage(m, kfid, externalUserId)
       if (!result) {
         logger.log(`无法处理消息 ${JSON.stringify(m)}: 无法下载文件`)
         return
