@@ -154,21 +154,20 @@ export function PrintersTab({ computerId, computerName, wsStatus, printers, onTo
             onCellClick: (record) => onTogglePrinter(record.name, record.action === '启用'),
         },
         {
-            name: '二维码',
+            name: '',
             dataIndex: 'qr',
-            width: 90,
             align: 'center',
             cellStyle: (record) => record.enabled ? { cursor: 32649 } : { color: 0x808080, cursor: 32648 },
             onCellClick: (record) => { if (record.enabled) showQrWindow(record.name) }
         },
         {
-            name: '用户',
+            name: '',
             dataIndex: 'manage',
-            width: 60,
             align: 'center',
             cellStyle: (record) => record.enabled ? { color: 0x0000FF, underline: true, cursor: 32649 } : { color: 0x808080, cursor: 32648 },
             onCellClick: (record) => { if (record.enabled && record.id != null) showManagerWindow(record.id, record.name) },
         },
+        { name: '', dataIndex: undefined },
     ]
     const [showDeviceId, setShowDeviceId] = useState(false)
     const [nameDraft, setNameDraft] = useState(computerName)
@@ -204,8 +203,8 @@ export function PrintersTab({ computerId, computerName, wsStatus, printers, onTo
         name: p.name,
         status: p.enabled ? '启用' : '禁用',
         action: p.enabled ? '禁用' : '启用',
-        qr: '查看',
-        manage: '管理',
+        qr: '二维码',
+        manage: '管理用户',
         enabled: p.enabled,
         id: p.id,
     }))
