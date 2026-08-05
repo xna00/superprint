@@ -294,6 +294,14 @@ const processMediaMessage = async (
 ): Promise<{ fileId: string; filename: string; type: 'image' | 'pdf' } | null> => {
   if (message.msgtype === 'image' && message.image?.media_id) {
     const result = await downloadMedia(message.image.media_id, duplex, tumble)
+    if (result.converted) {
+      const pdfPath = getFilePath(result.fileId)
+      if (pdfPath) {
+        const originalName = result.filename.replace(/\.[^.]+$/, '')
+        const previewMediaId = await uploadMedia(pdfPath, 'file', `[预览]${originalName}.pdf`)
+        await sendFileMessage(previewMediaId, kfid, externalUserId)
+      }
+    }
     return { ...result, type: 'image' }
   }
 
