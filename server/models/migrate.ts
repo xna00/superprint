@@ -30,7 +30,7 @@ appliedAt TEXT NOT NULL
         new Date().toISOString(),
       ]);
     try {
-      exec(`BEGIN; ${sql}; COMMIT;`);
+      exec(sql);
       markApplied();
       logger.log(`migration applied: ${file}`);
     } catch (e) {

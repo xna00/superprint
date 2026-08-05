@@ -18,4 +18,5 @@ server/bundle.js.map
 printdriver/output/
 vcpkg/
 cookie.txt
-opencode.jsonserver/dev.db-journal
+opencode.json
+server/dev.db-journal

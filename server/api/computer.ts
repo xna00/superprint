@@ -18,7 +18,13 @@ import { ApiError } from "./utils.ts";
 import { getInfo } from "./global.ts";
 import { getKfBaseLink, PRINT_MAN_KF_OPEN_ID } from "./weixin/link.ts";
 
-const VIRTUAL_PORTS = new Set(['PORTPROMPT:']);
+const VIRTUAL_PORTS = new Set([
+  'PORTPROMPT:',
+  'XPSPort:',
+  'SHRFAX:',
+  'nul:',
+  'FILE:',
+]);
 
 const getComputerId = () => {
   const info = getInfo();
