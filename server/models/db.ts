@@ -171,12 +171,6 @@ export const insertWeixinKfUser = (externalUserId: string) => {
   ).run({ externalUserId });
 };
 
-export const removeWeixinKfUserByExternalUserId = (externalUserId: string) => {
-  db.prepare(
-    `DELETE FROM WeixinKfUser WHERE WeixinKfUser.externalUserId = @externalUserId`,
-  ).run({ externalUserId });
-};
-
 export const updateWeixinKfUserInfo = (
   externalUserId: string,
   nickname: string | null,

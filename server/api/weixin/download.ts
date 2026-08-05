@@ -1,10 +1,9 @@
-import { writeFileSync, readFileSync, existsSync, mkdirSync, createWriteStream, appendFileSync, readdirSync, unlinkSync, statSync, rmSync } from "node:fs"
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs"
 import { join, extname } from "node:path"
 import { createHash } from "node:crypto"
 import { execSync } from "node:child_process"
 import { getAccessToken } from './token.ts'
 import PDFDocument from "pdfkit"
-import UZIP from "uzip"
 import { logger } from "../../logger.ts";
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads')
@@ -12,65 +11,6 @@ const UPLOADS_DIR = join(process.cwd(), 'uploads')
 const ensureUploadsDir = (): void => {
   if (!existsSync(UPLOADS_DIR)) {
     mkdirSync(UPLOADS_DIR, { recursive: true })
-  }
-}
-
-const renderPdfToJpegs = (pdfPath: string, dpi: number = 300): string[] => {
-  const tempDir = join(UPLOADS_DIR, `_xps_tmp_${Date.now()}`)
-  mkdirSync(tempDir, { recursive: true })
-  
-  const a4PdfPath = join(tempDir, 'a4.pdf')
-  const cmd1 = `pdftocairo -pdf -paper A4 -expand "${pdfPath}" "${a4PdfPath}"`
-  execSync(cmd1, { stdio: 'ignore', shell: '/bin/sh' })
-  
-  const prefix = join(tempDir, 'page')
-  const cmd2 = `pdftocairo -jpeg -r ${dpi} -jpegopt quality=85 "${a4PdfPath}" "${prefix}"`
-  execSync(cmd2, { stdio: 'ignore', shell: '/bin/sh' })
-  
-  const files = readdirSync(tempDir)
-    .filter(f => f.endsWith('.jpg'))
-    .sort((a, b) => {
-      const na = parseInt(a.match(/\d+/)?.[0] || '0')
-      const nb = parseInt(b.match(/\d+/)?.[0] || '0')
-      return na - nb
-    })
-    .map(f => join(tempDir, f))
-  
-  return files
-}
-
-const packageJpegsToZip = (jpegPaths: string[], outputPath: string): void => {
-  const zip: Record<string, Uint8Array> = {}
-  
-  for (let i = 0; i < jpegPaths.length; i++) {
-    const jpegData = readFileSync(jpegPaths[i])
-    zip[`page-${i + 1}.jpg`] = jpegData
-  }
-  
-  const zipData = UZIP.encode(zip)
-  writeFileSync(outputPath, Buffer.from(zipData))
-}
-
-export const convertPdfToXps = (pdfPath: string, duplex: boolean = true, tumble: boolean = false): void => {
-  const zipPath = pdfPath.replace(/\.pdf$/i, '.zip')
-  try {
-    const jpegPaths = renderPdfToJpegs(pdfPath, 300)
-    if (jpegPaths.length === 0) {
-      logger.error('PDF渲染JPEG失败：未生成任何图片')
-      return
-    }
-    packageJpegsToZip(jpegPaths, zipPath)
-    
-    try {
-      const tempDirs = readdirSync(UPLOADS_DIR).filter(d => d.startsWith('_xps_tmp_'))
-      for (const dir of tempDirs) {
-        rmSync(join(UPLOADS_DIR, dir), { recursive: true, force: true })
-      }
-    } catch (cleanupError) {
-      logger.error('清理临时目录失败:', cleanupError)
-    }
-  } catch (error) {
-    logger.error('PDF转ZIP失败:', error)
   }
 }
 
@@ -114,17 +54,6 @@ export const convertImageToPdf = (imagePath: string): Promise<string> => {
 
     doc.end()
   })
-}
-
-const convertImageToXps = async (imagePath: string, duplex: boolean = true, tumble: boolean = false): Promise<void> => {
-  try {
-    const pdfPath = await convertImageToPdf(imagePath)
-    if (pdfPath) {
-      convertPdfToXps(pdfPath, duplex, tumble)
-    }
-  } catch (error) {
-    logger.error('图片转PDF失败:', error)
-  }
 }
 
 export const isOfficeFile = (ext: string): boolean => {
@@ -245,24 +174,21 @@ export const downloadMedia = async (
   writeFileSync(filePath, buffer)
 
   const extLower = ext.toLowerCase()
-
-  if (extLower === '.pdf') {
-    convertPdfToXps(filePath, duplex, tumble)
-  } else if (isOfficeFile(extLower)) {
+  if (isOfficeFile(extLower)) {
     const pdfPath = convertOfficeToPdf(filePath)
     if (pdfPath) {
-      const tumbleForPresentation = isPresentationFile(extLower)
-      convertPdfToXps(pdfPath, duplex, tumbleForPresentation)
+      return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf') }
     }
   } else if (['.jpg', '.jpeg', '.png', '.gif'].includes(extLower)) {
-    await convertImageToXps(filePath, duplex, tumble)
+    const pdfPath = await convertImageToPdf(filePath)
+    return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf') }
   }
 
   return { fileId: hash, filename }
 }
 
 export const getFilePath = (fileId: string): string | null => {
-  const exts = ['.pdf', '.zip', '.ps', '.jpg', '.png', '.gif', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
+  const exts = ['.pdf', '.ps', '.jpg', '.png', '.gif', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
   for (const ext of exts) {
     const filePath = join(UPLOADS_DIR, fileId + ext)
     if (existsSync(filePath)) {
@@ -270,15 +196,6 @@ export const getFilePath = (fileId: string): string | null => {
     }
   }
   return null
-}
-
-export const reconvertPdfToXps = (fileId: string, duplex: boolean, tumble: boolean): boolean => {
-  const filePath = getFilePath(fileId)
-  if (!filePath || !filePath.toLowerCase().endsWith('.pdf')) {
-    return false
-  }
-  convertPdfToXps(filePath, duplex, tumble)
-  return true
 }
 
 export const getUploadsDir = (): string => {

@@ -40,28 +40,3 @@ export const getFile = async (fileName: string) => {
         },
     })
 }
-
-export const getZipFile = async (fileId: string) => {
-    await getExternalUserId()
-    const filePath = join(UPLOADS_DIR, fileId + '.zip')
-    try {
-        accessSync(filePath, constants.R_OK)
-    } catch {
-        throw new ApiError(404, {}, '文件不存在', 'FILE_NOT_FOUND')
-    }
-    const stream = Readable.toWeb(createReadStream(filePath))
-    return new Response(stream, {
-        headers: {
-            'Content-Type': 'application/zip',
-            'Content-Disposition': `attachment; filename="${fileId}.zip"`,
-        },
-    })
-}
-
-export const getXpsFile = async (fileId: string) => {
-    return getZipFile(fileId)
-}
-
-export const getPsFile = async (fileId: string) => {
-    return getXpsFile(fileId)
-}
