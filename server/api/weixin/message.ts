@@ -1,9 +1,11 @@
 import { sendTextMessage, sendMsgMenuMessage, uploadMedia, sendFileMessage } from './send.ts'
+
+const AUTO_CONFIRM_TIMEOUT = 60_000
+const autoConfirmTimers = new Map<number, ReturnType<typeof setTimeout>>()
 import { downloadMedia } from './download.ts'
 import {
   findWeixinKfUserByExternalUserId,
   insertWeixinKfUser,
-  removeWeixinKfUserByExternalUserId,
   updateWeixinKfUserInfo,
   findPrintTaskWithPrinter,
   updatePrintTaskState,
@@ -156,52 +158,34 @@ const HELP_MESSAGE = `📖 帮助信息
 
 欢迎使用打印服务！
 
-可用命令：
-• 帮助 - 显示此帮助信息
-• 退出登录 - 解除微信账号绑定
-
-发送图片或PDF文件即可创建打印任务。`
+发送文档、图片或PDF文件即可创建打印任务。`
 
 const sendHelp = async (openKfId: string, externalUserId: string) => {
   await sendTextMessage(HELP_MESSAGE, openKfId, externalUserId)
   logger.log('✅ 帮助信息发送成功')
 }
 
-const handleLogout = async (openKfId: string, externalUserId: string) => {
-  const kfUser = findWeixinKfUserByExternalUserId(externalUserId)
-
-  if (kfUser) {
-    removeWeixinKfUserByExternalUserId(externalUserId)
-    await sendTextMessage(
-      '✅ 已成功退出登录，您的微信账号已解除绑定。',
-      openKfId,
-      externalUserId
-    )
-    logger.log('✅ 用户已退出登录')
-  } else {
-    await sendTextMessage(
-      '您还未登录，无需退出。',
-      openKfId,
-      externalUserId
-    )
-  }
-}
-
 const handleConfirmById = async (openKfId: string, externalUserId: string, printTaskId: number) => {
+  const timer = autoConfirmTimers.get(printTaskId)
+  if (timer) {
+    clearTimeout(timer)
+    autoConfirmTimers.delete(printTaskId)
+  }
+
   const printTask = findPrintTaskWithPrinter(printTaskId)
 
   if (!printTask) {
-    await sendTextMessage('未找到对应的打印任务。', openKfId, externalUserId)
+    await sendTextMessage('❌ 未找到打印任务', openKfId, externalUserId)
     return
   }
 
   if (printTask.state !== 'waiting_confirmation') {
-    await sendTextMessage('该打印任务已处理。', openKfId, externalUserId)
+    await sendTextMessage('⏭️ 该打印任务已处理', openKfId, externalUserId)
     return
   }
 
   if (printTask.externalUserId !== externalUserId) {
-    await sendTextMessage('无权操作此任务。', openKfId, externalUserId)
+    await sendTextMessage('❌ 无权操作此任务', openKfId, externalUserId)
     return
   }
 
@@ -210,30 +194,45 @@ const handleConfirmById = async (openKfId: string, externalUserId: string, print
     notifyCheckJobs(printTask.printer.computerId)
   }
 
-  await sendTextMessage('✅ 打印任务已确认，等待打印中。', openKfId, externalUserId)
+  await sendTextMessage('✅ 已确认，等待打印', openKfId, externalUserId)
   logger.log(`✅ 已确认打印任务 ID: ${printTaskId}`)
 }
 
+const handleCancelAutoById = (openKfId: string, externalUserId: string, printTaskId: number) => {
+  const timer = autoConfirmTimers.get(printTaskId)
+  if (timer) {
+    clearTimeout(timer)
+    autoConfirmTimers.delete(printTaskId)
+    sendTextMessage('⏸️ 已取消自动确认，请点击"立即打印"手动确认', openKfId, externalUserId)
+    logger.log(`⏸️ 已取消自动确认打印任务 ID: ${printTaskId}`)
+  }
+}
+
 const handleDeleteById = async (openKfId: string, externalUserId: string, printTaskId: number) => {
+  const timer = autoConfirmTimers.get(printTaskId)
+  if (timer) {
+    clearTimeout(timer)
+    autoConfirmTimers.delete(printTaskId)
+  }
   const printTask = findPrintTaskById(printTaskId)
 
   if (!printTask) {
-    await sendTextMessage('未找到对应的打印任务。', openKfId, externalUserId)
+    await sendTextMessage('❌ 未找到打印任务', openKfId, externalUserId)
     return
   }
 
   if (printTask.externalUserId !== externalUserId) {
-    await sendTextMessage('无权删除此任务。', openKfId, externalUserId)
+    await sendTextMessage('❌ 无权操作此任务', openKfId, externalUserId)
     return
   }
 
   try {
     removePrintFilesByPrintTaskId(printTaskId)
     removePrintTaskById(printTaskId)
-    await sendTextMessage('✅ 打印任务已删除。', openKfId, externalUserId)
+    await sendTextMessage('✅ 已删除', openKfId, externalUserId)
     logger.log(`✅ 已删除打印任务 ID: ${printTaskId}`)
   } catch (error) {
-    await sendTextMessage('删除任务失败，请稍后重试。', openKfId, externalUserId)
+    await sendTextMessage('❌ 删除失败，请稍后重试', openKfId, externalUserId)
     logger.error('删除任务失败:', error)
   }
 }
@@ -242,19 +241,19 @@ const handleRetryById = async (openKfId: string, externalUserId: string, printTa
   const printTask = findPrintTaskById(printTaskId)
 
   if (!printTask) {
-    await sendTextMessage('未找到对应的打印任务。', openKfId, externalUserId)
+    await sendTextMessage('❌ 未找到打印任务', openKfId, externalUserId)
     return
   }
 
   if (printTask.externalUserId !== externalUserId) {
-    await sendTextMessage('无权操作此任务。', openKfId, externalUserId)
+    await sendTextMessage('❌ 无权操作此任务', openKfId, externalUserId)
     return
   }
 
   const failedFiles = listPrintFilesByPrintTaskIdAndState(printTaskId, 'failed')
   
   if (failedFiles.length === 0) {
-    await sendTextMessage('没有失败的文件需要重试。', openKfId, externalUserId)
+    await sendTextMessage('⏭️ 没有失败的文件需要重试', openKfId, externalUserId)
     return
   }
 
@@ -339,14 +338,15 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     for (const msg of textContents) {
       if (msg === '帮助' || msg === 'help' || msg === '?') {
         await sendHelp(kfid, externalUserId)
-      } else if (msg === '退出登录' || msg === 'logout') {
-        await handleLogout(kfid, externalUserId)
       } else {
         const menuMsg = textMessages.find(m => m.text.content.trim() === msg)
         const menuId = menuMsg?.text.menu_id
         if (menuId?.startsWith('confirm_')) {
           const printTaskId = parseInt(menuId.replace('confirm_', ''))
           await handleConfirmById(kfid, externalUserId, printTaskId)
+        } else if (menuId?.startsWith('cancel_auto_')) {
+          const printTaskId = parseInt(menuId.replace('cancel_auto_', ''))
+          handleCancelAutoById(kfid, externalUserId, printTaskId)
         } else if (menuId?.startsWith('delete_')) {
           const printTaskId = parseInt(menuId.replace('delete_', ''))
           await handleDeleteById(kfid, externalUserId, printTaskId)
@@ -362,7 +362,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     const printers = listPrintersByWeixinKfUser(externalUserId, kfid)
     if (printers.length === 0) {
       await sendTextMessage(
-        '请先绑定打印机。',
+        '⚠️ 请先扫描打印机二维码绑定后再发送文件',
         kfid,
         externalUserId
       )
@@ -402,7 +402,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
 
     const printer = findPrinterWithComputer(printerId)!
     if (!printer) {
-      await sendTextMessage('未找到可用的打印机，请检查打印机配置。', kfid, externalUserId)
+      await sendTextMessage('⚠️ 该打印机不可用，请联系管理员检查', kfid, externalUserId)
       return
     }
 
@@ -427,11 +427,9 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     const allFiles = listPrintFilesByPrintTaskId(printTaskId)
 
     let headContent = isNewJob
-      ? `📄 打印工作已创建\n\n`
-      : `📄 已添加打印任务\n\n`
-    headContent += `计算机: ${printer.computer.name}\n`
-    headContent += `打印机: ${printer.name}\n\n`
-    headContent += `文件列表:\n`
+      ? `📄 打印任务已创建\n\n`
+      : `📄 已追加文件到打印任务\n\n`
+    headContent += `🖨️ ${printer.name} (${printer.computer.name})\n\n`
 
     for (const file of allFiles) {
       const isImage = file.filename.match(/\.(jpg|jpeg|png|gif)$/i)
@@ -441,14 +439,16 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       headContent += `${typeLabel} ${file.filename} (${duplexLabel}/${tumbleLabel})\n`
     }
 
-    headContent += '\n💡 点击"查看详情"可修改打印设置'
+    headContent += '\n💡 查看详情可修改设置'
+    headContent += `\n⏰ 1分钟后自动确认`
 
     const printTaskUrl = await addTokenToUrl(`https://superprint.xna00.top/printTask?id=${printTaskId}`, externalUserId)
 
     await sendMsgMenuMessage(
       headContent,
       [
-        { content: '确认打印', id: `confirm_${printTaskId}` },
+        { content: '立即打印', id: `confirm_${printTaskId}` },
+        { content: '取消自动打印', id: `cancel_auto_${printTaskId}` },
         { content: '删除任务', id: `delete_${printTaskId}` },
         { content: '查看详情', url: printTaskUrl }
       ],
@@ -456,6 +456,16 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       externalUserId
     )
     logger.log('✅ 打印任务信息已发送给用户')
+
+    // 重置自动确认定时器（追加文件时也重新计时）
+    const oldTimer = autoConfirmTimers.get(printTaskId)
+    if (oldTimer) clearTimeout(oldTimer)
+    const timer = setTimeout(async () => {
+      autoConfirmTimers.delete(printTaskId)
+      logger.log(`⏰ 自动确认打印任务 ID: ${printTaskId}`)
+      await handleConfirmById(kfid, externalUserId, printTaskId)
+    }, AUTO_CONFIRM_TIMEOUT)
+    autoConfirmTimers.set(printTaskId, timer)
   })).then(() => {
     logger.log('✅ 所有用户消息已处理')
   })
@@ -509,17 +519,15 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
       if (menuId?.startsWith('confirm_')) {
         const printTaskId = parseInt(menuId.replace('confirm_', ''))
         await handleConfirmById(kfid, externalUserId, printTaskId)
+      } else if (menuId?.startsWith('cancel_auto_')) {
+        const printTaskId = parseInt(menuId.replace('cancel_auto_', ''))
+        handleCancelAutoById(kfid, externalUserId, printTaskId)
       } else if (menuId?.startsWith('delete_')) {
         const printTaskId = parseInt(menuId.replace('delete_', ''))
         await handleDeleteById(kfid, externalUserId, printTaskId)
       } else if (menuId?.startsWith('retry_')) {
         const printTaskId = parseInt(menuId.replace('retry_', ''))
         await handleRetryById(kfid, externalUserId, printTaskId)
-      } else if (kfUser) {
-        await sendTextMessage(`你好，${content}`, kfid, externalUserId)
-      } else {
-        const loginUrl = `https://superprint.xna00.top/?external_userid=${externalUserId}&open_kfid=${kfid}`
-        await sendTextMessage(`请先登录以使用完整功能：${loginUrl}`, kfid, externalUserId)
       }
     }
   }))
@@ -608,7 +616,7 @@ const handleEnterSessionEvents = async (events: (Message & { msgtype: 'event' })
       }
       if (result.changes > 0 && printer) {
         logger.log(`✅ 用户 ${externalUserId} 经客服 ${openKfId} 绑定打印机 ${printer.name} (#${printerId})`)
-        await sendTextMessage(`✅ 已绑定打印机「${printer.name}」，现在可以直接发送文件打印`, openKfId, externalUserId)
+        await sendTextMessage(`✅ 已绑定打印机「${printer.name}」，现在可以发送文件打印了`, openKfId, externalUserId)
       }
       batchgetCustomerInfo(externalUserId)
     } catch (error) {
