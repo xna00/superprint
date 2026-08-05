@@ -136,7 +136,7 @@ function runMainApp() {
                 if (wParam === PBT_APMRESUMESUSPEND || wParam === PBT_APMRESUMEAUTOMATIC) {
                     logger.log('[main] resuming from sleep, refreshing tray icon + resetting ws')
                     gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd, uID: 1 })
-                    const hIcon = gui.LoadIcon('APPLICATION')
+                    const hIcon = gui.LoadAppIcon()
                     if (hIcon) {
                         gui.ShellNotifyIcon(gui.NotifyIconCmd.ADD, {
                             hwnd, uID: 1,
@@ -204,7 +204,7 @@ function runMainApp() {
     const isAutoStart = args.includes('--autostart')
     if (!isAutoStart || storageGet('showOnStartup') !== false) gui.ShowWindow(root.hwnd)
 
-    const hIcon = gui.LoadIcon('APPLICATION')
+    const hIcon = gui.LoadAppIcon()
     if (hIcon) {
         const ok = gui.ShellNotifyIcon(gui.NotifyIconCmd.ADD, {
             hwnd: root.hwnd,
