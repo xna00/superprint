@@ -9,80 +9,87 @@ const root = path.join(__dirname, '..')
 const dist = path.join(root, 'dist')
 const qwDir = path.dirname(require.resolve('quickwin/package.json'))
 
-// 1. Copy main.js for dev (quickwin main.js)
-fs.copyFileSync(path.join(root, 'main.js'), path.join(dist, 'main.js'))
-
-// 2. Copy + rename + embed main.js into exe
-const exeSrc = path.join(qwDir, 'win-mingw64.exe')
-const mainJs = fs.readFileSync(path.join(root, 'main.js'))
-if (fs.existsSync(exeSrc)) {
-  const exeBuf = fs.readFileSync(exeSrc)
-  const lenBuf = Buffer.alloc(4)
-  lenBuf.writeUInt32LE(mainJs.length)
-  const magic = Buffer.from('QWJS', 'ascii')
-  fs.writeFileSync(path.join(dist, 'QuickSuperPrint.exe'), Buffer.concat([exeBuf, mainJs, lenBuf, magic]))
-  // Set icon on main exe
+async function setIconOn(exePath) {
   const icoPath = path.join(root, 'assets', 'icon.ico')
   if (fs.existsSync(icoPath)) {
-    rcedit(path.join(dist, 'QuickSuperPrint.exe'), { icon: icoPath }).then(() => {
-      console.log('postbuild: icon set on QuickSuperPrint.exe')
-    }).catch((err) => {
-      console.log('postbuild: icon set failed on QuickSuperPrint.exe:', err.message)
-    })
+    const t0 = Date.now()
+    console.log(`[postbuild] rcedit START ${path.basename(exePath)} t=${t0}`)
+    await rcedit(exePath, { icon: icoPath })
+    console.log(`[postbuild] rcedit END   ${path.basename(exePath)} ms=${Date.now() - t0}`)
+  } else {
+    console.log(`[postbuild] icon.ico NOT FOUND, skip ${path.basename(exePath)}`)
   }
 }
 
-// 3. Compute entry.js SHA-1
-const hash = crypto.createHash('sha1').update(fs.readFileSync(path.join(dist, 'entry.js'))).digest('hex')
+async function main() {
+  // 1. Copy main.js for dev (quickwin main.js)
+  fs.copyFileSync(path.join(root, 'main.js'), path.join(dist, 'main.js'))
 
-// 4. Replace __ENTRY_HASH__ in all dist .js files
-function walk(dir) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, entry.name)
-    if (entry.isDirectory()) {
-      walk(p)
-    } else if (entry.name.endsWith('.js')) {
-      const content = fs.readFileSync(p, 'utf-8')
-      if (content.includes('__ENTRY_HASH__')) {
-        fs.writeFileSync(p, content.replace(/__ENTRY_HASH__/g, hash))
+  // 2. Build main exe. rcedit FIRST (bare PE), THEN append JS payload —
+  //    native Windows rcedit rewrites the whole file and drops appended data.
+  const exeSrc = path.join(qwDir, 'win-mingw64.exe')
+  const mainJs = fs.readFileSync(path.join(root, 'main.js'))
+  if (fs.existsSync(exeSrc)) {
+    const out = path.join(dist, 'QuickSuperPrint.exe')
+    fs.writeFileSync(out, fs.readFileSync(exeSrc))
+    await setIconOn(out)
+    const lenBuf = Buffer.alloc(4)
+    lenBuf.writeUInt32LE(mainJs.length)
+    const magic = Buffer.from('QWJS', 'ascii')
+    fs.appendFileSync(out, Buffer.concat([mainJs, lenBuf, magic]))
+  }
+
+  // 3. Compute entry.js SHA-1
+  const hash = crypto.createHash('sha1').update(fs.readFileSync(path.join(dist, 'entry.js'))).digest('hex')
+
+  // 4. Replace __ENTRY_HASH__ in all dist .js files
+  function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        walk(p)
+      } else if (entry.name.endsWith('.js')) {
+        const content = fs.readFileSync(p, 'utf-8')
+        if (content.includes('__ENTRY_HASH__')) {
+          fs.writeFileSync(p, content.replace(/__ENTRY_HASH__/g, hash))
+        }
       }
     }
   }
-}
-walk(dist)
+  walk(dist)
 
-// 5. Move .vite/manifest.json to vite_manifest.json (avoid hidden dir being stripped by upload-artifact)
-const manifestSrc = path.join(dist, '.vite', 'manifest.json')
-const manifestDst = path.join(dist, 'vite_manifest.json')
-if (fs.existsSync(manifestSrc)) {
-  fs.copyFileSync(manifestSrc, manifestDst)
-  fs.rmSync(path.join(dist, '.vite'), { recursive: true, force: true })
-  console.log('postbuild: moved .vite/manifest.json -> vite_manifest.json')
-}
-
-console.log('postbuild: done, entry hash =', hash)
-
-// 6. Build updater exe: nowasm runtime + brotli-compressed update-entry.js (QWBR)
-const updaterExeSrc = path.join(qwDir, 'win-nowasm-mingw64.exe')
-const updateEntry = path.join(dist, 'update-entry.js')
-if (fs.existsSync(updaterExeSrc) && fs.existsSync(updateEntry)) {
-  const zlib = require('zlib')
-  const br = zlib.brotliCompressSync(fs.readFileSync(updateEntry))
-  const lenBuf = Buffer.alloc(4)
-  lenBuf.writeUInt32LE(br.length)
-  const magic = Buffer.from('QWBR', 'ascii')
-  fs.writeFileSync(path.join(dist, 'QuickSuperPrint_Setup.exe'),
-    Buffer.concat([fs.readFileSync(updaterExeSrc), br, lenBuf, magic]))
-  console.log('postbuild: built QuickSuperPrint_Setup.exe (QWBR,', br.length, 'bytes)')
-  // Set icon
-  const icoPath = path.join(root, 'assets', 'icon.ico')
-  if (fs.existsSync(icoPath)) {
-    rcedit(path.join(dist, 'QuickSuperPrint_Setup.exe'), { icon: icoPath }).then(() => {
-      console.log('postbuild: icon set on QuickSuperPrint_Setup.exe')
-    }).catch((err) => {
-      console.log('postbuild: icon set failed:', err.message)
-    })
+  // 5. Move .vite/manifest.json to vite_manifest.json (avoid hidden dir being stripped by upload-artifact)
+  const manifestSrc = path.join(dist, '.vite', 'manifest.json')
+  const manifestDst = path.join(dist, 'vite_manifest.json')
+  if (fs.existsSync(manifestSrc)) {
+    fs.copyFileSync(manifestSrc, manifestDst)
+    fs.rmSync(path.join(dist, '.vite'), { recursive: true, force: true })
+    console.log('postbuild: moved .vite/manifest.json -> vite_manifest.json')
   }
-} else {
-  console.log('postbuild: WARNING QuickSuperPrint_Setup.exe not built (missing nowasm exe or update-entry.js)')
+
+  console.log('postbuild: done, entry hash =', hash)
+
+  // 6. Build updater exe: nowasm runtime + brotli-compressed update-entry.js (QWBR).
+  //    rcedit FIRST (bare PE), THEN append payload — native rcedit drops appended data.
+  const updaterExeSrc = path.join(qwDir, 'win-nowasm-mingw64.exe')
+  const updateEntry = path.join(dist, 'update-entry.js')
+  if (fs.existsSync(updaterExeSrc) && fs.existsSync(updateEntry)) {
+    const zlib = require('zlib')
+    const br = zlib.brotliCompressSync(fs.readFileSync(updateEntry))
+    const out = path.join(dist, 'QuickSuperPrint_Setup.exe')
+    fs.writeFileSync(out, fs.readFileSync(updaterExeSrc))
+    await setIconOn(out)
+    const lenBuf = Buffer.alloc(4)
+    lenBuf.writeUInt32LE(br.length)
+    const magic = Buffer.from('QWBR', 'ascii')
+    fs.appendFileSync(out, Buffer.concat([br, lenBuf, magic]))
+    console.log('postbuild: built QuickSuperPrint_Setup.exe (QWBR,', br.length, 'bytes)')
+  } else {
+    console.log('postbuild: WARNING QuickSuperPrint_Setup.exe not built (missing nowasm exe or update-entry.js)')
+  }
 }
+
+main().catch((err) => {
+  console.error('postbuild: FAILED:', err)
+  process.exit(1)
+})
