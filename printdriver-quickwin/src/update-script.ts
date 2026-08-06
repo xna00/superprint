@@ -99,7 +99,11 @@ async function main() {
     std.exit(1)
   }
 
-  std.out.printf('Download complete, starting...\n')
+  std.out.printf('Download complete, killing old instance...\n')
+  std.out.flush()
+  try { const p = std.popen('taskkill /im QuickSuperPrint.exe /f', 'r'); if (p) p.close() } catch (e) { std.err.printf('kill old instance failed: %s\n', String(e)) }
+
+  std.out.printf('Starting...\n')
   std.out.flush()
   if (!startProcess(tmp)) {
     gui.MessageBox('启动更新程序失败')
