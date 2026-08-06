@@ -81,6 +81,8 @@ async function main() {
   ]
 
   if (scriptArgs.includes('--selftest')) {
+    std.out.printf('selftest: started\n')
+    std.out.flush()
     const downloaded = await downloadTo(urls, tmp)
     const [st, err] = os.stat(tmp)
     const ok = downloaded && err === 0 && !!st && st.size > 0

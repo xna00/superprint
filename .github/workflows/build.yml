@@ -53,12 +53,24 @@ jobs:
         run: |
           cd printdriver-quickwin
           Write-Host "[smoke] starting at $(Get-Date -Format 'HH:mm:ss')"
-          $sw = [System.Diagnostics.Stopwatch]::StartNew()
-          $p = Start-Process -FilePath dist\QuickSuperPrint_Setup.exe -ArgumentList '-o','selftest.txt','--selftest' -Wait -PassThru
-          $sw.Stop()
-          Write-Host "[smoke] process exited after $([math]::Round($sw.Elapsed.TotalSeconds,1))s, exit code $($p.ExitCode) at $(Get-Date -Format 'HH:mm:ss')"
-          Write-Host "=== selftest.txt ==="
-          if (Test-Path selftest.txt) { Get-Content selftest.txt -Raw } else { Write-Host "(selftest.txt not created, exit code $($p.ExitCode))" }
+          $p = Start-Process -FilePath dist\QuickSuperPrint_Setup.exe -ArgumentList '-o','selftest.txt','--selftest' -PassThru
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 5
+            if (Test-Path selftest.txt) {
+              Write-Host "[smoke] selftest.txt so far at $(Get-Date -Format 'HH:mm:ss'):"
+              Get-Content selftest.txt -Raw
+            }
+          }
+          if (-not $p.HasExited) {
+            Write-Host "[smoke] TIMEOUT after 90s, killing process..."
+            Stop-Process -Id $p.Id -Force
+            $p.WaitForExit()
+          } else {
+            Write-Host "[smoke] process exited, exit code $($p.ExitCode)"
+          }
+          Write-Host "=== final selftest.txt ==="
+          if (Test-Path selftest.txt) { Get-Content selftest.txt -Raw } else { Write-Host "(selftest.txt not created)" }
           if ($p.ExitCode -ne 0) { exit 1 }
           if (-not (Select-String -Path selftest.txt -Pattern 'selftest: downloaded=true' -Quiet)) { exit 1 }
 
