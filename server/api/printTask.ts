@@ -233,8 +233,9 @@ export const getPrintJobs = async () => {
   const printerIds = printers.map(p => p.id);
   const allTasks = listPrintTasksByState('waiting_print');
   const tasks = allTasks.filter((t) => printerIds.includes(t.printerId));
-  return tasks.map((t: any) => ({
+  return tasks.map((t) => ({
     ...t,
+    printer: findPrinterById(t.printerId),
     printFiles: listPrintFilesByPrintTaskId(t.id),
   }));
 };

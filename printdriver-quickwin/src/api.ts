@@ -16,18 +16,21 @@ export const api = createHandler(firstBase, {
     let lastErr: unknown
     for (const base of API_BASE_URLS) {
       try {
+        logger.log('[api]', 'fetch', base + pathAndQuery)
         const r = req.clone()
         const res = await fetch(base + pathAndQuery, {
           method: r.method,
           headers: Object.fromEntries(r.headers.entries()),
           body: r.body,
         })
+        logger.log('[api]', 'ok', base, '->', res.status, res.headers.get('content-type'))
         return res
       } catch (e) {
-        lastErr = e;
-        logger.log(base, "failed, try next!")
+        lastErr = e
+        logger.log('[api]', 'FAIL', base, '->', e instanceof Error ? e.message : String(e))
       }
     }
+    logger.log('[api]', 'all bases failed')
     throw lastErr
   },
 })

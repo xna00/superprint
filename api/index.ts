@@ -36,11 +36,18 @@ export const createHandler = (base: string, options?: {
         if (res.status === 401) {
           // location.href = "/login";
         }
-        if (
-          res.headers.get("content-type")?.toLowerCase() === "application/json"
-        ) {
-          return res.json();
+        const ct = (res.headers.get("content-type") || "").toLowerCase();
+        if (ct.includes("application/json")) {
+          const text = await res.clone().text();
+          try {
+            return JSON.parse(text);
+          } catch (e) {
+            console.log("[api] json parse failed, status:", res.status, "body(200):", text.slice(0, 200));
+            throw e;
+          }
         }
+        const text = await res.clone().text();
+        console.log("[api] non-json response, status:", res.status, "content-type:", ct, "body(200):", text.slice(0, 200));
         return res;
       });
     },

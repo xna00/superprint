@@ -100,6 +100,7 @@ export async function handlePrintJob(computerId: string): Promise<void> {
 
     try {
         const tasks = await api.printTask.getPrintJobs()
+        log(`got ${tasks ? tasks.length : 'null'} tasks`)
 
         if (!tasks || tasks.length === 0) {
             log('no pending print tasks')
@@ -116,7 +117,7 @@ export async function handlePrintJob(computerId: string): Promise<void> {
                         printTaskId: String(task.id),
                         fileId: pf.fileId,
                         filename: pf.filename || pf.fileId,
-                        printerName: task.printer.name || '',
+                        printerName: task.printer?.name || '',
                         duplex: pf.duplex ?? true,
                         tumble: pf.tumble ?? false,
                     })
