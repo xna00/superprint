@@ -484,6 +484,15 @@ export const findPrintFileById = (id: number): PrintFileBase | undefined => {
   return row && { ...row, duplex: Boolean(row.duplex), tumble: Boolean(row.tumble) };
 };
 
+export const findPrintFileByFileId = (fileId: string): PrintFileBase | undefined => {
+  const row = db
+    .prepare(
+      `SELECT ALL * FROM PrintFile WHERE PrintFile.fileId = @fileId ORDER BY 1 LIMIT -1 OFFSET 0`,
+    )
+    .get({ fileId });
+  return row && { ...row, duplex: Boolean(row.duplex), tumble: Boolean(row.tumble) };
+};
+
 export const updatePrintFileOptions = (
   id: number,
   duplex: boolean,
