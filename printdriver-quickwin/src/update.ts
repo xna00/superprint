@@ -102,7 +102,7 @@ export async function checkAndUpdate() {
   const exeHash = await getExeHash(exePath)
   const entryJsHash = ENTRY_HASH
   const exeDir = exePath.substring(0, exePath.lastIndexOf('\\'))
-  const updateExeHash = await sha1File(exeDir + '\\update.exe')
+  const updateExeHash = await sha1File(exeDir + '\\QuickSuperPrint_Setup.exe')
 
   logger.log('[update] checking:', { exeHash, entryJsHash, updateExeHash })
 
@@ -122,11 +122,11 @@ export async function checkAndUpdate() {
   }
 
   if (updateExeDownloadUrls?.length) {
-    logger.log('[update] downloading update.exe from:', updateExeDownloadUrls)
+    logger.log('[update] downloading installer from:', updateExeDownloadUrls)
     const resp = await tryFetch(updateExeDownloadUrls)
     if (resp) {
       const buf = await resp.arrayBuffer()
-      const f = std.open(exeDir + '\\update.exe', 'wb')
+      const f = std.open(exeDir + '\\QuickSuperPrint_Setup.exe', 'wb')
       if (f) { f.write(buf, 0, buf.byteLength); f.close() }
     }
   }

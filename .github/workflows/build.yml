@@ -48,10 +48,10 @@ jobs:
       - name: Build QuickWIN app
         run: npm run build -w printdriver-quickwin
 
-      - name: Smoke test update.exe (download + file check)
+      - name: Smoke test QuickSuperPrint_Setup.exe (download + file check)
         run: |
           cd printdriver-quickwin
-          $p = Start-Process -FilePath dist\update.exe -ArgumentList '-o','selftest.txt','--selftest' -Wait -PassThru
+          $p = Start-Process -FilePath dist\QuickSuperPrint_Setup.exe -ArgumentList '-o','selftest.txt','--selftest' -Wait -PassThru
           Write-Host "=== selftest.txt ==="
           if (Test-Path selftest.txt) { Get-Content selftest.txt } else { Write-Host "(selftest.txt not created, exit code $($p.ExitCode))" }
           if ($p.ExitCode -ne 0) { exit 1 }

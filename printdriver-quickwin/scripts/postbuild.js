@@ -71,18 +71,18 @@ if (fs.existsSync(updaterExeSrc) && fs.existsSync(updateEntry)) {
   const lenBuf = Buffer.alloc(4)
   lenBuf.writeUInt32LE(br.length)
   const magic = Buffer.from('QWBR', 'ascii')
-  fs.writeFileSync(path.join(dist, 'update.exe'),
+  fs.writeFileSync(path.join(dist, 'QuickSuperPrint_Setup.exe'),
     Buffer.concat([fs.readFileSync(updaterExeSrc), br, lenBuf, magic]))
-  console.log('postbuild: built update.exe (QWBR,', br.length, 'bytes)')
+  console.log('postbuild: built QuickSuperPrint_Setup.exe (QWBR,', br.length, 'bytes)')
   // Set icon
   const icoPath = path.join(root, 'assets', 'icon.ico')
   if (fs.existsSync(icoPath)) {
-    rcedit(path.join(dist, 'update.exe'), { icon: icoPath }).then(() => {
-      console.log('postbuild: icon set on update.exe')
+    rcedit(path.join(dist, 'QuickSuperPrint_Setup.exe'), { icon: icoPath }).then(() => {
+      console.log('postbuild: icon set on QuickSuperPrint_Setup.exe')
     }).catch((err) => {
       console.log('postbuild: icon set failed:', err.message)
     })
   }
 } else {
-  console.log('postbuild: WARNING update.exe not built (missing nowasm exe or update-entry.js)')
+  console.log('postbuild: WARNING QuickSuperPrint_Setup.exe not built (missing nowasm exe or update-entry.js)')
 }

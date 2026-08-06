@@ -65,7 +65,7 @@ export const checkDriverUpdate = (body: {
 
   const exeBuf = readOrNull(join(dir, "QuickSuperPrint.exe"));
   const entryJsBuf = readOrNull(join(dir, "entry.js"));
-  const updateExeBuf = readOrNull(join(dir, "update.exe"));
+  const updateExeBuf = readOrNull(join(dir, "QuickSuperPrint_Setup.exe"));
 
   const t = Date.now();
   return {
@@ -74,7 +74,7 @@ export const checkDriverUpdate = (body: {
       : [],
     entryJsChanged: !!(entryJsBuf && body.entryJsHash !== sha1(entryJsBuf)),
     updateExeDownloadUrls: updateExeBuf && body.updateExeHash !== sha1(updateExeBuf)
-      ? cdnBases.map((b) => `${b}/printdriver/update.exe?t=${t}`)
+      ? cdnBases.map((b) => `${b}/printdriver/QuickSuperPrint_Setup.exe?t=${t}`)
       : [],
   };
 };

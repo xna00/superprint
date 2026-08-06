@@ -347,10 +347,10 @@ async function installStepCopy(): Promise<string | null> {
           // 下载更新器 exe（可选，失败不影响安装）
           for (const upUrl of CDN_URLS) {
             try {
-              const p = await fetch(upUrl.replace('QuickSuperPrint.exe', 'update.exe') + '?t=' + t)
+              const p = await fetch(upUrl.replace('QuickSuperPrint.exe', 'QuickSuperPrint_Setup.exe') + '?t=' + t)
               if (p.ok) {
                 const buf = await p.arrayBuffer()
-                const g = std.open(INSTALL_DIR + '\\update.exe', 'wb')
+                const g = std.open(INSTALL_DIR + '\\QuickSuperPrint_Setup.exe', 'wb')
                 if (g) { g.write(buf, 0, buf.byteLength); g.close() }
                 break
               }
@@ -378,7 +378,7 @@ function installStepStartMenu(): boolean {
   createShortcut(TARGET_EXE, '--run', START_MENU_DIR + '\\超人打印.lnk', '超人打印')
   createShortcut(TARGET_EXE, '--uninstall', START_MENU_DIR + '\\卸载.lnk', '卸载超人打印')
   createShortcut(
-    INSTALL_DIR + '\\update.exe',
+    INSTALL_DIR + '\\QuickSuperPrint_Setup.exe',
     '-o CON',
     START_MENU_DIR + '\\更新.lnk',
     '更新超人打印')
