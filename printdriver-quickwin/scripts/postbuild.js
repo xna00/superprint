@@ -1,9 +1,6 @@
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
-const { rcedit } = require('rcedit')
-
-process.env.WINE_BINARY = 'wine'
 
 const root = path.join(__dirname, '..')
 const dist = path.join(root, 'dist')
@@ -21,15 +18,6 @@ if (fs.existsSync(exeSrc)) {
   lenBuf.writeUInt32LE(mainJs.length)
   const magic = Buffer.from('QWJS', 'ascii')
   fs.writeFileSync(path.join(dist, 'QuickSuperPrint.exe'), Buffer.concat([exeBuf, mainJs, lenBuf, magic]))
-  // Set icon on main exe
-  const icoPath = path.join(root, 'assets', 'icon.ico')
-  if (fs.existsSync(icoPath)) {
-    rcedit(path.join(dist, 'QuickSuperPrint.exe'), { icon: icoPath }).then(() => {
-      console.log('postbuild: icon set on QuickSuperPrint.exe')
-    }).catch((err) => {
-      console.log('postbuild: icon set failed on QuickSuperPrint.exe:', err.message)
-    })
-  }
 }
 
 // 3. Compute entry.js SHA-1
@@ -74,15 +62,6 @@ if (fs.existsSync(updaterExeSrc) && fs.existsSync(updateEntry)) {
   fs.writeFileSync(path.join(dist, 'QuickSuperPrint_Setup.exe'),
     Buffer.concat([fs.readFileSync(updaterExeSrc), br, lenBuf, magic]))
   console.log('postbuild: built QuickSuperPrint_Setup.exe (QWBR,', br.length, 'bytes)')
-  // Set icon
-  const icoPath = path.join(root, 'assets', 'icon.ico')
-  if (fs.existsSync(icoPath)) {
-    rcedit(path.join(dist, 'QuickSuperPrint_Setup.exe'), { icon: icoPath }).then(() => {
-      console.log('postbuild: icon set on QuickSuperPrint_Setup.exe')
-    }).catch((err) => {
-      console.log('postbuild: icon set failed:', err.message)
-    })
-  }
 } else {
   console.log('postbuild: WARNING QuickSuperPrint_Setup.exe not built (missing nowasm exe or update-entry.js)')
 }
