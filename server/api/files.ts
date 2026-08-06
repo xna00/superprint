@@ -5,6 +5,7 @@ import { join, extname } from "node:path"
 import { ApiError, decryptString } from "./utils.ts"
 import { getInfo } from "./global.ts"
 import { findComputerById, findPrinterById, findPrintFileByFileId, findPrintTaskById } from "../models/db.ts"
+import { logger } from "../logger.ts"
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads')
 
@@ -50,7 +51,8 @@ const getFileAccess = async (fileName: string) => {
 const BR_QUALITY = 4
 
 export const getFile = async (fileName: string) => {
-    const acceptBr = (getInfo().request.headers.get("accept-encoding") || "").includes('br')
+    const acceptEncoding = getInfo().request.headers.get("accept-encoding") || ""
+    const acceptBr = acceptEncoding.includes('br')
     await getFileAccess(fileName)
     const filePath = join(UPLOADS_DIR, fileName)
     try {
@@ -70,6 +72,9 @@ export const getFile = async (fileName: string) => {
             params: { [zconstants.BROTLI_PARAM_QUALITY]: BR_QUALITY },
         }))
         headers['Content-Encoding'] = 'br'
+        logger.log(`[getFile] br压缩传输: ${fileName} (accept-encoding: ${acceptEncoding})`)
+    } else {
+        logger.log(`[getFile] 原样传输: ${fileName} (accept-encoding: ${acceptEncoding || '无'})`)
     }
     const stream = Readable.toWeb(source)
     return new Response(stream, { headers })
