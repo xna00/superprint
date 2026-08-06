@@ -1,5 +1,6 @@
 import { createReadStream, accessSync, constants } from "node:fs"
 import { Readable } from "node:stream"
+import { createBrotliCompress, constants as zconstants } from "node:zlib"
 import { join, extname } from "node:path"
 import { ApiError, decryptString } from "./utils.ts"
 import { getInfo } from "./global.ts"
@@ -46,7 +47,10 @@ const getFileAccess = async (fileName: string) => {
     return computerId;
 };
 
+const BR_QUALITY = 4
+
 export const getFile = async (fileName: string) => {
+    const acceptBr = (getInfo().request.headers.get("accept-encoding") || "").includes('br')
     await getFileAccess(fileName)
     const filePath = join(UPLOADS_DIR, fileName)
     try {
@@ -54,13 +58,19 @@ export const getFile = async (fileName: string) => {
     } catch {
         throw new ApiError(404, {}, '文件不存在', 'FILE_NOT_FOUND')
     }
-    const stream = Readable.toWeb(createReadStream(filePath))
     const ext = extname(fileName).toLowerCase()
     const mimeType = MIME_TYPES[ext] || 'application/octet-stream'
-    return new Response(stream, {
-        headers: {
-            'Content-Type': mimeType,
-            'Content-Disposition': `inline; filename="${fileName}"`,
-        },
-    })
+    const headers: Record<string, string> = {
+        'Content-Type': mimeType,
+        'Content-Disposition': `inline; filename="${fileName}"`,
+    }
+    let source: Readable = createReadStream(filePath)
+    if (ext === '.pdf' && acceptBr) {
+        source = createReadStream(filePath).pipe(createBrotliCompress({
+            params: { [zconstants.BROTLI_PARAM_QUALITY]: BR_QUALITY },
+        }))
+        headers['Content-Encoding'] = 'br'
+    }
+    const stream = Readable.toWeb(source)
+    return new Response(stream, { headers })
 }
