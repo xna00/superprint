@@ -10,5 +10,5 @@
 - 生成脚本：`printdriver-quickwin/scripts/generate-icon.js`
 - 使用 `sharp`（基于 librsvg）渲染 SVG 为 16/32/48/64 PNG，再用 `png-to-ico` 合成 ICO
 - 手动运行：`npm run generate-icon`（在 `printdriver-quickwin` 目录）
-- 产物 `icon.ico` 提交到仓库，`postbuild.js` 中的 `rcedit` 直接使用它
+- 产物 `icon.ico` 提交到仓库（当前构建未嵌入，仅保留生成流程备用）
 - 注意：ImageMagick 的 SVG 渲染器不支持 `<linearGradient>`，导致渐变丢失，所以不能用 `convert` 生成 ICO
