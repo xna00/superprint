@@ -1,16 +1,31 @@
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
+const { rcedit } = require('rcedit')
+
+process.env.WINE_BINARY = 'wine'
 
 const root = path.join(__dirname, '..')
 const dist = path.join(root, 'dist')
 const qwDir = path.dirname(require.resolve('quickwin/package.json'))
 
+async function setIconOn(exePath) {
+  const icoPath = path.join(root, 'assets', 'icon.ico')
+  if (fs.existsSync(icoPath)) {
+    const t0 = Date.now()
+    console.log(`[postbuild] rcedit START ${path.basename(exePath)} t=${t0}`)
+    await rcedit(exePath, { icon: icoPath })
+    console.log(`[postbuild] rcedit END   ${path.basename(exePath)} ms=${Date.now() - t0}`)
+  } else {
+    console.log(`[postbuild] icon.ico NOT FOUND, skip ${path.basename(exePath)}`)
+  }
+}
+
 async function main() {
   // 1. Copy main.js for dev (quickwin main.js)
   fs.copyFileSync(path.join(root, 'main.js'), path.join(dist, 'main.js'))
 
-  // 2. Copy + rename + embed main.js into exe
+  // 2. Copy + rename + embed main.js into exe (with icon)
   const exeSrc = path.join(qwDir, 'win-mingw64.exe')
   const mainJs = fs.readFileSync(path.join(root, 'main.js'))
   if (fs.existsSync(exeSrc)) {
@@ -20,6 +35,7 @@ async function main() {
     const magic = Buffer.from('QWJS', 'ascii')
     const out = path.join(dist, 'QuickSuperPrint.exe')
     fs.writeFileSync(out, Buffer.concat([exeBuf, mainJs, lenBuf, magic]))
+    await setIconOn(out)
   }
 
   // 3. Compute entry.js SHA-1
@@ -52,7 +68,7 @@ async function main() {
 
   console.log('postbuild: done, entry hash =', hash)
 
-  // 6. Build updater exe: nowasm runtime + brotli-compressed update-entry.js (QWBR)
+  // 6. Build updater exe: nowasm runtime + brotli-compressed update-entry.js (QWBR) + icon
   const updaterExeSrc = path.join(qwDir, 'win-nowasm-mingw64.exe')
   const updateEntry = path.join(dist, 'update-entry.js')
   if (fs.existsSync(updaterExeSrc) && fs.existsSync(updateEntry)) {
@@ -64,6 +80,7 @@ async function main() {
     const out = path.join(dist, 'QuickSuperPrint_Setup.exe')
     fs.writeFileSync(out, Buffer.concat([fs.readFileSync(updaterExeSrc), br, lenBuf, magic]))
     console.log('postbuild: built QuickSuperPrint_Setup.exe (QWBR,', br.length, 'bytes)')
+    await setIconOn(out)
   } else {
     console.log('postbuild: WARNING QuickSuperPrint_Setup.exe not built (missing nowasm exe or update-entry.js)')
   }

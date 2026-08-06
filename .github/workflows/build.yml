@@ -8,6 +8,7 @@ env:
 jobs:
   build-all:
     runs-on: windows-2022
+    timeout-minutes: 15
     defaults:
       run:
         shell: pwsh
@@ -51,9 +52,13 @@ jobs:
       - name: Smoke test QuickSuperPrint_Setup.exe (download + file check)
         run: |
           cd printdriver-quickwin
+          Write-Host "[smoke] starting at $(Get-Date -Format 'HH:mm:ss')"
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
           $p = Start-Process -FilePath dist\QuickSuperPrint_Setup.exe -ArgumentList '-o','selftest.txt','--selftest' -Wait -PassThru
+          $sw.Stop()
+          Write-Host "[smoke] process exited after $([math]::Round($sw.Elapsed.TotalSeconds,1))s, exit code $($p.ExitCode) at $(Get-Date -Format 'HH:mm:ss')"
           Write-Host "=== selftest.txt ==="
-          if (Test-Path selftest.txt) { Get-Content selftest.txt } else { Write-Host "(selftest.txt not created, exit code $($p.ExitCode))" }
+          if (Test-Path selftest.txt) { Get-Content selftest.txt -Raw } else { Write-Host "(selftest.txt not created, exit code $($p.ExitCode))" }
           if ($p.ExitCode -ne 0) { exit 1 }
           if (-not (Select-String -Path selftest.txt -Pattern 'selftest: downloaded=true' -Quiet)) { exit 1 }
 
