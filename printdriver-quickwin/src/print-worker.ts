@@ -246,7 +246,7 @@ function centerAndStretch(hdc: number, dib: DibResult, use32bit: boolean): boole
     return sdRet > 0
 }
 
-async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolean, tumble: boolean, renderEngine: string, renderDPI: number): Promise<boolean> {
+async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolean, tumble: boolean, renderEngine: string, renderDPI: number, docName: string): Promise<boolean> {
     logger.log('[worker] printPdf:', printerName, 'duplex:', duplex, 'tumble:', tumble, 'renderEngine:', renderEngine)
 
     const printerNameBuf = strToWideBuf(printerName)
@@ -354,7 +354,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         }
     }
 
-    const docNameBuf = strToWideBuf('SuperPrint')
+    const docNameBuf = strToWideBuf(docName || 'SuperPrint')
     const docNamePtr = bufferPtr(docNameBuf)
 
     const docInfo = new ArrayBuffer(40)
@@ -519,7 +519,7 @@ os.Worker.parent.onmessage = async (e) => {
             }
             const pdfBuf = await res.arrayBuffer()
             if (pdfBuf.byteLength === 0) throw new Error('downloaded PDF is empty')
-            const success = await printPdf(pdfBuf, msg.printerName, msg.duplex, msg.tumble, msg.renderEngine, msg.renderDPI)
+            const success = await printPdf(pdfBuf, msg.printerName, msg.duplex, msg.tumble, msg.renderEngine, msg.renderDPI, msg.docName)
             const out: WorkerOutMsg = { type: 'done', jobId: msg.jobId, success }
             os.Worker.parent.postMessage(out)
         } catch (e2: unknown) {

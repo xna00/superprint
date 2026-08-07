@@ -91,6 +91,7 @@ async function processFile(file: PrintFileInfo): Promise<boolean> {
             jobId,
             renderEngine: getRenderEngine(),
             renderDPI: getRenderDPI(),
+            docName: file.filename || 'SuperPrint',
         })
     })
 }

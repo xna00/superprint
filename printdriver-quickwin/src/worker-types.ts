@@ -7,6 +7,7 @@ export interface PrintRequest {
     jobId: number
     renderEngine: 'pdfium' | 'mupdf'
     renderDPI: number
+    docName: string
 }
 export interface PrintResult {
     type: 'done'
