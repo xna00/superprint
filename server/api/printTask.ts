@@ -22,7 +22,7 @@ import {
 } from "../models/db.ts"
 import { ApiError, addTokenToUrl, decryptString } from "./utils.ts"
 import { notifyCheckJobs } from "../ws/index.ts"
-import { sendMsgMenuMessage } from "./weixin/send.ts"
+import { sendMsgMenuMessage, sendTextMessage } from "./weixin/send.ts"
 import { getInfo } from "./global.ts"
 import { logger } from "../logger.ts";
 
@@ -148,10 +148,25 @@ export const fileSucceed = async (id: number) => {
   updatePrintFileState(id, 'completed')
   const allFiles = listPrintFilesByPrintTaskId(task.id)
   const allCompleted = allFiles.every(f => f.state === 'completed')
-  if (allCompleted) {
+  if (allCompleted && task.state !== 'completed') {
     updatePrintTaskState(task.id, 'completed')
+    await sendPrintSuccessNotification(task)
   }
   return { success: true }
+}
+
+const sendPrintSuccessNotification = async (task: PrintTaskBase) => {
+  if (!task.externalUserId) {
+    logger.log(`任务 ${task.id} 没有 externalUserId，跳过通知`)
+    return
+  }
+  const message = `✅ 打印任务 #${task.id} 已完成`
+  try {
+    await sendTextMessage(message, task.weixinKfId, task.externalUserId)
+    logger.log(`已向 ${task.externalUserId} 发送打印完成通知`)
+  } catch (error) {
+    logger.error(`发送打印完成通知失败:`, error)
+  }
 }
 
 const sendPrintFailureNotification = async (task: PrintTaskBase, failedFiles: PrintFileBase[]) => {
