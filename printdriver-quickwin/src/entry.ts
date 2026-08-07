@@ -1,3 +1,4 @@
+import 'quickwin/lib/fetch.js'
 import './ua.js'
 import './metadata.js'
 import './main.js'
@@ -10,7 +11,13 @@ logger.log('[entry] exe:', exePath)
 logger.log('[entry] baseUrl:', baseUrl)
 logger.log('[entry] scriptArgs:', scriptArgs)
 
-globalThis.__APP_METADATA__?.then(m => {
+const md = globalThis.__APP_METADATA__!
+fetch(baseUrl + 'metadata.json?t=' + Date.now())
+  .then(r => r.json())
+  .then(m => md.resolve(m))
+  .catch(e => md.reject(e))
+
+md.promise.then(m => {
   for (const file of m.preload || []) {
     const url = baseUrl + file
     console.log('[preload]', url)

@@ -25,7 +25,7 @@ export function SettingsTab() {
   const [buildTime, setBuildTime] = useState('')
 
   useEffect(() => {
-    globalThis.__APP_METADATA__?.then(m => setBuildTime(m.buildTime)).catch(() => {})
+    globalThis.__APP_METADATA__?.promise.then(m => setBuildTime(m.buildTime)).catch(() => {})
   }, [])
 
   function changeRenderEngine(v: 'pdfium' | 'mupdf') {
