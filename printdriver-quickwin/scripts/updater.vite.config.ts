@@ -3,7 +3,6 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   define: {
     DEBUG: 'false',
-    __BUILD_TIME__: JSON.stringify(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })),
   },
   build: {
     target: 'es2022',

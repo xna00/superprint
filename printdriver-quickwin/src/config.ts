@@ -17,6 +17,3 @@ export const WS_TIMEOUT = 60000
 export const RENDER_DPI = 600
 
 export const ENTRY_HASH = '__ENTRY_HASH__'
-
-declare const __BUILD_TIME__: string
-export const BUILD_TIME = __BUILD_TIME__

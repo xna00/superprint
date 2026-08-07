@@ -58,14 +58,28 @@ async function main() {
   }
   walk(dist)
 
-  // 5. Move .vite/manifest.json to vite_manifest.json (avoid hidden dir being stripped by upload-artifact)
+  // 5. Generate metadata.json (buildTime + entryHash + dynamic chunk preload list),
+  //    then drop .vite (hidden dir gets stripped by upload-artifact).
   const manifestSrc = path.join(dist, '.vite', 'manifest.json')
-  const manifestDst = path.join(dist, 'vite_manifest.json')
+  const preload = []
   if (fs.existsSync(manifestSrc)) {
-    fs.copyFileSync(manifestSrc, manifestDst)
+    const manifest = JSON.parse(fs.readFileSync(manifestSrc, 'utf-8'))
+    for (const [src, info] of Object.entries(manifest)) {
+      if (info.isDynamicEntry && info.file && info.file.endsWith('.js')) {
+        preload.push(info.file)
+      }
+    }
     fs.rmSync(path.join(dist, '.vite'), { recursive: true, force: true })
-    console.log('postbuild: moved .vite/manifest.json -> vite_manifest.json')
   }
+  const now = new Date()
+  const metadata = {
+    buildTime: now.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }),
+    buildTimestamp: now.getTime(),
+    entryHash: hash,
+    preload,
+  }
+  fs.writeFileSync(path.join(dist, 'metadata.json'), JSON.stringify(metadata, null, 2))
+  console.log('postbuild: wrote metadata.json', JSON.stringify(metadata))
 
   console.log('postbuild: done, entry hash =', hash)
 

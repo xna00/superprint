@@ -1,7 +1,7 @@
 import './ua.js'
-import "./main.js"
+import './metadata.js'
+import './main.js'
 import { logger } from './logger.js'
-type ManifestEntry = { isDynamicEntry?: boolean; file?: string }
 import * as win from 'win'
 
 const exePath = win.GetModuleFileName() || 'unknown'
@@ -10,20 +10,14 @@ logger.log('[entry] exe:', exePath)
 logger.log('[entry] baseUrl:', baseUrl)
 logger.log('[entry] scriptArgs:', scriptArgs)
 
-fetch(baseUrl + 'vite_manifest.json?t=' + Date.now())
-  .then(r => r.json())
-  .then(m => {
-    for (const [src, info] of Object.entries(m as Record<string, unknown>)) {
-      const entry = info as ManifestEntry
-      if (entry.isDynamicEntry && entry.file && entry.file.endsWith('.js')) {
-        const url = baseUrl + entry.file
-        console.log('[preload]', src, url)
-        fetch(url)
-          .then(() => console.log('[preload] done:', entry.file))
-          .catch(e => console.log('[preload] error:', entry.file, e))
-      }
-    }
-  })
-  .catch(e => {
-    console.log('[preload] manifest error:', e)
-  })
+globalThis.__APP_METADATA__?.then(m => {
+  for (const file of m.preload || []) {
+    const url = baseUrl + file
+    console.log('[preload]', url)
+    fetch(url)
+      .then(() => console.log('[preload] done:', file))
+      .catch(e => console.log('[preload] error:', file, e))
+  }
+}).catch(e => {
+  console.log('[preload] metadata error:', e)
+})

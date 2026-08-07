@@ -37,6 +37,19 @@ export function readPtr(dv: DataView, offset: number): number {
     return low + high * 4294967296
 }
 
+export interface AppMetadata {
+  buildTime: string
+  buildTimestamp: number
+  entryHash: string
+  preload: string[]
+}
+
+declare global {
+  interface GlobalThis {
+    __APP_METADATA__?: Promise<AppMetadata>
+  }
+}
+
 /** Convert a GUID string like `{000214F9-0000-0000-C000-000000000046}` to a 16-byte ArrayBuffer */
 export function guidStrToBytes(guid: string): ArrayBuffer {
     const hex = guid.replace(/[{}]/g, '').replace(/-/g, '')
