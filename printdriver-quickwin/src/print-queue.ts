@@ -95,7 +95,27 @@ async function processFile(file: PrintFileInfo): Promise<boolean> {
     })
 }
 
+let _printing = false
+let _dirty = false
+
 export async function handlePrintJob(computerId: string): Promise<void> {
+    if (_printing) {
+        log('print job already in progress, will re-check afterwards')
+        _dirty = true
+        return
+    }
+    _printing = true
+    try {
+        do {
+            _dirty = false
+            await runPrintJob(computerId)
+        } while (_dirty)
+    } finally {
+        _printing = false
+    }
+}
+
+async function runPrintJob(computerId: string): Promise<void> {
     log('fetching print tasks...')
 
     try {

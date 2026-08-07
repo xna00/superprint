@@ -1,7 +1,7 @@
 import 'quickwin/lib/websocket.js'
 import * as os from 'os'
 import { getDeviceId } from './device.js'
-import { handleWsMessage } from './print-queue.js'
+import { handleWsMessage, handlePrintJob } from './print-queue.js'
 import { WS_URLS, WS_TIMEOUT } from './config.js'
 import { logger } from './logger.js'
 
@@ -82,6 +82,7 @@ export async function connectWs(addLog: (msg: string) => void, setWsStatus: (s: 
                 setWsStatus('已连接')
                 addLog('[ws] connected')
                 logger.log(`[ws] connected in ${elapsed}ms`)
+                handlePrintJob(devId)
                 w.onmessage = (ev: MessageEvent) => {
                     const data = ev.data
                     if (typeof data === 'string' && data) {
