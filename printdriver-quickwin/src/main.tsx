@@ -140,9 +140,10 @@ function runMainApp() {
                     if (hIcon) {
                         gui.ShellNotifyIcon(gui.NotifyIconCmd.ADD, {
                             hwnd, uID: 1,
-                            flags: gui.NotifyIconFlag.MESSAGE | gui.NotifyIconFlag.ICON,
+                            flags: gui.NotifyIconFlag.MESSAGE | gui.NotifyIconFlag.ICON | gui.NotifyIconFlag.TIP,
                             callbackMessage: WM_TRAY,
                             hIcon,
+                            tip: '超人打印',
                         })
                         logger.log('[main] tray icon re-added after wake')
                     } else {
@@ -209,9 +210,10 @@ function runMainApp() {
         const ok = gui.ShellNotifyIcon(gui.NotifyIconCmd.ADD, {
             hwnd: root.hwnd,
             uID: 1,
-            flags: gui.NotifyIconFlag.MESSAGE | gui.NotifyIconFlag.ICON,
+            flags: gui.NotifyIconFlag.MESSAGE | gui.NotifyIconFlag.ICON | gui.NotifyIconFlag.TIP,
             callbackMessage: WM_TRAY,
             hIcon,
+            tip: '超人打印',
         })
         std.out.printf('[main] tray icon %s\n', ok ? 'added' : 'FAILED')
         std.out.flush()
