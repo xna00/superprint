@@ -135,6 +135,42 @@ export const sendTextMessage = async (
   return data.msgid
 }
 
+export const sendWelcomeMsg = async (
+  code: string,
+  openKfId: string,
+  externalUserId: string,
+  content: string
+): Promise<string> => {
+  const accessToken = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/kf/send_welcome_msg?access_token=${accessToken}`
+
+  const requestBody = {
+    code,
+    touser: externalUserId,
+    open_kfid: openKfId,
+    msgtype: 'text',
+    text: {
+      content
+    }
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(requestBody)
+  })
+
+  const data = await response.json() as SendMessageResponse
+
+  if (data.errcode !== 0) {
+    throw new Error(`发送欢迎语失败: ${data.errmsg} (errcode: ${data.errcode})`)
+  }
+
+  return data.msgid
+}
+
 export const sendMsgMenuMessage = async (
   headContent: string,
   menuList: MsgMenuItem[],

@@ -1,4 +1,4 @@
-import { sendTextMessage, sendMsgMenuMessage, uploadMedia, sendFileMessage } from './send.ts'
+import { sendTextMessage, sendMsgMenuMessage, uploadMedia, sendFileMessage, sendWelcomeMsg } from './send.ts'
 
 const AUTO_CONFIRM_TIMEOUT = 60_000
 const autoConfirmTimers = new Map<number, ReturnType<typeof setTimeout>>()
@@ -643,6 +643,18 @@ const handleEnterSessionEvents = async (events: (Message & { msgtype: 'event' })
       if (result.changes > 0 && printer) {
         logger.log(`✅ 用户 ${externalUserId} 经客服 ${openKfId} 绑定打印机 ${printer.name} (#${printerId})`)
         await sendTextMessage(`✅ 已绑定打印机「${printer.name}」，现在可以发送文件打印了`, openKfId, externalUserId)
+        if (event.welcome_code) {
+          try {
+            await sendWelcomeMsg(
+              event.welcome_code,
+              openKfId,
+              externalUserId,
+              `✅ 已绑定打印机「${printer.name}」，现在可以发送文件打印了`
+            )
+          } catch (error) {
+            logger.error('发送欢迎语失败:', error)
+          }
+        }
       }
       batchgetCustomerInfo(externalUserId)
     } catch (error) {
