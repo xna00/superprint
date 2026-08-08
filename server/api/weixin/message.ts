@@ -398,6 +398,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
     let printTaskId: number
     let isNewJob = false
     let printerId: number
+    let defaultDuplex: boolean | null = null
 
     if (existingPrintTask) {
       printTaskId = existingPrintTask.id
@@ -407,6 +408,12 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
       const tasks = listPrintTasksByExternalUserIdAndKfid(externalUserId, kfid)
       const lastTask = tasks.find(t => printerIds.has(t.printerId))
       printerId = lastTask?.printerId ?? printers.find(p => p.enabled)?.id ?? printers[0].id
+      if (lastTask) {
+        const lastFiles = listPrintFilesByPrintTaskId(lastTask.id)
+        if (lastFiles.length > 0) {
+          defaultDuplex = lastFiles[lastFiles.length - 1].duplex
+        }
+      }
       printTaskId = generateTaskId()
       insertPrintTask({
         id: printTaskId,
@@ -437,7 +444,7 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
         printTaskId: printTaskId,
         fileId: result.fileId,
         filename: result.filename,
-        duplex: true,
+        duplex: defaultDuplex ?? true,
         tumble: isPresentationFile(result.filename)
       })
       logger.log(`PrintFile 已创建，ID: ${fileId}, 文件: ${result.filename}`)
