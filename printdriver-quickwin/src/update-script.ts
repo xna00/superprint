@@ -121,7 +121,14 @@ async function main() {
   const installDir = localAppData + '\\SuperPrint'
   const target = installDir + '\\QuickSuperPrint.exe'
   try { os.mkdir(installDir) } catch (_) {}
-  if (!moveFileExW(tmp, target)) {
+
+  os.sleep(500) // 等旧进程完全退出，避免 MoveFileExW 被占用映像拦截
+  let moved = false
+  for (let i = 0; i < 3 && !moved; i++) {
+    moved = moveFileExW(tmp, target)
+    if (!moved) os.sleep(1000)
+  }
+  if (!moved) {
     gui.MessageBox('替换程序文件失败')
     std.exit(1)
   }
