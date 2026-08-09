@@ -4,6 +4,7 @@ import * as os from 'os'
 import { ffiCall, readByte, bufferPtr as bufPtr, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT64 } from 'ffi'
 import * as gui from 'gui'
 import { strToWideBuf, readPtr, getExePath, guidStrToBytes } from './utils.js'
+import { logInstall } from './install-log.js'
 
 const INSTALL_DIR = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
 const TARGET_EXE = INSTALL_DIR + '\\QuickSuperPrint.exe'
@@ -307,13 +308,17 @@ export const UNINSTALL_STEPS: InstallStep[] = [
 ]
 
 export async function runInstallStep(key: string): Promise<string | null> {
+  logInstall('runInstallStep start ' + key)
+  let result: string | null = null
   switch (key) {
-    case 'copy': return await installStepCopy()
-    case 'regrun': return installStepRegRun() ? '' : null
-    case 'startmenu': return installStepStartMenu() ? '' : null
-    case 'desktop': return installStepDesktop() ? '' : null
-    default: return null
+    case 'copy': result = await installStepCopy(); break
+    case 'regrun': result = installStepRegRun() ? '' : null; break
+    case 'startmenu': result = installStepStartMenu() ? '' : null; break
+    case 'desktop': result = installStepDesktop() ? '' : null; break
+    default: result = null
   }
+  logInstall('runInstallStep end ' + key + ' => ' + (result === null ? 'FAIL' : JSON.stringify(result)))
+  return result
 }
 
 export function runUninstallStep(key: string): boolean {
@@ -330,38 +335,91 @@ const CDN_URLS = [
   'https://superprint.xna00.top/printdriver/QuickSuperPrint.exe',
 ]
 
+function logDirContents(dir: string): void {
+  try {
+    const r = os.readdir(dir)
+    const names = r ? r[0] : null
+    logInstall('readdir ' + dir + ' => ' + (names ? names.join(',') : '(null)'))
+  } catch (e) {
+    logInstall('readdir ' + dir + ' failed: ' + String(e))
+  }
+}
+
+function scheduleRecheck(path: string, ms: number): void {
+  os.setTimeout(() => {
+    const [st, err] = os.stat(path)
+    logInstall('recheck+' + ms + 'ms ' + path + ' stat err=' + err + ' size=' + (st ? st.size : -1))
+  }, ms)
+}
+
 async function installStepCopy(): Promise<string | null> {
   const exePath = getExePath()
-  if (!exePath) return null
+  logInstall('copy step start, exePath=' + exePath + ' INSTALL_DIR=' + INSTALL_DIR + ' TARGET_EXE=' + TARGET_EXE)
+  if (!exePath) {
+    logInstall('copy step: getExePath empty, abort')
+    return null
+  }
   os.mkdir(INSTALL_DIR)
   const t = Date.now()
   for (const url of CDN_URLS) {
     try {
       const resp = await fetch(url + '?t=' + t)
+      logInstall('download ' + url + ' status=' + resp.status + ' ok=' + resp.ok)
       if (resp.ok) {
         const buf = await resp.arrayBuffer()
+        logInstall('download body bytes=' + buf.byteLength)
         const f = std.open(TARGET_EXE, 'wb')
         if (f) {
-          f.write(buf, 0, buf.byteLength)
+          const w = f.write(buf, 0, buf.byteLength)
           f.close()
+          const [st, err] = os.stat(TARGET_EXE)
+          logInstall('wrote TARGET_EXE bytes=' + w + ' stat err=' + err + ' size=' + (st ? st.size : -1))
+          scheduleRecheck(TARGET_EXE, 2000)
+          scheduleRecheck(TARGET_EXE, 8000)
           // 下载更新器 exe（可选，失败不影响安装）
           for (const upUrl of CDN_URLS) {
             try {
               const p = await fetch(upUrl.replace('QuickSuperPrint.exe', 'QuickSuperPrint_Setup.exe') + '?t=' + t)
               if (p.ok) {
-                const buf = await p.arrayBuffer()
-                const g = std.open(INSTALL_DIR + '\\QuickSuperPrint_Setup.exe', 'wb')
-                if (g) { g.write(buf, 0, buf.byteLength); g.close() }
+                const sbuf = await p.arrayBuffer()
+                const setupPath = INSTALL_DIR + '\\QuickSuperPrint_Setup.exe'
+                const g = std.open(setupPath, 'wb')
+                if (g) {
+                  const gw = g.write(sbuf, 0, sbuf.byteLength)
+                  g.close()
+                  const [st2, err2] = os.stat(setupPath)
+                  logInstall('wrote Setup.exe bytes=' + gw + ' stat err=' + err2 + ' size=' + (st2 ? st2.size : -1))
+                  scheduleRecheck(setupPath, 2000)
+                  scheduleRecheck(setupPath, 8000)
+                } else {
+                  logInstall('FAILED to open Setup.exe for write')
+                }
                 break
               }
-            } catch (_) {}
+            } catch (e) {
+              logInstall('Setup.exe download exception: ' + String(e))
+            }
           }
+          logDirContents(INSTALL_DIR)
           return ' (下载)'
+        } else {
+          logInstall('FAILED to open TARGET_EXE for write')
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      logInstall('download exception: ' + String(e))
+    }
   }
-  if (copyFile(exePath, TARGET_EXE)) return ' (本地)'
+  const copied = copyFile(exePath, TARGET_EXE)
+  logInstall('local copy result=' + copied + ' from ' + exePath)
+  if (copied) {
+    const [st, err] = os.stat(TARGET_EXE)
+    logInstall('after local copy, TARGET_EXE stat err=' + err + ' size=' + (st ? st.size : -1))
+    scheduleRecheck(TARGET_EXE, 2000)
+    scheduleRecheck(TARGET_EXE, 8000)
+    return ' (本地)'
+  }
+  logInstall('copy step FAILED (download + local copy both failed)')
   return null
 }
 
