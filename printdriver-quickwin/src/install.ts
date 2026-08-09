@@ -3,7 +3,7 @@ import * as win from 'win'
 import * as os from 'os'
 import { ffiCall, readByte, bufferPtr as bufPtr, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT64 } from 'ffi'
 import * as gui from 'gui'
-import { strToWideBuf, readPtr, getExePath, guidStrToBytes } from './utils.js'
+import { strToWideBuf, readPtr, guidStrToBytes } from './utils.js'
 
 const INSTALL_DIR = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
 const TARGET_EXE = INSTALL_DIR + '\\QuickSuperPrint.exe'
@@ -34,23 +34,6 @@ function readQword(addr: number): number {
   const low = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
   const high = b4 | (b5 << 8) | (b6 << 16) | (b7 << 24)
   return (high >>> 0) * 4294967296 + (low >>> 0)
-}
-
-function copyFile(src: string, dst: string): boolean {
-  const f = std.open(src, 'rb')
-  if (!f) return false
-  f.seek(0, 2)
-  const size = f.tell()
-  f.seek(0, 0)
-  const buf = new ArrayBuffer(size)
-  const n = f.read(buf, 0, size)
-  f.close()
-  if (n !== size) return false
-  const g = std.open(dst, 'wb')
-  if (!g) return false
-  g.write(buf, 0, size)
-  g.close()
-  return true
 }
 
 function mkdirW(path: string): boolean {
@@ -285,7 +268,68 @@ function createShortcut(targetPath: string, args: string, shortcutPath: string, 
 }
 
 // ---------------------------------------------------------------------------
-// step definitions (for GUI install/uninstall)
+// ensure installed files (run on every main app startup)
+// ---------------------------------------------------------------------------
+
+function existsW(path: string): boolean {
+  const p = k32proc('GetFileAttributesW')
+  if (!p) return true
+  const attrs = ffiCall(p, [FFI_TYPE_POINTER], [strToWideBuf(path)], FFI_TYPE_SINT32)
+  return attrs !== -1 && (attrs & 0x10) === 0
+}
+
+const CDN_URLS = [
+  'https://superprint6.xna00.top/printdriver/QuickSuperPrint.exe',
+  'https://superprint.xna00.top/printdriver/QuickSuperPrint.exe',
+]
+
+const SETUP_EXE = INSTALL_DIR + '\\QuickSuperPrint_Setup.exe'
+
+async function ensureSetupExe(): Promise<void> {
+  if (existsW(SETUP_EXE)) return
+  const t = Date.now()
+  for (const url of CDN_URLS) {
+    try {
+      const resp = await fetch(url.replace('QuickSuperPrint.exe', 'QuickSuperPrint_Setup.exe') + '?t=' + t)
+      if (resp.ok) {
+        const buf = await resp.arrayBuffer()
+        const f = std.open(SETUP_EXE, 'wb')
+        if (f) {
+          f.write(buf, 0, buf.byteLength)
+          f.close()
+        }
+        return
+      }
+    } catch (_) {}
+  }
+}
+
+function ensureShortcuts(): void {
+  mkdirW(START_MENU_DIR)
+  createShortcut(TARGET_EXE, '-o CON --run', START_MENU_DIR + '\\超人打印(控制台).lnk', '超人打印')
+  createShortcut(TARGET_EXE, '-o CON --uninstall', START_MENU_DIR + '\\卸载(控制台).lnk', '卸载超人打印')
+  createShortcut(TARGET_EXE, '-d -o LOG --run', START_MENU_DIR + '\\超人打印(调试).lnk', '超人打印')
+  createShortcut(TARGET_EXE, '--run', START_MENU_DIR + '\\超人打印.lnk', '超人打印')
+  createShortcut(TARGET_EXE, '--uninstall', START_MENU_DIR + '\\卸载.lnk', '卸载超人打印')
+  createShortcut(SETUP_EXE, '-o CON', START_MENU_DIR + '\\更新.lnk', '更新超人打印')
+  const userProfile = std.getenv('USERPROFILE') || ''
+  createShortcut(TARGET_EXE, '--run', userProfile + '\\Desktop\\超人打印.lnk', '超人打印')
+}
+
+function ensureAutoStart(): boolean {
+  const cmdLine = '"' + TARGET_EXE + '" --run --autostart'
+  return regSetRun(cmdLine)
+}
+
+export async function ensureInstalled(): Promise<void> {
+  try { os.mkdir(INSTALL_DIR) } catch (_) {}
+  await ensureSetupExe()
+  ensureShortcuts()
+  ensureAutoStart()
+}
+
+// ---------------------------------------------------------------------------
+// uninstall
 // ---------------------------------------------------------------------------
 
 export interface InstallStep {
@@ -293,28 +337,11 @@ export interface InstallStep {
   label: string
 }
 
-export const INSTALL_STEPS: InstallStep[] = [
-  { key: 'copy', label: '安装程序文件' },
-  { key: 'regrun', label: '注册系统开机自启' },
-  { key: 'startmenu', label: '添加开始菜单快捷方式' },
-  { key: 'desktop', label: '添加桌面快捷方式' },
-]
-
 export const UNINSTALL_STEPS: InstallStep[] = [
   { key: 'remove_shortcuts', label: '删除快捷方式' },
   { key: 'remove_regrun', label: '删除开机自启注册表' },
   { key: 'remove_files', label: '删除程序文件' },
 ]
-
-export async function runInstallStep(key: string): Promise<string | null> {
-  switch (key) {
-    case 'copy': return await installStepCopy()
-    case 'regrun': return installStepRegRun() ? '' : null
-    case 'startmenu': return installStepStartMenu() ? '' : null
-    case 'desktop': return installStepDesktop() ? '' : null
-    default: return null
-  }
-}
 
 export function runUninstallStep(key: string): boolean {
   switch (key) {
@@ -323,71 +350,6 @@ export function runUninstallStep(key: string): boolean {
     case 'remove_files': return uninstallStepFiles()
     default: return false
   }
-}
-
-const CDN_URLS = [
-  'https://superprint6.xna00.top/printdriver/QuickSuperPrint.exe',
-  'https://superprint.xna00.top/printdriver/QuickSuperPrint.exe',
-]
-
-async function installStepCopy(): Promise<string | null> {
-  const exePath = getExePath()
-  if (!exePath) return null
-  os.mkdir(INSTALL_DIR)
-  const t = Date.now()
-  for (const url of CDN_URLS) {
-    try {
-      const resp = await fetch(url + '?t=' + t)
-      if (resp.ok) {
-        const buf = await resp.arrayBuffer()
-        const f = std.open(TARGET_EXE, 'wb')
-        if (f) {
-          f.write(buf, 0, buf.byteLength)
-          f.close()
-          // 下载更新器 exe（可选，失败不影响安装）
-          for (const upUrl of CDN_URLS) {
-            try {
-              const p = await fetch(upUrl.replace('QuickSuperPrint.exe', 'QuickSuperPrint_Setup.exe') + '?t=' + t)
-              if (p.ok) {
-                const buf = await p.arrayBuffer()
-                const g = std.open(INSTALL_DIR + '\\QuickSuperPrint_Setup.exe', 'wb')
-                if (g) { g.write(buf, 0, buf.byteLength); g.close() }
-                break
-              }
-            } catch (_) {}
-          }
-          return ' (下载)'
-        }
-      }
-    } catch (_) {}
-  }
-  if (copyFile(exePath, TARGET_EXE)) return ' (本地)'
-  return null
-}
-
-function installStepRegRun(): boolean {
-  const cmdLine = '"' + TARGET_EXE + '" --run --autostart'
-  return regSetRun(cmdLine)
-}
-
-function installStepStartMenu(): boolean {
-  mkdirW(START_MENU_DIR)
-  createShortcut(TARGET_EXE, '-o CON --run', START_MENU_DIR + '\\超人打印(控制台).lnk', '超人打印')
-  createShortcut(TARGET_EXE, '-o CON --uninstall', START_MENU_DIR + '\\卸载(控制台).lnk', '卸载超人打印')
-  createShortcut(TARGET_EXE, '-d -o LOG --run', START_MENU_DIR + '\\超人打印(调试).lnk', '超人打印')
-  createShortcut(TARGET_EXE, '--run', START_MENU_DIR + '\\超人打印.lnk', '超人打印')
-  createShortcut(TARGET_EXE, '--uninstall', START_MENU_DIR + '\\卸载.lnk', '卸载超人打印')
-  createShortcut(
-    INSTALL_DIR + '\\QuickSuperPrint_Setup.exe',
-    '-o CON',
-    START_MENU_DIR + '\\更新.lnk',
-    '更新超人打印')
-  return true
-}
-
-function installStepDesktop(): boolean {
-  const userProfile = std.getenv('USERPROFILE') || ''
-  return createShortcut(TARGET_EXE, '--run', userProfile + '\\Desktop\\超人打印.lnk', '超人打印')
 }
 
 function uninstallStepShortcuts(): boolean {
@@ -435,16 +397,6 @@ function uninstallStepFiles(): boolean {
 // ---------------------------------------------------------------------------
 // combined CLI functions
 // ---------------------------------------------------------------------------
-
-export async function install(): Promise<void> {
-  std.out.printf('[install] starting...\n'); std.out.flush()
-  for (const step of INSTALL_STEPS) {
-    const ok = await runInstallStep(step.key)
-    std.out.printf('[install] %s: %s\n', step.label, ok ? 'OK' : 'FAIL'); std.out.flush()
-    if (!ok) return
-  }
-  std.out.printf('[install] done\n'); std.out.flush()
-}
 
 export function uninstall(): void {
   std.out.printf('[uninstall] starting...\n'); std.out.flush()

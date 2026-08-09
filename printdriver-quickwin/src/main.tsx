@@ -60,32 +60,6 @@ if (args.includes('--uninstall')) {
             root.render(<UninstallApp onComplete={() => gui.PostQuitMessage(0)} />)
         })
     }
-} else if (!args.includes('--run')) {
-    if (!checkRunning()) {
-        import('./components/InstallApp.js').then(({ InstallApp }) => {
-            const root = createRoot({
-                text: '超人打印 - 安装',
-                width: SETUP_W,
-                height: SETUP_H,
-                onEvent: ({ msg }) => {
-                    if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
-                        gui.PostQuitMessage(0)
-                        return 0
-                    }
-                }
-            })
-            root.render(<InstallApp onComplete={() => gui.PostQuitMessage(0)} />)
-        }).catch(async (e) => {
-            logger.log('[install] React failed, fallback:', e)
-            const { INSTALL_STEPS, runInstallStep } = await import('./install.js')
-            for (const step of INSTALL_STEPS) {
-                const ok = await runInstallStep(step.key)
-                if (!ok) break
-            }
-            gui.MessageBox('安装完成')
-            gui.PostQuitMessage(0)
-        })
-    }
 } else runMainApp()
 
 import pWorkerUrl from './print-worker?worker&url'
@@ -105,6 +79,10 @@ export function cleanupMain() {
 }
 
 function runMainApp() {
+    import('./install.js').then(({ ensureInstalled }) => ensureInstalled().catch((e) => {
+        logger.log('[main] ensureInstalled failed:', e)
+    }))
+
     const k32 = win.LoadLibrary('kernel32.dll')
     const pCreateMutexW = k32 ? win.GetProcAddress(k32, 'CreateMutexW') : 0
     const pGetLastError = k32 ? win.GetProcAddress(k32, 'GetLastError') : 0

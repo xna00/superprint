@@ -52,11 +52,11 @@ async function downloadTo(urls: string[], tmp: string): Promise<boolean> {
   return false
 }
 
-function startProcess(exePath: string): boolean {
+function startProcess(exePath: string, args?: string): boolean {
   const k32 = win.LoadLibrary('kernel32.dll')
   const p = k32 ? win.GetProcAddress(k32, 'CreateProcessW') : null
   if (!p) return false
-  const cmd = strToWideBuf('"' + exePath + '"')
+  const cmd = strToWideBuf('"' + exePath + '"' + (args ? ' ' + args : ''))
   const si = new ArrayBuffer(68)
   new DataView(si).setUint32(0, 68, true)
   const pi = new ArrayBuffer(24)
@@ -69,7 +69,20 @@ function startProcess(exePath: string): boolean {
   return ret !== 0
 }
 
+const _k32 = win.LoadLibrary('kernel32.dll')
+const _pMoveFileExW = _k32 ? win.GetProcAddress(_k32, 'MoveFileExW') : null
+
+function moveFileExW(oldPath: string, newPath: string): boolean {
+  if (!_pMoveFileExW) return false
+  const ret = ffiCall(_pMoveFileExW,
+    [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
+    [strToWideBuf(oldPath), strToWideBuf(newPath), 3], // MOVEFILE_REPLACE_EXISTING=1 | MOVEFILE_COPY_ALLOWED=2
+    FFI_TYPE_SINT32)
+  return ret !== 0
+}
+
 async function main() {
+  const localAppData = std.getenv('LOCALAPPDATA') || '.'
   const tmpDir = std.getenv('TEMP') || '.'
   cleanupOldTemp(tmpDir)
 
@@ -105,9 +118,18 @@ async function main() {
   std.out.flush()
   try { const p = std.popen('taskkill /im QuickSuperPrint.exe /f', 'r'); if (p) p.close() } catch (e) { std.err.printf('kill old instance failed: %s\n', String(e)) }
 
+  const installDir = localAppData + '\\SuperPrint'
+  const target = installDir + '\\QuickSuperPrint.exe'
+  try { os.mkdir(installDir) } catch (_) {}
+  if (!moveFileExW(tmp, target)) {
+    gui.MessageBox('替换程序文件失败')
+    std.exit(1)
+  }
+  try { os.remove(tmp) } catch (_) {}
+
   std.out.printf('Starting...\n')
   std.out.flush()
-  if (!startProcess(tmp)) {
+  if (!startProcess(target, '--run')) {
     gui.MessageBox('启动更新程序失败')
     std.exit(1)
   }
