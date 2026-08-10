@@ -330,14 +330,47 @@ function ensureShortcuts(): void {
 }
 
 function pruneShortcuts(): void {
-  const r = os.readdir(START_MENU_DIR)
-  const names = r ? r[0] : null
-  if (!names) return
-  for (const n of names) {
-    if (!SHORTCUT_WHITELIST.some(s => s.name === n)) {
-      deleteFileW(START_MENU_DIR + '\\' + n)
+  const findFirst = k32proc('FindFirstFileW')
+  const findNext = k32proc('FindNextFileW')
+  const findClose = k32proc('FindClose')
+  if (!findFirst || !findNext || !findClose) return
+
+  const FIND_DATA_SIZE = 592
+  const findData = new ArrayBuffer(FIND_DATA_SIZE)
+  const fdPtr = bufPtr(findData)
+  const pattern = START_MENU_DIR + '\\*.*'
+  const hFind = ffiCall(findFirst,
+    [FFI_TYPE_POINTER, FFI_TYPE_POINTER],
+    [strToWideBuf(pattern), findData], FFI_TYPE_UINT64)
+  if (!hFind) return
+
+  const NAME_OFFSET = 44
+
+  function readFileName(): string {
+    let s = ''
+    for (let i = 0; i < 260; i++) {
+      const ch = readByte(fdPtr + NAME_OFFSET + i * 2) |
+                (readByte(fdPtr + NAME_OFFSET + i * 2 + 1) << 8)
+      if (ch === 0) break
+      s += String.fromCharCode(ch)
+    }
+    return s
+  }
+
+  let name = readFileName()
+  if (name !== '.' && name !== '..' && !SHORTCUT_WHITELIST.some(s => s.name === name)) {
+    deleteFileW(START_MENU_DIR + '\\' + name)
+  }
+
+  while (ffiCall(findNext, [FFI_TYPE_UINT64, FFI_TYPE_POINTER],
+    [hFind, findData], FFI_TYPE_SINT32)) {
+    name = readFileName()
+    if (name !== '.' && name !== '..' && !SHORTCUT_WHITELIST.some(s => s.name === name)) {
+      deleteFileW(START_MENU_DIR + '\\' + name)
     }
   }
+
+  ffiCall(findClose, [FFI_TYPE_UINT64], [hFind], FFI_TYPE_SINT32)
 }
 
 function ensureAutoStart(): boolean {
