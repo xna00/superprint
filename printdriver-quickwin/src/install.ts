@@ -7,7 +7,25 @@ import { strToWideBuf, readPtr, guidStrToBytes } from './utils.js'
 
 const INSTALL_DIR = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
 const TARGET_EXE = INSTALL_DIR + '\\QuickSuperPrint.exe'
+const SETUP_EXE = INSTALL_DIR + '\\QuickSuperPrint_Setup.exe'
 const START_MENU_DIR = (std.getenv('APPDATA') || '') + '\\Microsoft\\Windows\\Start Menu\\Programs\\超人打印'
+
+interface ShortcutDef {
+  name: string
+  target: string
+  args: string
+  desc: string
+}
+
+const SHORTCUT_WHITELIST: ShortcutDef[] = [
+  { name: '超人打印.lnk', target: TARGET_EXE, args: '--run', desc: '超人打印' },
+  { name: '卸载.lnk', target: TARGET_EXE, args: '--uninstall', desc: '卸载超人打印' },
+  { name: '更新.lnk', target: SETUP_EXE, args: '-o CON', desc: '更新超人打印' },
+  // 需要时取消注释即可恢复
+  // { name: '超人打印(控制台).lnk', target: TARGET_EXE, args: '-o CON --run', desc: '超人打印' },
+  // { name: '卸载(控制台).lnk', target: TARGET_EXE, args: '-o CON --uninstall', desc: '卸载超人打印' },
+  // { name: '超人打印(调试).lnk', target: TARGET_EXE, args: '-d -o LOG --run', desc: '超人打印' },
+]
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -283,8 +301,6 @@ const CDN_URLS = [
   'https://superprint.xna00.top/printdriver/QuickSuperPrint.exe',
 ]
 
-const SETUP_EXE = INSTALL_DIR + '\\QuickSuperPrint_Setup.exe'
-
 async function ensureSetupExe(): Promise<void> {
   if (existsW(SETUP_EXE)) return
   const t = Date.now()
@@ -306,14 +322,22 @@ async function ensureSetupExe(): Promise<void> {
 
 function ensureShortcuts(): void {
   mkdirW(START_MENU_DIR)
-  createShortcut(TARGET_EXE, '-o CON --run', START_MENU_DIR + '\\超人打印(控制台).lnk', '超人打印')
-  createShortcut(TARGET_EXE, '-o CON --uninstall', START_MENU_DIR + '\\卸载(控制台).lnk', '卸载超人打印')
-  createShortcut(TARGET_EXE, '-d -o LOG --run', START_MENU_DIR + '\\超人打印(调试).lnk', '超人打印')
-  createShortcut(TARGET_EXE, '--run', START_MENU_DIR + '\\超人打印.lnk', '超人打印')
-  createShortcut(TARGET_EXE, '--uninstall', START_MENU_DIR + '\\卸载.lnk', '卸载超人打印')
-  createShortcut(SETUP_EXE, '-o CON', START_MENU_DIR + '\\更新.lnk', '更新超人打印')
+  for (const s of SHORTCUT_WHITELIST) {
+    createShortcut(s.target, s.args, START_MENU_DIR + '\\' + s.name, s.desc)
+  }
   const userProfile = std.getenv('USERPROFILE') || ''
   createShortcut(TARGET_EXE, '--run', userProfile + '\\Desktop\\超人打印.lnk', '超人打印')
+}
+
+function pruneShortcuts(): void {
+  const r = os.readdir(START_MENU_DIR)
+  const names = r ? r[0] : null
+  if (!names) return
+  for (const n of names) {
+    if (!SHORTCUT_WHITELIST.some(s => s.name === n)) {
+      deleteFileW(START_MENU_DIR + '\\' + n)
+    }
+  }
 }
 
 function ensureAutoStart(): boolean {
@@ -325,6 +349,7 @@ export async function ensureInstalled(): Promise<void> {
   try { os.mkdir(INSTALL_DIR) } catch (_) {}
   await ensureSetupExe()
   ensureShortcuts()
+  pruneShortcuts()
   ensureAutoStart()
 }
 
