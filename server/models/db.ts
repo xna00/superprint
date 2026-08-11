@@ -266,6 +266,12 @@ export const ensurePrinterBindKey = (id: number): string => {
   return bindKey;
 };
 
+export const regeneratePrinterBindKey = (id: number): string => {
+  const bindKey = randomBytes(16).toString("hex");
+  updatePrinterBindKey(id, bindKey);
+  return bindKey;
+};
+
 export const findPrinterIdByBindKey = (bindKey: string): number | undefined =>
   db
     .prepare(

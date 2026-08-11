@@ -11,6 +11,7 @@ import {
   listPrintersByComputerId,
   listPrintTasksByPrinterId,
   ensurePrinterBindKey,
+  regeneratePrinterBindKey as dbRegeneratePrinterBindKey,
   listWeixinKfUsersByPrinterId,
   unlinkPrinterFromWeixinKfUser,
 } from "../models/db.ts";
@@ -92,6 +93,17 @@ export const getPrinterKfLink = async (printerName: string) => {
     throw new ApiError(404, {}, "打印机不存在", "ENTITY_NOT_FOUND");
   }
   const bindKey = ensurePrinterBindKey(printer.id);
+  const baseLink = await getKfBaseLink(PRINT_MAN_KF_OPEN_ID);
+  return { link: `${baseLink}&scene_param=${encodeURIComponent(bindKey)}` };
+};
+
+export const regeneratePrinterBindKey = async (printerId: number) => {
+  const computerId = getExistingComputerId();
+  const printer = findPrinterById(printerId);
+  if (!printer || printer.computerId !== computerId) {
+    throw new ApiError(404, {}, "打印机不存在", "ENTITY_NOT_FOUND");
+  }
+  const bindKey = dbRegeneratePrinterBindKey(printer.id);
   const baseLink = await getKfBaseLink(PRINT_MAN_KF_OPEN_ID);
   return { link: `${baseLink}&scene_param=${encodeURIComponent(bindKey)}` };
 };

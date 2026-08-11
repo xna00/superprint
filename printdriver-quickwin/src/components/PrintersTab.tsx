@@ -141,6 +141,35 @@ const showManagerWindow = async (printerId: number, printerName: string) => {
     renderUsers()
 }
 
+function QrWindow({ printerId, name }: { printerId: number; name: string }) {
+    const [link, setLink] = useState<string | null>(null)
+    useEffect(() => {
+        let cancelled = false
+        api.computer.getPrinterKfLink(name)
+            .then(res => { if (!cancelled) setLink(res.link) })
+            .catch(e => { logger.log('[qr] getPrinterKfLink failed: ' + String(e)) })
+        return () => { cancelled = true }
+    }, [name])
+    const onRegenerate = async () => {
+        try {
+            const res = await api.computer.regeneratePrinterBindKey(printerId)
+            setLink(res.link)
+        } catch (e) {
+            logger.log('[qr] regeneratePrinterBindKey failed: ' + String(e))
+        }
+    }
+    const size = 200
+    return (
+        <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, gap: 8 }}>
+            <w type="STATIC" ws={VISIBLE} text={name} style={{ height: 24, width: 'auto' }} />
+            {link
+                ? <QRCode text={link} size={size} />
+                : <w type="STATIC" ws={VISIBLE} text={'获取二维码失败'} style={{ height: 24, width: 'auto' }} />}
+            <Button onClick={onRegenerate} style={{ width: 80, height: 24 }}>重新生成</Button>
+        </w>
+    )
+}
+
 export function PrintersTab({ computerId, computerName, wsStatus, printers, onTogglePrinter, onSaveComputerName, onResetComputerName }: PrintersTabProps) {
     const columns: Column<PrinterRow>[] = [
         { name: '打印机名', dataIndex: 'name' },
@@ -158,7 +187,7 @@ export function PrintersTab({ computerId, computerName, wsStatus, printers, onTo
             dataIndex: 'qr',
             align: 'center',
             cellStyle: (record) => record.enabled ? { cursor: 32649 } : { color: 0x808080, cursor: 32648 },
-            onCellClick: (record) => { if (record.enabled) showQrWindow(record.name) }
+            onCellClick: (record) => { if (record.enabled && record.id != null) showQrWindow(record.id, record.name) }
         },
         {
             name: '',
@@ -176,28 +205,14 @@ export function PrintersTab({ computerId, computerName, wsStatus, printers, onTo
     }, [computerName])
     const maskDeviceId = (id: string) =>
         id.length > 6 ? id.slice(0, 6) + '...' : id
-    const showQrWindow = async (name: string) => {
+    const showQrWindow = async (printerId: number, name: string) => {
         const size = 200
-        let link: string | null = null
-        try {
-            const res = await api.computer.getPrinterKfLink(name)
-            link = res.link
-        } catch (e) {
-            logger.log('[qr] getPrinterKfLink failed: ' + String(e))
-        }
         const root = createRoot({
             text: '打印机二维码',
             width: 300,
-            height: size + 80,
+            height: size + 100,
         })
-        root.render(
-            <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1 }}>
-                <w type="STATIC" ws={VISIBLE} text={name} style={{ height: 24, width: 'auto' }} />
-                {link
-                    ? <QRCode text={link} size={size} />
-                    : <w type="STATIC" ws={VISIBLE} text={'获取二维码失败'} style={{ height: 24, width: 'auto' }} />}
-            </w>
-        )
+        root.render(<QrWindow printerId={printerId} name={name} />)
     }
     const data: PrinterRow[] = printers.map(p => ({
         name: p.name,
