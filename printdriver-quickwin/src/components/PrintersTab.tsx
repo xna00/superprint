@@ -177,7 +177,7 @@ export function PrintersTab({ computerId, computerName, wsStatus, printers, onTo
     const maskDeviceId = (id: string) =>
         id.length > 6 ? id.slice(0, 6) + '...' : id
     const showQrWindow = async (name: string) => {
-        const size = 220
+        const size = 200
         let link: string | null = null
         try {
             const res = await api.computer.getPrinterKfLink(name)
@@ -187,8 +187,8 @@ export function PrintersTab({ computerId, computerName, wsStatus, printers, onTo
         }
         const root = createRoot({
             text: '打印机二维码',
-            width: size + 16,
-            height: size + 40,
+            width: 300,
+            height: size + 80,
         })
         root.render(
             <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1 }}>

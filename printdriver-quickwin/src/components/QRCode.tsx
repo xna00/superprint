@@ -2,9 +2,11 @@ import { useRef, useEffect } from 'react'
 import * as gui from 'gui'
 import qrcode from 'qrcode-generator'
 import { createBitmap, deleteObject } from '../qr.js'
+import { scaleFactor } from 'quickwin/lib/react-qw/reconciler.js'
 
 const VISIBLE = gui.WindowStyle.VISIBLE
 const SS_BITMAP = gui.StaticStyleEx.BITMAP
+const SS_CENTERIMAGE = gui.StaticStyleEx.CENTERIMAGE
 const STM_SETIMAGE = gui.StaticMsg.SETIMAGE
 const IMAGE_BITMAP = gui.ImageType.BITMAP
 
@@ -21,16 +23,17 @@ export function QRCode({ text, size }: QRCodeProps) {
         const hStatic = hStaticRef.current
         if (!hStatic || !text) return
 
+        const px = Math.round(size * scaleFactor)
         const qr = qrcode(0, 'M')
         qr.addData(text)
         qr.make()
         const moduleCount = qr.getModuleCount()
-        const scale = size / moduleCount
+        const scale = px / moduleCount
 
-        const stride = size * 4
-        const buf = new Uint8Array(size * stride)
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
+        const stride = px * 4
+        const buf = new Uint8Array(px * stride)
+        for (let y = 0; y < px; y++) {
+            for (let x = 0; x < px; x++) {
                 const moduleY = Math.min(Math.floor(y / scale), moduleCount - 1)
                 const moduleX = Math.min(Math.floor(x / scale), moduleCount - 1)
                 const dark = qr.isDark(moduleY, moduleX)
@@ -47,7 +50,7 @@ export function QRCode({ text, size }: QRCodeProps) {
             deleteObject(hbmpRef.current)
         }
 
-        const hbmp = createBitmap(size, size, 32, buf.buffer)
+        const hbmp = createBitmap(px, px, 32, buf.buffer)
         hbmpRef.current = hbmp
 
         const oldBmp = gui.SendMessage(hStatic, STM_SETIMAGE, IMAGE_BITMAP, hbmp)
@@ -71,6 +74,6 @@ export function QRCode({ text, size }: QRCodeProps) {
     }, [])
 
     return (
-        <w type="STATIC" ws={VISIBLE | SS_BITMAP} ref={hStaticRef} style={{ width: size, height: size }} />
+        <w type="STATIC" ws={VISIBLE | SS_BITMAP | SS_CENTERIMAGE} ref={hStaticRef} style={{ width: size, height: size }} />
     )
 }
