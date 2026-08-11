@@ -141,31 +141,42 @@ const showManagerWindow = async (printerId: number, printerName: string) => {
     renderUsers()
 }
 
+type QrState =
+    | { status: 'loading' }
+    | { status: 'ready'; link: string }
+    | { status: 'error' }
+
 function QrWindow({ printerId, name }: { printerId: number; name: string }) {
-    const [link, setLink] = useState<string | null>(null)
+    const [state, setState] = useState<QrState>({ status: 'loading' })
     useEffect(() => {
         let cancelled = false
+        setState({ status: 'loading' })
         api.computer.getPrinterKfLink(name)
-            .then(res => { if (!cancelled) setLink(res.link) })
-            .catch(e => { logger.log('[qr] getPrinterKfLink failed: ' + String(e)) })
+            .then(res => { if (!cancelled) setState({ status: 'ready', link: res.link }) })
+            .catch(e => { logger.log('[qr] getPrinterKfLink failed: ' + String(e)); if (!cancelled) setState({ status: 'error' }) })
         return () => { cancelled = true }
     }, [name])
     const onRegenerate = async () => {
+        setState({ status: 'loading' })
         try {
             const res = await api.computer.regeneratePrinterBindKey(printerId)
-            setLink(res.link)
+            setState({ status: 'ready', link: res.link })
         } catch (e) {
             logger.log('[qr] regeneratePrinterBindKey failed: ' + String(e))
+            setState({ status: 'error' })
         }
     }
     const size = 200
     return (
         <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, gap: 8 }}>
             <w type="STATIC" ws={VISIBLE} text={name} style={{ height: 24, width: 'auto' }} />
-            {link
-                ? <QRCode text={link} size={size} />
-                : <w type="STATIC" ws={VISIBLE} text={'获取二维码失败'} style={{ height: 24, width: 'auto' }} />}
-            <Button onClick={onRegenerate} style={{ width: 80, height: 24 }}>重新生成</Button>
+            <w type="STATIC" ws={VISIBLE} text={'使用微信扫描二维码绑定打印机'} style={{ height: 24, width: 'auto' }} />
+            {state.status === 'ready'
+                ? <QRCode text={state.link} size={size} />
+                : state.status === 'loading'
+                    ? <w type="STATIC" ws={VISIBLE} text={'正在加载...'} style={{ height: 24, width: 'auto' }} />
+                    : <w type="STATIC" ws={VISIBLE} text={'获取二维码失败'} style={{ height: 24, width: 'auto' }} />}
+            <Button onClick={onRegenerate} disabled={state.status === 'loading'} style={{ width: 80, height: 24 }}>重新生成</Button>
         </w>
     )
 }
@@ -210,7 +221,7 @@ export function PrintersTab({ computerId, computerName, wsStatus, printers, onTo
         const root = createRoot({
             text: '打印机二维码',
             width: 300,
-            height: size + 100,
+            height: size + 180,
         })
         root.render(<QrWindow printerId={printerId} name={name} />)
     }
