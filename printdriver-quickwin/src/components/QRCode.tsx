@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react'
 import * as gui from 'gui'
-import qrcode from 'qrcode-generator'
+import { generate, correction, mode } from 'lean-qr'
 import { createBitmap, deleteObject } from '../qr.js'
 import { scaleFactor } from 'quickwin/lib/react-qw/reconciler.js'
 
@@ -24,10 +24,12 @@ export function QRCode({ text, size }: QRCodeProps) {
         if (!hStatic || !text) return
 
         const px = Math.round(size * scaleFactor)
-        const qr = qrcode(0, 'M')
-        qr.addData(text)
-        qr.make()
-        const moduleCount = qr.getModuleCount()
+        const qr = generate(text, {
+            minCorrectionLevel: correction.M,
+            maxCorrectionLevel: correction.M,
+            modes: [mode.numeric, mode.alphaNumeric, mode.ascii, mode.utf8],
+        })
+        const moduleCount = qr.size
         const scale = px / moduleCount
 
         const stride = px * 4
@@ -36,7 +38,7 @@ export function QRCode({ text, size }: QRCodeProps) {
             for (let x = 0; x < px; x++) {
                 const moduleY = Math.min(Math.floor(y / scale), moduleCount - 1)
                 const moduleX = Math.min(Math.floor(x / scale), moduleCount - 1)
-                const dark = qr.isDark(moduleY, moduleX)
+                const dark = qr.get(moduleX, moduleY)
                 const off = y * stride + x * 4
                 const v = dark ? 0 : 255
                 buf[off] = v

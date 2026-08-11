@@ -21,7 +21,7 @@
     "@types/react": "^19.2.17",
     "api": "*",
     "jpeg-js": "^0.4.4",
-    "qrcode-generator": "^2.0.4",
+    "lean-qr": "^2.7.2",
     "quickwin": "^2026.8.6-11405",
     "react": "^19.2.7",
     "uzip": "^0.20201231.0",
