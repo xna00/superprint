@@ -125,13 +125,20 @@ export const sendTextMessage = async (
     },
     body: JSON.stringify(requestBody)
   })
-  
-  const data = await response.json() as SendMessageResponse
-  
+
+  const raw = await response.text()
+  let data: SendMessageResponse
+  try {
+    data = JSON.parse(raw) as SendMessageResponse
+  } catch (error) {
+    logger.log(`send_msg 响应解析失败 status=${response.status} body=${raw}`)
+    throw new Error(`发送消息失败: 响应解析失败 (status: ${response.status}, body: ${raw})`)
+  }
+
   if (data.errcode !== 0) {
     throw new Error(`发送消息失败: ${data.errmsg} (errcode: ${data.errcode})`)
   }
-  
+
   return data.msgid
 }
 
@@ -142,12 +149,10 @@ export const sendWelcomeMsg = async (
   content: string
 ): Promise<string> => {
   const accessToken = await getAccessToken()
-  const url = `https://qyapi.weixin.qq.com/cgi-bin/kf/send_welcome_msg?access_token=${accessToken}`
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/kf/send_msg_on_event?access_token=${accessToken}`
 
   const requestBody = {
     code,
-    touser: externalUserId,
-    open_kfid: openKfId,
     msgtype: 'text',
     text: {
       content
@@ -162,7 +167,14 @@ export const sendWelcomeMsg = async (
     body: JSON.stringify(requestBody)
   })
 
-  const data = await response.json() as SendMessageResponse
+  const raw = await response.text()
+  let data: SendMessageResponse
+  try {
+    data = JSON.parse(raw) as SendMessageResponse
+  } catch (error) {
+    logger.log(`send_welcome_msg 响应解析失败 status=${response.status} body=${raw}`)
+    throw new Error(`发送欢迎语失败: 响应解析失败 (status: ${response.status}, body: ${raw})`)
+  }
 
   if (data.errcode !== 0) {
     throw new Error(`发送欢迎语失败: ${data.errmsg} (errcode: ${data.errcode})`)

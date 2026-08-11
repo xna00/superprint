@@ -642,7 +642,6 @@ const handleEnterSessionEvents = async (events: (Message & { msgtype: 'event' })
       }
       if (result.changes > 0 && printer) {
         logger.log(`✅ 用户 ${externalUserId} 经客服 ${openKfId} 绑定打印机 ${printer.name} (#${printerId})`)
-        await sendTextMessage(`✅ 已绑定打印机「${printer.name}」，现在可以发送文件打印了`, openKfId, externalUserId)
         if (event.welcome_code) {
           try {
             await sendWelcomeMsg(
@@ -651,9 +650,15 @@ const handleEnterSessionEvents = async (events: (Message & { msgtype: 'event' })
               externalUserId,
               `✅ 已绑定打印机「${printer.name}」，现在可以发送文件打印了`
             )
+            logger.log(`✅ 欢迎语已发送: externalUserId=${externalUserId}`)
           } catch (error) {
             logger.error('发送欢迎语失败:', error)
           }
+        }
+        try {
+          await sendTextMessage(`✅ 已绑定打印机「${printer.name}」，现在可以发送文件打印了`, openKfId, externalUserId)
+        } catch (error) {
+          logger.error('发送绑定确认消息失败:', error)
         }
       }
       batchgetCustomerInfo(externalUserId)
