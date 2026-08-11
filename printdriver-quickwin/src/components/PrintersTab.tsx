@@ -192,10 +192,10 @@ export function PrintersTab({ computerId, computerName, wsStatus, printers, onTo
         })
         root.render(
             <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1 }}>
-                <w type="STATIC" ws={VISIBLE} text={name} style={{ height: 24 }} />
+                <w type="STATIC" ws={VISIBLE} text={name} style={{ height: 24, width: 'auto' }} />
                 {link
                     ? <QRCode text={link} size={size} />
-                    : <w type="STATIC" ws={VISIBLE} text={'获取二维码失败'} style={{ height: 24 }} />}
+                    : <w type="STATIC" ws={VISIBLE} text={'获取二维码失败'} style={{ height: 24, width: 'auto' }} />}
             </w>
         )
     }
