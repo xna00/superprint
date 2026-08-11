@@ -170,7 +170,7 @@ function QrWindow({ printerId, name }: { printerId: number; name: string }) {
     return (
         <w type="STATIC" ws={VISIBLE | CLIPCHILDREN} style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, gap: 8 }}>
             <w type="STATIC" ws={VISIBLE} text={name} style={{ height: 24, width: 'auto' }} />
-            <w type="STATIC" ws={VISIBLE} text={'使用微信扫描二维码绑定打印机'} style={{ height: 24, width: 'auto' }} />
+            <w type="STATIC" ws={VISIBLE} text={'微信扫码绑定打印机'} style={{ height: 24, width: 'auto' }} />
             {state.status === 'ready'
                 ? <QRCode text={state.link} size={size} />
                 : state.status === 'loading'
