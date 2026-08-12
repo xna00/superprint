@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { PrintTaskDetail } from './pages/PrintTaskDetail'
+import { Landing } from './pages/Landing'
 
 function HiddenDebugTrigger() {
   const hintRef = useRef<HTMLDivElement>(null)
@@ -85,47 +86,25 @@ const handleTokenFromUrl = () => {
   }
 }
 
-declare global {
-  interface Window {
-    WeixinJSBridge?: {
-      call: (method: string) => void
-    }
-  }
-}
-
-const closeWindow = () => {
-  if (typeof window.WeixinJSBridge !== 'undefined') {
-    window.WeixinJSBridge.call('closeWindow')
-  } else if (document.addEventListener) {
-    document.addEventListener('WeixinJSBridgeReady', () => {
-      window.WeixinJSBridge?.call('closeWindow')
-    }, false)
-  } else {
-    window.close()
-  }
-}
-
 function App() {
-  const [page, setPage] = useState<'printTaskDetail' | 'close'>('printTaskDetail')
+  const [page, setPage] = useState<'printTaskDetail' | 'landing'>('landing')
 
   useEffect(() => {
-    handleTokenFromUrl()
-
     const path = window.location.pathname
     const params = new URLSearchParams(window.location.search)
     const printTaskId = params.get('id')
 
     if (path === '/printTask' && printTaskId) {
+      handleTokenFromUrl()
       setPage('printTaskDetail')
     } else {
-      setPage('close')
-      setTimeout(closeWindow, 100)
+      setPage('landing')
     }
   }, [])
 
   return (
     <>
-      {page === 'printTaskDetail' ? <PrintTaskDetail /> : null}
+      {page === 'printTaskDetail' ? <PrintTaskDetail /> : <Landing />}
       <HiddenDebugTrigger />
     </>
   )
