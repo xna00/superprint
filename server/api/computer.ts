@@ -86,10 +86,10 @@ export const computerInfo = async (computerId: string) => {
   return { ...computer, printers };
 };
 
-export const getPrinterKfLink = async (printerName: string) => {
+export const getPrinterKfLink = async (printerId: number) => {
   const computerId = getExistingComputerId();
-  const printer = findPrinterByComputerIdAndName(computerId, printerName);
-  if (!printer) {
+  const printer = findPrinterById(printerId);
+  if (!printer || printer.computerId !== computerId) {
     throw new ApiError(404, {}, "打印机不存在", "ENTITY_NOT_FOUND");
   }
   const bindKey = ensurePrinterBindKey(printer.id);

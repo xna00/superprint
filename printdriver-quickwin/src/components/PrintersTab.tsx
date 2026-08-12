@@ -151,11 +151,11 @@ function QrWindow({ printerId, name }: { printerId: number; name: string }) {
     useEffect(() => {
         let cancelled = false
         setState({ status: 'loading' })
-        api.computer.getPrinterKfLink(name)
+        api.computer.getPrinterKfLink(printerId)
             .then(res => { if (!cancelled) setState({ status: 'ready', link: res.link }) })
             .catch(e => { logger.log('[qr] getPrinterKfLink failed: ' + String(e)); if (!cancelled) setState({ status: 'error' }) })
         return () => { cancelled = true }
-    }, [name])
+    }, [printerId])
     const onRegenerate = async () => {
         setState({ status: 'loading' })
         try {
