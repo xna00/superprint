@@ -1,174 +1,167 @@
-import type { ReactNode } from 'react'
+const steps = [
+  {
+    n: '1',
+    title: '安装',
+    desc: '在连接打印机的电脑上安装客户端',
+  },
+  {
+    n: '2',
+    title: '绑定',
+    desc: '家人用微信扫描打印机二维码',
+  },
+  {
+    n: '3',
+    title: '打印',
+    desc: '在微信里发送文件，打印机会自动打印',
+  },
+]
 
-const features = [
+const abilities = [
   {
-    title: '微信扫码绑定',
-    desc: '扫打印机二维码进入客服会话即完成绑定，支持多用户绑多台打印机',
+    n: '01',
+    title: '格式',
+    desc: '支持 PDF、Word、Excel、PPT、图片',
   },
   {
-    title: '聊天内直接打印',
-    desc: '在微信/企业微信客服会话中转发文件即可发起打印，无需跳转其他应用',
-  },
-  {
-    title: '多格式支持',
-    desc: 'PDF、Word、Excel、PPT、图片，全格式覆盖',
-  },
-  {
-    title: '多文件合并',
-    desc: '待确认期间连续转发的文件自动并入同一任务，一单打完',
-  },
-  {
+    n: '02',
     title: '打印设置',
-    desc: '双面/单面、长边/短边翻页，可在任务详情页修改',
+    desc: '支持双面/单面、长边/短边翻页',
   },
   {
-    title: '任务详情',
-    desc: 'H5 页面查看文件清单、预览 PDF、切换打印机、保存并打印',
-  },
-  {
-    title: '自动确认',
-    desc: '60 秒无操作自动确认，人不在也能按时出纸',
-  },
-  {
+    n: '03',
     title: '结果通知',
-    desc: '打印完成、失败实时推送，失败文件可一键重试',
+    desc: '打印完成或失败会收到通知',
+  },
+  {
+    n: '04',
+    title: '多人使用',
+    desc: '支持多个家人绑定同一台打印机',
   },
 ]
 
-const scenarios = [
-  {
-    title: '家庭',
-    desc: '孩子作业、老师发在群里的试卷，长按消息转发即打印，老人小孩都会用。',
-  },
-  {
-    title: '移动办公',
-    desc: '人在外面、文件在手机里，随时把文件打回办公室或家里的打印机。',
-  },
-  {
-    title: '机构增值',
-    desc: '多用户多打印机统一管理、私有部署；附带公文识别、PDF 转换、PDF 转 Word 等文档服务。',
-  },
-]
+const noNeeds = ['U 盘', '登录电脑', '装小程序', '跑打印店']
 
-const reasons = [
-  {
-    title: '人人有微信，零学习成本',
-    desc: '绑定 + 转发就是全部操作，无需下载、注册或配置',
-  },
-  {
-    title: '信息不换生态',
-    desc: '从"群里收到作业"到"打印机出纸"全程留在微信里，省去文件反复存取跳转',
-  },
-  {
-    title: '对比更轻',
-    desc: '无需像云打印机那样装各家小程序，无需像 U 盘那样登录电脑，无需像传统网络打印那样配 IP 和驱动',
-  },
-]
-
-function SectionTitle({ children }: { children: ReactNode }) {
+function ChatMock() {
   return (
-    <h2 className="text-center text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-      {children}
-    </h2>
-  )
-}
+    <div className="w-full max-w-sm rounded-3xl bg-[#ededed] p-5 text-left shadow-xl ring-1 ring-black/5">
+      <div className="flex items-center justify-between pb-4 text-[13px] text-black/60">
+        <span>微信</span>
+        <span className="tracking-widest">•••</span>
+      </div>
 
-function SectionSub({ children }: { children: ReactNode }) {
-  return <p className="mx-auto mt-2 max-w-2xl text-center text-slate-500">{children}</p>
+      <div className="flex items-start gap-2">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#10aeff] text-xs text-white">
+          师
+        </div>
+        <div className="max-w-[82%] rounded-2xl rounded-tl-sm bg-white px-3.5 py-2.5 text-[13px] leading-snug text-black/90 shadow-sm">
+          明天要用的作业，麻烦打印一下
+          <div className="mt-2.5 flex items-center gap-2.5 rounded-lg border border-black/10 bg-[#f6f6f6] px-2.5 py-2">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded bg-red-50 text-[10px] font-semibold text-red-500">
+              PDF
+            </div>
+            <div className="text-[12px] leading-tight">
+              <div className="text-black/85">数学作业.pdf</div>
+              <div className="mt-0.5 text-black/40">2.3 MB</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="ml-10 mt-3 w-44 rounded-xl bg-white py-1 text-[13px] shadow-lg ring-1 ring-black/5">
+        <div className="px-3.5 py-2 text-black/60">复制</div>
+        <div className="px-3.5 py-2 text-black/60">收藏</div>
+        <div className="px-3.5 py-2 font-medium text-emerald-600">转发…</div>
+        <div className="px-3.5 py-2 text-red-500">删除</div>
+      </div>
+      <div className="ml-2 mt-1.5 text-[11px] text-black/40">长按文件 → 转发</div>
+
+      <div className="mt-5 flex justify-end">
+        <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-[#95ec69] px-3.5 py-2.5 text-[13px] leading-snug text-black/90 shadow-sm">
+          转发给 超人打印机
+        </div>
+      </div>
+
+      <div className="mt-5 text-center text-[11px] text-black/40">已发送到打印机 · 已打印</div>
+    </div>
+  )
 }
 
 export function Landing() {
   return (
-    <div className="min-h-screen bg-white text-left text-slate-700">
-      <header className="bg-gradient-to-b from-emerald-50 to-white">
-        <div className="mx-auto max-w-5xl px-6 pb-16 pt-20 text-center sm:pt-28">
-          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-4 py-1 text-sm font-medium text-emerald-700">
-            <span className="size-2 rounded-full bg-emerald-500" />
-            超人打印 SuperPrint
-          </span>
-          <h1 className="mx-auto mt-6 max-w-3xl text-3xl font-bold leading-tight tracking-tight text-slate-900 sm:text-5xl">
-            微信里转发文件，打印机直接出纸
-          </h1>
-          <p className="mx-auto mt-4 max-w-xl text-base text-slate-500 sm:text-lg">
-            不用装 App、不用登录电脑、不换聊天软件。
-          </p>
-          <div className="mt-8 flex justify-center gap-3 text-sm text-slate-400">
-            <span>绑定即用</span>
-            <span>·</span>
-            <span>转发即打</span>
-            <span>·</span>
-            <span>全程留在微信里</span>
+    <div className="landing-root min-h-screen bg-white text-left text-slate-700">
+      <header className="relative overflow-hidden">
+        <div className="mx-auto grid max-w-5xl items-center gap-14 px-6 pb-20 pt-16 sm:pt-20 lg:grid-cols-2 lg:pb-28">
+          <div>
+            <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3.5 py-1 text-[13px] font-medium text-emerald-600 ring-1 ring-emerald-100">
+              超人打印 SuperPrint
+            </span>
+            <h1 className="mt-6 text-4xl font-bold leading-tight tracking-tight text-slate-900 sm:text-[44px] sm:leading-[1.15]">
+              微信发送文件，即可打印
+            </h1>
+            <p className="mt-5 max-w-md text-[15px] leading-relaxed text-slate-500">
+              在连接打印机的电脑上安装客户端，用微信发送文件即可打印。
+            </p>
+            <div className="mt-7 flex flex-wrap gap-x-3 gap-y-2 text-[13px] text-slate-400">
+              <span>不装 App</span>
+              <span>·</span>
+              <span>不用开电脑</span>
+              <span>·</span>
+              <span>家人扫码即可使用</span>
+            </div>
+          </div>
+          <div className="flex justify-center lg:justify-end">
+            <ChatMock />
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-5xl px-6 py-16">
-        <SectionTitle>产品简介</SectionTitle>
-        <SectionSub>基于微信生态的云打印服务</SectionSub>
-        <p className="mx-auto mt-8 max-w-3xl leading-relaxed text-slate-600">
-          部署方只需在一台连接打印机的 Windows 电脑上安装常驻代理，机构成员或家庭成员用微信扫描打印机二维码完成一次绑定，
-          之后就能在企业微信客服会话里直接转发文档或图片，远程打印到指定打印机。
-        </p>
-        <p className="mx-auto mt-4 max-w-3xl leading-relaxed text-slate-600">
-          整个过程无需 U 盘、无需登录电脑、无需安装任何打印 App——微信人人都有，绑定即用。
-        </p>
-      </section>
-
-      <section className="bg-slate-50 py-16">
-        <div className="mx-auto max-w-5xl px-6">
-          <SectionTitle>核心功能</SectionTitle>
-          <SectionSub>从扫码绑定到出纸通知，完整的一站式打印链路</SectionSub>
-          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {features.map((f) => (
-              <div
-                key={f.title}
-                className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
-              >
-                <h3 className="text-base font-semibold text-slate-900">{f.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-500">{f.desc}</p>
+      <section className="mx-auto max-w-5xl px-6 py-16 lg:py-20">
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-900">怎么用</h2>
+        <div className="mt-10 grid gap-10 sm:grid-cols-3 sm:gap-6">
+          {steps.map((s) => (
+            <div key={s.n} className="border-t border-slate-200 pt-6">
+              <div className="flex size-8 items-center justify-center rounded-full bg-emerald-600 text-sm font-semibold text-white">
+                {s.n}
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-5xl px-6 py-16">
-        <SectionTitle>适用场景</SectionTitle>
-        <SectionSub>一个面向所有人的微信打印入口</SectionSub>
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
-          {scenarios.map((s) => (
-            <div key={s.title} className="rounded-xl border border-slate-200 p-6">
-              <h3 className="text-base font-semibold text-slate-900">{s.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-500">{s.desc}</p>
+              <h3 className="mt-4 text-base font-semibold text-slate-900">{s.title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-500">{s.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="bg-slate-50 py-16">
+      <section className="bg-slate-50 py-16 lg:py-20">
         <div className="mx-auto max-w-5xl px-6">
-          <SectionTitle>为什么选它</SectionTitle>
-          <div className="mt-10 space-y-6">
-            {reasons.map((r) => (
-              <div
-                key={r.title}
-                className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-6 sm:flex-row sm:items-center sm:gap-6"
-              >
-                <h3 className="shrink-0 text-base font-semibold text-slate-900 sm:w-48">
-                  {r.title}
-                </h3>
-                <p className="text-sm leading-relaxed text-slate-500">{r.desc}</p>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">功能</h2>
+          <div className="mt-10 grid gap-x-10 gap-y-8 md:grid-cols-2">
+            {abilities.map((a) => (
+              <div key={a.n} className="flex gap-5">
+                <span className="shrink-0 pt-0.5 font-mono text-sm text-emerald-600">{a.n}</span>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">{a.title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-500">{a.desc}</p>
+                </div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <footer className="mx-auto max-w-5xl px-6 py-12 text-center">
-        <p className="text-sm text-slate-500">
-          私有部署 · 自动更新 · 交付即可用，持续迭代
-        </p>
-        <p className="mt-4 text-xs text-slate-400">超人打印 SuperPrint</p>
+      <section className="mx-auto max-w-5xl px-6 py-16 lg:py-20">
+        <h2 className="text-center text-2xl font-semibold tracking-tight text-slate-900">
+          不需要
+        </h2>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-lg text-slate-400">
+          {noNeeds.map((t) => (
+            <span key={t} className="line-through decoration-slate-300">
+              {t}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <footer className="border-t border-slate-100 py-10 text-center">
+        <p className="text-xs text-slate-400">超人打印 SuperPrint · 安装即用 · 自动更新</p>
       </footer>
     </div>
   )

@@ -111,3 +111,20 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* 官网首页：去除文档式边框与居中，恢复通栏布局 */
+#root:has(.landing-root) {
+  width: 100%;
+  max-width: 100%;
+  border-inline: none;
+  text-align: left;
+}
+
+.landing-root h1,
+.landing-root h2 {
+  font-size: inherit;
+  line-height: inherit;
+  margin: 0;
+  font-weight: inherit;
+  color: inherit;
+}
