@@ -80,7 +80,7 @@ const convertToPdf = async (fileId: string, filename: string): Promise<string | 
   if (SUPPORTED_OFFICE_EXTS.includes(ext)) {
     const officePath = join(uploadsDir, fileId + ext)
     if (!existsSync(officePath)) return null
-    const pdfPath = convertOfficeToPdf(officePath)
+    const pdfPath = await convertOfficeToPdf(officePath)
     return pdfPath
   }
 

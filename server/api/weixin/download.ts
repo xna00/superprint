@@ -1,5 +1,5 @@
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs"
-import { join, extname } from "node:path"
+import { join, extname, basename } from "node:path"
 import { createHash } from "node:crypto"
 import { execSync } from "node:child_process"
 import { getAccessToken } from './token.ts'
@@ -7,6 +7,7 @@ import PDFDocument from "pdfkit"
 import { logger } from "../../logger.ts";
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads')
+const WPS2PDF_URL = 'http://localhost:8080'
 
 const ensureUploadsDir = (): void => {
   if (!existsSync(UPLOADS_DIR)) {
@@ -66,18 +67,61 @@ export const isPresentationFile = (ext: string): boolean => {
   return presentationExts.includes(ext.toLowerCase())
 }
 
-export const convertOfficeToPdf = (filePath: string): string | null => {
+const convertWithWpsApi = async (filePath: string, outputPath: string): Promise<boolean> => {
+  const form = new FormData()
+  form.append('file', new Blob([readFileSync(filePath)]), basename(filePath))
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 90000)
+
+  try {
+    const response = await fetch(`${WPS2PDF_URL}/convert`, {
+      method: 'POST',
+      body: form,
+      signal: controller.signal
+    })
+
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`
+      try {
+        const data = await response.json() as { detail?: string }
+        if (data.detail) detail = data.detail
+      } catch {
+        // 忽略响应解析失败
+      }
+      logger.error('WPS转PDF失败:', detail)
+      return false
+    }
+
+    const pdfBuffer = Buffer.from(await response.arrayBuffer())
+    if (pdfBuffer.length === 0) return false
+    writeFileSync(outputPath, pdfBuffer)
+    return true
+  } catch (error) {
+    logger.error('WPS转PDF请求失败:', error)
+    return false
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export const convertOfficeToPdf = async (filePath: string): Promise<string | null> => {
   const ext = extname(filePath)
   if (!isOfficeFile(ext)) return null
 
   const outputDir = join(UPLOADS_DIR)
   const absolutePath = filePath.startsWith('/') ? filePath : join(process.cwd(), filePath)
+  const pdfPath = filePath.replace(/\.[^.]+$/, '.pdf')
+
+  if (await convertWithWpsApi(absolutePath, pdfPath)) {
+    logger.log('WPS: PDF 转换完成', pdfPath)
+    return pdfPath
+  }
 
   try {
     const cmd = `libreoffice --headless --convert-to pdf --outdir "${outputDir}" "${absolutePath}"`
-    execSync(cmd, { stdio: 'ignore', shell: '/bin/sh' })
+    execSync(cmd, { stdio: 'ignore', shell: '/bin/sh', timeout: 90000 })
 
-    const pdfPath = filePath.replace(/\.[^.]+$/, '.pdf')
     if (existsSync(pdfPath)) {
       return pdfPath
     }
@@ -176,7 +220,7 @@ export const downloadMedia = async (
 
   const extLower = ext.toLowerCase()
   if (isOfficeFile(extLower)) {
-    const pdfPath = convertOfficeToPdf(filePath)
+    const pdfPath = await convertOfficeToPdf(filePath)
     if (pdfPath) {
       return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf'), converted: true }
     }

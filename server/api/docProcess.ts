@@ -95,7 +95,7 @@ export const processDocumentSimple = async (
   writeFileSync(docxPath, docxBuffer)
   logger.log(`docx 文件已保存: ${docxPath}`)
 
-  const pdfPath = convertOfficeToPdf(docxPath)
+  const pdfPath = await convertOfficeToPdf(docxPath)
   if (!pdfPath) {
     throw new Error('PDF 生成失败')
   }
@@ -134,7 +134,7 @@ export const processDocument = async (
   logger.log(`docx 文件已保存: ${docxPath}`)
 
   // 转换 docx 为 PDF 供前端预览
-  const pdfPath = convertOfficeToPdf(docxPath)
+  const pdfPath = await convertOfficeToPdf(docxPath)
   if (pdfPath) {
     logger.log(`PDF 预览文件已生成: ${pdfPath}`)
   } else {
