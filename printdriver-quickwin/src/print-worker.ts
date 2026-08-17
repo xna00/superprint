@@ -205,7 +205,7 @@ function renderPdfPageWithPDFium(procs: Record<string, number>, doc: number, pag
         ffiCall(procs['FPDFBitmap_FillRect'], [FFI_U64, FFI_S32, FFI_S32, FFI_S32, FFI_S32, FFI_U32],
             [bmp, 0, 0, bmpW, bmpH, 0xFFFFFFFF], FFI_VOID)
         ffiCall(procs['FPDF_RenderPageBitmap'], [FFI_U64, FFI_U64, FFI_S32, FFI_S32, FFI_S32, FFI_S32, FFI_S32, FFI_U32],
-            [bmp, page, 0, 0, bmpW, bmpH, rotate, 0], FFI_VOID)
+            [bmp, page, 0, 0, bmpW, bmpH, rotate, 0x10], FFI_VOID)
 
         const stride = ffiCall(procs['FPDFBitmap_GetStride'], [FFI_U64], [bmp], FFI_S32)
         const ptr = ffiCall(procs['FPDFBitmap_GetBuffer'], [FFI_U64], [bmp], FFI_PTR)
