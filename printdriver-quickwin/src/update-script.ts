@@ -136,7 +136,9 @@ async function main() {
 
   std.out.printf('Starting...\n')
   std.out.flush()
-  if (!startProcess(target, '--run')) {
+  // 若由主程序的兜底逻辑带 --noretry 启动，则透传给新实例，避免其再次触发兜底造成死循环
+  const passArgs = scriptArgs.includes('--noretry') ? '--run --noretry' : '--run'
+  if (!startProcess(target, passArgs)) {
     gui.MessageBox('启动更新程序失败')
     std.exit(1)
   }
