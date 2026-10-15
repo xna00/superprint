@@ -1,13 +1,12 @@
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs"
 import { join, extname, basename } from "node:path"
 import { createHash } from "node:crypto"
-import { execSync } from "node:child_process"
 import { getAccessToken } from './token.ts'
 import PDFDocument from "pdfkit"
 import { logger } from "../../logger.ts";
+import { WPS2PDF_URLS } from "../constants.ts"
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads')
-const WPS2PDF_URL = 'http://localhost:8080'
 
 const ensureUploadsDir = (): void => {
   if (!existsSync(UPLOADS_DIR)) {
@@ -67,49 +66,68 @@ export const isPresentationFile = (ext: string): boolean => {
   return presentationExts.includes(ext.toLowerCase())
 }
 
+const MAX_ATTEMPTS = 3 // 每个地址的重试次数
+const RETRY_DELAYS = [1000, 2000] // 每次重试前的退避(ms)
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
 const convertWithWpsApi = async (filePath: string, outputPath: string): Promise<boolean> => {
-  const form = new FormData()
-  form.append('file', new Blob([readFileSync(filePath)]), basename(filePath))
+  const fileBuffer = readFileSync(filePath)
+  const fileName = basename(filePath)
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 90000)
+  for (const baseUrl of WPS2PDF_URLS) {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      // FormData 的 body 只能读一次，每次尝试都要重建
+      const form = new FormData()
+      form.append('file', new Blob([fileBuffer]), fileName)
 
-  try {
-    const response = await fetch(`${WPS2PDF_URL}/convert`, {
-      method: 'POST',
-      body: form,
-      signal: controller.signal
-    })
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 30000)
 
-    if (!response.ok) {
-      let detail = `HTTP ${response.status}`
       try {
-        const data = await response.json() as { detail?: string }
-        if (data.detail) detail = data.detail
-      } catch {
-        // 忽略响应解析失败
-      }
-      logger.error('WPS转PDF失败:', detail)
-      return false
-    }
+        const response = await fetch(`${baseUrl}/convert`, {
+          method: 'POST',
+          body: form,
+          signal: controller.signal
+        })
 
-    const pdfBuffer = Buffer.from(await response.arrayBuffer())
-    if (pdfBuffer.length === 0) return false
-    writeFileSync(outputPath, pdfBuffer)
-    return true
-  } catch (error) {
-    logger.error('WPS转PDF请求失败:', error)
-    return false
-  } finally {
-    clearTimeout(timer)
+        if (response.ok) {
+          const pdfBuffer = Buffer.from(await response.arrayBuffer())
+          if (pdfBuffer.length > 0) {
+            writeFileSync(outputPath, pdfBuffer)
+            return true
+          }
+          logger.error(`WPS转PDF返回空内容 [${baseUrl}] 第 ${attempt}/${MAX_ATTEMPTS} 次`)
+        } else {
+          let detail = `HTTP ${response.status}`
+          try {
+            const data = await response.json() as { detail?: string }
+            if (data.detail) detail = data.detail
+          } catch {
+            // 忽略响应解析失败
+          }
+          logger.error(`WPS转PDF失败 [${baseUrl}] 第 ${attempt}/${MAX_ATTEMPTS} 次:`, detail)
+          // 4xx 是格式不支持/文件过大等客户端错误，对同一地址重试无意义 → 直接换下一个地址
+          if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
+            break
+          }
+        }
+      } catch (error) {
+        logger.error(`WPS转PDF请求失败 [${baseUrl}] 第 ${attempt}/${MAX_ATTEMPTS} 次:`, error)
+      } finally {
+        clearTimeout(timer)
+      }
+
+      if (attempt < MAX_ATTEMPTS) await sleep(RETRY_DELAYS[attempt - 1] ?? 2000)
+    }
   }
+
+  return false
 }
 
 export const convertOfficeToPdf = async (filePath: string): Promise<string | null> => {
   const ext = extname(filePath)
   if (!isOfficeFile(ext)) return null
 
-  const outputDir = join(UPLOADS_DIR)
   const absolutePath = filePath.startsWith('/') ? filePath : join(process.cwd(), filePath)
   const pdfPath = filePath.replace(/\.[^.]+$/, '.pdf')
 
@@ -118,18 +136,8 @@ export const convertOfficeToPdf = async (filePath: string): Promise<string | nul
     return pdfPath
   }
 
-  try {
-    const cmd = `libreoffice --headless --convert-to pdf --outdir "${outputDir}" "${absolutePath}"`
-    execSync(cmd, { stdio: 'ignore', shell: '/bin/sh', timeout: 90000 })
-
-    if (existsSync(pdfPath)) {
-      return pdfPath
-    }
-    return null
-  } catch (error) {
-    logger.error('Office转PDF失败:', error)
-    return null
-  }
+  logger.error('Office转PDF失败（无回退）:', absolutePath)
+  return null
 }
 
 const getFilenameFromResponse = (response: Response, mediaId: string): string => {
