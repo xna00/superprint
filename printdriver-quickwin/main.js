@@ -16,8 +16,8 @@ function launchSetup() {
     if (p) p.close()
 }
 
-import('https://superprint6.xna00.top/printdriver/entry.js?' + timestamp).catch(e => {
-    console.log("Error loading superprint6, trying fallback: superprint.xna00.top\n", e)
+import('https://superprint.112287.xyz/printdriver/entry.js?' + timestamp).catch(e => {
+    console.log("Error loading superprint.112287.xyz, trying fallback: superprint.xna00.top\n", e)
     return import('https://superprint.xna00.top/printdriver/entry.js?' + timestamp)
 }).catch(e => {
     console.log("Error loading superprint:", e)

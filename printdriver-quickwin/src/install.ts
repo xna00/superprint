@@ -297,7 +297,7 @@ function existsW(path: string): boolean {
 }
 
 const CDN_URLS = [
-  'https://superprint6.xna00.top/printdriver/QuickSuperPrint.exe',
+  'https://superprint.112287.xyz/printdriver/QuickSuperPrint.exe',
   'https://superprint.xna00.top/printdriver/QuickSuperPrint.exe',
 ]
 

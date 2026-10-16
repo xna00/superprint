@@ -1,10 +1,10 @@
 export const API_BASE_URLS = [
-    'https://superprint6.xna00.top/api',
+    'https://superprint.112287.xyz/api',
     'https://superprint.xna00.top/api',
 ]
 
 export const WS_URLS = [
-    'wss://superprint6.xna00.top/ws/print',
+    'wss://superprint.112287.xyz/ws/print',
     'wss://superprint.xna00.top/ws/print',
 ]
 

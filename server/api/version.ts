@@ -52,7 +52,7 @@ export const check = (currentVersion: string): { version?: string; downloadUrls?
 };
 
 const cdnBases = [
-  "https://superprint6.xna00.top",
+  "https://superprint.112287.xyz",
   "https://superprint.xna00.top",
 ];
 

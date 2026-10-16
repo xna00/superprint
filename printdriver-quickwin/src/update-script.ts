@@ -89,7 +89,7 @@ async function main() {
   const t = timestamp()
   const tmp = tempExePath(tmpDir, t)
   const urls = [
-    'https://superprint6.xna00.top/printdriver/QuickSuperPrint.exe?t=' + t,
+    'https://superprint.112287.xyz/printdriver/QuickSuperPrint.exe?t=' + t,
     'https://superprint.xna00.top/printdriver/QuickSuperPrint.exe?t=' + t,
   ]
 
