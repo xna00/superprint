@@ -41,27 +41,38 @@ jobs:
       - name: Smoke test QuickSuperPrint_Setup.exe (download + file check)
         run: |
           cd printdriver-quickwin
-          Write-Host "[smoke] starting at $(Get-Date -Format 'HH:mm:ss')"
-          $p = Start-Process -FilePath dist\QuickSuperPrint_Setup.exe -ArgumentList '-o','selftest.txt','--selftest' -PassThru
-          $deadline = (Get-Date).AddSeconds(90)
-          while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
-            Start-Sleep -Seconds 5
-            if (Test-Path selftest.txt) {
-              Write-Host "[smoke] selftest.txt so far at $(Get-Date -Format 'HH:mm:ss'):"
-              Get-Content selftest.txt -Raw
+          # 这个自检要从 CI（境外）下载生产上的 ~1.5MB exe：直连源站那条 URL 基本必然
+          # 30s 超时，只能指望 CF 那条能在 30s 内拉完 → 跨境抖动会误报（#427 第一次 attempt）。
+          # 抖动重试，最多 3 次；真坏（404 / 文件被删 / 源站挂）是确定性的，三次都会失败。
+          $attempts = 3
+          for ($i = 1; $i -le $attempts; $i++) {
+            Write-Host "[smoke] attempt $i/$attempts starting at $(Get-Date -Format 'HH:mm:ss')"
+            Remove-Item selftest.txt -ErrorAction SilentlyContinue
+            $p = Start-Process -FilePath dist\QuickSuperPrint_Setup.exe -ArgumentList '-o','selftest.txt','--selftest' -PassThru
+            $deadline = (Get-Date).AddSeconds(90)
+            while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
+              Start-Sleep -Seconds 5
+              if (Test-Path selftest.txt) {
+                Write-Host "[smoke] selftest.txt so far at $(Get-Date -Format 'HH:mm:ss'):"
+                Get-Content selftest.txt -Raw
+              }
             }
+            if (-not $p.HasExited) {
+              Write-Host "[smoke] TIMEOUT after 90s, killing process..."
+              Stop-Process -Id $p.Id -Force
+              $p.WaitForExit()
+            } else {
+              Write-Host "[smoke] process exited, exit code $($p.ExitCode)"
+            }
+            Write-Host "=== selftest.txt (attempt $i) ==="
+            if (Test-Path selftest.txt) { Get-Content selftest.txt -Raw } else { Write-Host "(selftest.txt not created)" }
+            $ok = ($p.ExitCode -eq 0) -and (Test-Path selftest.txt) -and (Select-String -Path selftest.txt -Pattern 'selftest: downloaded=true' -Quiet)
+            if ($ok) { Write-Host "[smoke] OK on attempt $i/$attempts"; exit 0 }
+            Write-Host "[smoke] attempt $i failed"
+            if ($i -lt $attempts) { Start-Sleep -Seconds 5 }
           }
-          if (-not $p.HasExited) {
-            Write-Host "[smoke] TIMEOUT after 90s, killing process..."
-            Stop-Process -Id $p.Id -Force
-            $p.WaitForExit()
-          } else {
-            Write-Host "[smoke] process exited, exit code $($p.ExitCode)"
-          }
-          Write-Host "=== final selftest.txt ==="
-          if (Test-Path selftest.txt) { Get-Content selftest.txt -Raw } else { Write-Host "(selftest.txt not created)" }
-          if ($p.ExitCode -ne 0) { exit 1 }
-          if (-not (Select-String -Path selftest.txt -Pattern 'selftest: downloaded=true' -Quiet)) { exit 1 }
+          Write-Host "[smoke] all $attempts attempts failed"
+          exit 1
 
       - uses: actions/upload-artifact@v6
         with:
