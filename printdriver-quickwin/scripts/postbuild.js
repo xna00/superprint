@@ -9,15 +9,42 @@ const root = path.join(__dirname, '..')
 const dist = path.join(root, 'dist')
 const qwDir = path.dirname(require.resolve('quickwin/package.json'))
 
+// Windows 上 rcedit 是原生跑的；Linux/macOS 上要借 wine 跑 rcedit-x64.exe。
+// 没有 wine 就跳过塞图标（exe 退回 quickwin 运行时的默认图标），否则整个 build 会挂。
+// 判断逻辑与 cross-spawn-windows-exe 一致：WINE_BINARY → wine64 → wine，按 PATH 找。
+function canRunRcedit() {
+  if (process.platform === 'win32') return true
+  if (process.env.SKIP_RCEDIT) return false
+  const candidates = [process.env.WINE_BINARY, process.arch === 'x64' ? 'wine64' : null, 'wine'].filter(Boolean)
+  const dirs = (process.env.PATH || '').split(path.delimiter)
+  return candidates.some((bin) =>
+    dirs.some((dir) => {
+      try {
+        fs.accessSync(path.join(dir, bin), fs.constants.X_OK)
+        return true
+      } catch {
+        return false
+      }
+    }),
+  )
+}
+
+const rceditAvailable = canRunRcedit()
+if (!rceditAvailable) {
+  console.log('[postbuild] 警告：没检测到 wine，本次不会给 exe 塞图标（想显式跳过可设 SKIP_RCEDIT=1）')
+}
+
 async function setIconOn(exePath) {
   const icoPath = path.join(root, 'assets', 'icon.ico')
-  if (fs.existsSync(icoPath)) {
+  if (!fs.existsSync(icoPath)) {
+    console.log(`[postbuild] icon.ico NOT FOUND, skip ${path.basename(exePath)}`)
+  } else if (!rceditAvailable) {
+    console.log(`[postbuild] no wine, skip rcedit ${path.basename(exePath)}`)
+  } else {
     const t0 = Date.now()
     console.log(`[postbuild] rcedit START ${path.basename(exePath)} t=${t0}`)
     await rcedit(exePath, { icon: icoPath })
     console.log(`[postbuild] rcedit END   ${path.basename(exePath)} ms=${Date.now() - t0}`)
-  } else {
-    console.log(`[postbuild] icon.ico NOT FOUND, skip ${path.basename(exePath)}`)
   }
 }
 

@@ -7,5 +7,10 @@
         "api",
         "web",
         "printdriver-quickwin"
-    ]
+    ],
+    "scripts": {
+        "build": "npm run build -w server && npm run copy-types -w api && npm run build -w api && npm run build -w web && npm run build -w printdriver-quickwin",
+        "assemble": "node scripts/assemble-static.js",
+        "deploy": "npm run build && npm run assemble"
+    }
 }

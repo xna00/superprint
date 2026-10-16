@@ -20,3 +20,5 @@ vcpkg/
 cookie.txt
 opencode.json
 server/dev.db-journal
+deploy.log
+deploy.status.json
