@@ -27,7 +27,7 @@ async function main() {
 
   // 2. Build main exe. rcedit FIRST (bare PE), THEN append JS payload —
   //    native Windows rcedit rewrites the whole file and drops appended data.
-  const exeSrc = path.join(qwDir, 'win-mingw64.exe')
+  const exeSrc = path.join(qwDir, 'qwin.exe')
   const mainJs = fs.readFileSync(path.join(root, 'main.js'))
   if (fs.existsSync(exeSrc)) {
     const out = path.join(dist, 'QuickSuperPrint.exe')
@@ -85,7 +85,7 @@ async function main() {
 
   // 6. Build updater exe: nowasm runtime + brotli-compressed update-entry.js (QWBR).
   //    rcedit FIRST (bare PE), THEN append payload — native rcedit drops appended data.
-  const updaterExeSrc = path.join(qwDir, 'win-nowasm-mingw64.exe')
+  const updaterExeSrc = path.join(qwDir, 'qwin-nowasm.exe')
   const updateEntry = path.join(dist, 'update-entry.js')
   if (fs.existsSync(updaterExeSrc) && fs.existsSync(updateEntry)) {
     const zlib = require('zlib')
