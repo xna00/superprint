@@ -10,5 +10,6 @@
 - 生成脚本：`printdriver-quickwin/scripts/generate-icon.js`
 - 使用 `sharp`（基于 librsvg）渲染 SVG 为 16/32/48/64 PNG，再用 `png-to-ico` 合成 ICO
 - 手动运行：`npm run generate-icon`（在 `printdriver-quickwin` 目录）
-- 产物 `icon.ico` 提交到仓库，`postbuild.js` 中的 `rcedit` 直接使用它
+- 产物 `icon.ico` 提交到仓库，`postbuild.js` 用 `resedit`（纯 JS）把它写进 exe 的 `RT_ICON`/`RT_GROUP_ICON`（图标组 ID 0 / lang 1033，与旧 rcedit 行为一致）
 - 注意：ImageMagick 的 SVG 渲染器不支持 `<linearGradient>`，导致渐变丢失，所以不能用 `convert` 生成 ICO
+- 注意：不要改回 `rcedit`（Windows 原生没事，但 Linux/服务器上要借 wine，没 wine 就没图标，且 CI 与服务器产物 sha1 不一致）；`SKIP_ICON=1` 可以临时跳过塞图标

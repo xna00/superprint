@@ -1,65 +1,56 @@
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
-const { rcedit } = require('rcedit')
-
-process.env.WINE_BINARY = 'wine'
+const ResEdit = require('resedit')
 
 const root = path.join(__dirname, '..')
 const dist = path.join(root, 'dist')
 const qwDir = path.dirname(require.resolve('quickwin/package.json'))
 
-// Windows 上 rcedit 是原生跑的；Linux/macOS 上要借 wine 跑 rcedit-x64.exe。
-// 没有 wine 就跳过塞图标（exe 退回 quickwin 运行时的默认图标），否则整个 build 会挂。
-// 判断逻辑与 cross-spawn-windows-exe 一致：WINE_BINARY → wine64 → wine，按 PATH 找。
-function canRunRcedit() {
-  if (process.platform === 'win32') return true
-  if (process.env.SKIP_RCEDIT) return false
-  const candidates = [process.env.WINE_BINARY, process.arch === 'x64' ? 'wine64' : null, 'wine'].filter(Boolean)
-  const dirs = (process.env.PATH || '').split(path.delimiter)
-  return candidates.some((bin) =>
-    dirs.some((dir) => {
-      try {
-        fs.accessSync(path.join(dir, bin), fs.constants.X_OK)
-        return true
-      } catch {
-        return false
-      }
-    }),
-  )
-}
+// 塞图标用 resedit（纯 JS），不再依赖 rcedit + wine：Windows / Linux 服务器 / CI 都能跑，
+// 产物字节一致，也就不再有"没 wine 就跳过图标、服务器构建的 exe 没图标"这个降级分支。
+// 图标组 ID / lang 跟 rcedit 的行为对齐（0 / 1033）；stub 自身没有图标组，这里是新建。
+const ICON_GROUP_ID = 0
+const ICON_LANG = 1033
 
-const rceditAvailable = canRunRcedit()
-if (!rceditAvailable) {
-  console.log('[postbuild] 警告：没检测到 wine，本次不会给 exe 塞图标（想显式跳过可设 SKIP_RCEDIT=1）')
-}
-
-async function setIconOn(exePath) {
+function setIconOn(exePath) {
   const icoPath = path.join(root, 'assets', 'icon.ico')
+  if (process.env.SKIP_ICON) {
+    console.log(`[postbuild] SKIP_ICON=1, skip icon ${path.basename(exePath)}`)
+    return
+  }
   if (!fs.existsSync(icoPath)) {
     console.log(`[postbuild] icon.ico NOT FOUND, skip ${path.basename(exePath)}`)
-  } else if (!rceditAvailable) {
-    console.log(`[postbuild] no wine, skip rcedit ${path.basename(exePath)}`)
-  } else {
-    const t0 = Date.now()
-    console.log(`[postbuild] rcedit START ${path.basename(exePath)} t=${t0}`)
-    await rcedit(exePath, { icon: icoPath })
-    console.log(`[postbuild] rcedit END   ${path.basename(exePath)} ms=${Date.now() - t0}`)
+    return
   }
+  const t0 = Date.now()
+  const exe = ResEdit.NtExecutable.from(fs.readFileSync(exePath))
+  const res = ResEdit.NtExecutableResource.from(exe)
+  const icons = ResEdit.Data.IconFile.from(fs.readFileSync(icoPath)).icons.map((i) => i.data)
+  const groups = ResEdit.Resource.IconGroupEntry.fromEntries(res.entries)
+  const targets = groups.length ? groups : [{ id: ICON_GROUP_ID, lang: ICON_LANG }]
+  for (const g of targets) {
+    ResEdit.Resource.IconGroupEntry.replaceIconsForResource(res.entries, g.id, g.lang, icons)
+  }
+  res.outputResource(exe)
+  fs.writeFileSync(exePath, Buffer.from(exe.generate()))
+  console.log(
+    `[postbuild] icon set ${path.basename(exePath)} groups=${targets.map((g) => `${g.id}/${g.lang}`).join(',')} ms=${Date.now() - t0}`,
+  )
 }
 
 async function main() {
   // 1. Copy main.js for dev (quickwin main.js)
   fs.copyFileSync(path.join(root, 'main.js'), path.join(dist, 'main.js'))
 
-  // 2. Build main exe. rcedit FIRST (bare PE), THEN append JS payload —
-  //    native Windows rcedit rewrites the whole file and drops appended data.
+  // 2. Build main exe. setIcon FIRST (bare PE), THEN append JS payload —
+  //    原生 rcedit 会重写整个文件、把追加的数据丢掉（resedit 能保留 overlay，但统一"先图标后追加"最省心）。
   const exeSrc = path.join(qwDir, 'qwin.exe')
   const mainJs = fs.readFileSync(path.join(root, 'main.js'))
   if (fs.existsSync(exeSrc)) {
     const out = path.join(dist, 'QuickSuperPrint.exe')
     fs.writeFileSync(out, fs.readFileSync(exeSrc))
-    await setIconOn(out)
+    setIconOn(out)
     const lenBuf = Buffer.alloc(4)
     lenBuf.writeUInt32LE(mainJs.length)
     const magic = Buffer.from('QWJS', 'ascii')
@@ -111,7 +102,7 @@ async function main() {
   console.log('postbuild: done, entry hash =', hash)
 
   // 6. Build updater exe: nowasm runtime + brotli-compressed update-entry.js (QWBR).
-  //    rcedit FIRST (bare PE), THEN append payload — native rcedit drops appended data.
+  //    setIcon FIRST (bare PE), THEN append payload — native rcedit drops appended data.
   const updaterExeSrc = path.join(qwDir, 'qwin-nowasm.exe')
   const updateEntry = path.join(dist, 'update-entry.js')
   if (fs.existsSync(updaterExeSrc) && fs.existsSync(updateEntry)) {
@@ -119,7 +110,7 @@ async function main() {
     const br = zlib.brotliCompressSync(fs.readFileSync(updateEntry))
     const out = path.join(dist, 'QuickSuperPrint_Setup.exe')
     fs.writeFileSync(out, fs.readFileSync(updaterExeSrc))
-    await setIconOn(out)
+    setIconOn(out)
     const lenBuf = Buffer.alloc(4)
     lenBuf.writeUInt32LE(br.length)
     const magic = Buffer.from('QWBR', 'ascii')
