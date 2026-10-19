@@ -185,9 +185,11 @@ export const updateWeixinKfUserInfo = (
 
 // ── Computer ──
 
+// 客户端每次启动都会注册，重复注册是正常路径而不是错误。
+// 全仓其他 INSERT 都是 OR ABORT（fail loud），这里例外。
 export const insertComputer = (id: string, name: string) => {
   db.prepare(
-    `INSERT OR ABORT INTO Computer (id, name) VALUES (@id, @name)`,
+    `INSERT OR IGNORE INTO Computer (id, name) VALUES (@id, @name)`,
   ).run({ id, name });
 };
 
