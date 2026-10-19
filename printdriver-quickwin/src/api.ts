@@ -1,6 +1,6 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
-import { createHandler } from 'api/index.js'
+import { createHandler } from 'api'
 import { API_BASE_URLS } from './config.js'
 import { getDeviceId } from './device.js'
 import { logger } from './logger.js'

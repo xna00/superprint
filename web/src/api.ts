@@ -1,4 +1,4 @@
-import { createHandler } from '../../api/index.ts'
+import { createHandler } from 'api'
 
 export const api = createHandler('/api')
 
