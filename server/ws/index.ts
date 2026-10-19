@@ -1,7 +1,5 @@
 import type { Server } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { logger } from "../logger.ts";
 import { findComputerById } from "../models/db.ts";
 
@@ -19,21 +17,6 @@ type WsEntry = {
 const wsMap: Record<string, WsEntry | undefined> = {};
 
 const HEARTBEAT_INTERVAL = 30000;
-
-const staticDir = join(import.meta.dirname, "..", "static");
-
-const getVersionInfo = (): { version: string; setupexe: string } | null => {
-  const jsonPath = join(staticDir, "printdriver.json");
-  if (!existsSync(jsonPath)) return null;
-  try {
-    const content = readFileSync(jsonPath, "utf-8");
-    const info = JSON.parse(content);
-    if (info.version && info.setupexe) return info;
-    return null;
-  } catch {
-    return null;
-  }
-};
 
 const findWsInfo = (ws: WebSocket): { id: string; name: string } | null => {
   for (const [computerId, entry] of Object.entries(wsMap)) {
@@ -53,7 +36,6 @@ export const createWebSocketServer = (server: Server) => {
   const wss = new WebSocketServer({ server });
 
   const interval = setInterval(() => {
-    const versionInfo = getVersionInfo();
     
     wss.clients.forEach((ws) => {
       const wsInfo = findWsInfo(ws);
@@ -67,11 +49,7 @@ export const createWebSocketServer = (server: Server) => {
       ws.isAlive = false;
       ws.ping();
       
-      const heartbeatMsg: { type: string; version?: string } = { type: "heartbeat" };
-      if (versionInfo) {
-        heartbeatMsg.version = versionInfo.version;
-      }
-      ws.send(JSON.stringify(heartbeatMsg));
+      ws.send(JSON.stringify({ type: "heartbeat" }));
       
       logger.log(`WebSocket ping 已发送，${logPrefix(wsInfo)}`);
     });
