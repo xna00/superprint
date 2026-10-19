@@ -18,11 +18,12 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@quickwinlabs/mupdf-wasm": "^1.28.0",
     "@types/react": "^19.2.17",
     "api": "*",
     "jpeg-js": "^0.4.4",
     "lean-qr": "^2.7.2",
-    "quickwin": "1.0.0",
+    "quickwin": "3.0.4",
     "react": "^19.2.7",
     "uzip": "^0.20201231.0",
     "vite": "^8.0.14"

@@ -1,10 +1,20 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
 import * as gui from 'gui'
-import * as win from 'win'
-import { ffiCall, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_UINT64 } from 'ffi'
 import * as os from 'os'
 import * as std from 'std'
+import { NULL } from 'quickwin/lib/ffi/ctype.js'
+import { CloseHandle } from 'quickwin/lib/windows/kernel32.js'
+import { ShellNotifyIcon } from 'quickwin/lib/windows/shell32.js'
+import {
+    AppendMenu, CreatePopupMenu, DestroyMenu, PostQuitMessage, SetForegroundWindow,
+    ShowWindow, TrackPopupMenu,
+} from 'quickwin/lib/windows/user32.js'
+import { NOTIFYICONDATAW } from 'quickwin/lib/windows/structs.js'
+import {
+    MenuFlag, NotifyIconCmd, NotifyIconFlag, PowerBroadcast, ShowWindowCmd,
+    TrackPopupMenuFlag, WmMsg,
+} from 'quickwin/constants'
 import { createRoot } from 'quickwin/lib/react-qw/index.js'
 import { cleanupWs, resetWs } from './ws.js'
 import { setPrintWorker } from './print-queue.js'
@@ -13,11 +23,13 @@ import { App } from './App.js'
 import { storageGet } from './storage.js'
 import { logger } from './logger.js'
 import { startUpdateCheck, clearUpdateTimer } from './update.js'
-import { strToWideBuf } from './utils.js'
+import { acquireSingleInstanceMutex, bailOnSecondInstance, getCursorPos } from './win32.js'
 
 export let printWorker: PrintWorker | null = null
 export let mainHwnd: gui.HWND | null = null
 export let hMutex: number | null = null
+
+const MUTEX_NAME = 'SuperPrint_SingleInstance'
 
 const args = scriptArgs.slice(0)
 logger.log('[main] scriptArgs:', args)
@@ -25,21 +37,14 @@ logger.log('[main] scriptArgs:', args)
 const SETUP_W = 400
 const SETUP_H = 220
 
+/** 已有一份在跑 → 提示并退出（返回 true）。命中时不留句柄。 */
 function checkRunning(): boolean {
-    const k32 = win.LoadLibrary('kernel32.dll')
-    const pCreateMutexW = k32 ? win.GetProcAddress(k32, 'CreateMutexW') : 0
-    const pGetLastError = k32 ? win.GetProcAddress(k32, 'GetLastError') : 0
-    const pCloseHandle = k32 ? win.GetProcAddress(k32, 'CloseHandle') : 0
-    if (!pCreateMutexW || !pGetLastError) return false
-    const h = ffiCall(pCreateMutexW, [FFI_TYPE_POINTER, FFI_TYPE_SINT32, FFI_TYPE_POINTER],
-        [null, 0, strToWideBuf('SuperPrint_SingleInstance')], FFI_TYPE_POINTER)
-    const err = ffiCall(pGetLastError, [], [], FFI_TYPE_UINT32)
-    if (err === 183) {
-        gui.MessageBox('超人打印正在运行，请先退出后再操作')
-        gui.PostQuitMessage(0)
+    const h = acquireSingleInstanceMutex(MUTEX_NAME)
+    if (h === null) {
+        bailOnSecondInstance()
         return true
     }
-    if (pCloseHandle && h) ffiCall(pCloseHandle, [FFI_TYPE_UINT64], [h], FFI_TYPE_SINT32)
+    if (h) CloseHandle(h)
     return false
 }
 
@@ -51,13 +56,13 @@ if (args.includes('--uninstall')) {
                 width: SETUP_W,
                 height: SETUP_H,
                 onEvent: ({ msg }) => {
-                    if (msg === gui.WmMsg.CLOSE || msg === gui.WmMsg.DESTROY) {
-                        gui.PostQuitMessage(0)
+                    if (msg === WmMsg.CLOSE || msg === WmMsg.DESTROY) {
+                        PostQuitMessage(0)
                         return 0
                     }
                 }
             })
-            root.render(<UninstallApp onComplete={() => gui.PostQuitMessage(0)} />)
+            root.render(<UninstallApp onComplete={() => PostQuitMessage(0)} />)
         })
     }
 } else runMainApp()
@@ -83,25 +88,20 @@ function runMainApp() {
         logger.log('[main] ensureInstalled failed:', e)
     }))
 
-    const k32 = win.LoadLibrary('kernel32.dll')
-    const pCreateMutexW = k32 ? win.GetProcAddress(k32, 'CreateMutexW') : 0
-    const pGetLastError = k32 ? win.GetProcAddress(k32, 'GetLastError') : 0
-    if (pCreateMutexW && pGetLastError) {
-        hMutex = ffiCall(pCreateMutexW, [FFI_TYPE_POINTER, FFI_TYPE_SINT32, FFI_TYPE_POINTER],
-            [null, 0, strToWideBuf('SuperPrint_SingleInstance')], FFI_TYPE_POINTER)
-        const err = ffiCall(pGetLastError, [], [], FFI_TYPE_UINT32)
-        if (err === 183) {
-            gui.PostQuitMessage(0)
-            return
-        }
+    // 单实例互斥体：抢不到说明已有实例，静默退出
+    const m = acquireSingleInstanceMutex(MUTEX_NAME)
+    if (m === null) {
+        PostQuitMessage(0)
+        return
     }
+    hMutex = m
 
     const winW = 600
     const winH = 400
-    const WM_TRAY = gui.WmMsg.USER + 0x401
-    const WM_POWERBROADCAST = gui.WmMsg.POWERBROADCAST
-    const PBT_APMRESUMESUSPEND = gui.PowerBroadcast.APMRESUMESUSPEND
-    const PBT_APMRESUMEAUTOMATIC = gui.PowerBroadcast.APMRESUMEAUTOMATIC
+    const WM_TRAY = WmMsg.USER + 0x401
+    const WM_POWERBROADCAST = WmMsg.POWERBROADCAST
+    const PBT_APMRESUMESUSPEND = PowerBroadcast.APMRESUMESUSPEND
+    const PBT_APMRESUMEAUTOMATIC = PowerBroadcast.APMRESUMEAUTOMATIC
 
     const root = createRoot({
         text: '超人打印',
@@ -113,15 +113,16 @@ function runMainApp() {
                 logger.log(`[main] WM_POWERBROADCAST wParam=${wParam} (expected suspend=${PBT_APMRESUMESUSPEND} auto=${PBT_APMRESUMEAUTOMATIC})`)
                 if (wParam === PBT_APMRESUMESUSPEND || wParam === PBT_APMRESUMEAUTOMATIC) {
                     logger.log('[main] resuming from sleep, refreshing tray icon + resetting ws')
-                    gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd, uID: 1 })
+                    ShellNotifyIcon(NotifyIconCmd.DELETE, { cbSize: NOTIFYICONDATAW.size, hWnd: hwnd, uID: 1 })
                     const hIcon = gui.LoadAppIcon()
                     if (hIcon) {
-                        gui.ShellNotifyIcon(gui.NotifyIconCmd.ADD, {
-                            hwnd, uID: 1,
-                            flags: gui.NotifyIconFlag.MESSAGE | gui.NotifyIconFlag.ICON | gui.NotifyIconFlag.TIP,
-                            callbackMessage: WM_TRAY,
+                        ShellNotifyIcon(NotifyIconCmd.ADD, {
+                            cbSize: NOTIFYICONDATAW.size,
+                            hWnd: hwnd, uID: 1,
+                            uFlags: NotifyIconFlag.MESSAGE | NotifyIconFlag.ICON | NotifyIconFlag.TIP,
+                            uCallbackMessage: WM_TRAY,
                             hIcon,
-                            tip: '超人打印',
+                            szTip: '超人打印',
                         })
                         logger.log('[main] tray icon re-added after wake')
                     } else {
@@ -133,24 +134,23 @@ function runMainApp() {
             }
             if (msg === WM_TRAY) {
                 const evt = lParam
-                if (evt === gui.WmMsg.LBUTTONDOWN) {
-                    gui.ShowWindow(hwnd, gui.ShowWindowCmd.RESTORE)
-                    gui.SetForegroundWindow(hwnd)
-                } else if (evt === gui.WmMsg.RBUTTONDOWN || evt === gui.WmMsg.CONTEXTMENU) {
-                    gui.SetForegroundWindow(hwnd)
-                    const pos = gui.GetCursorPos()
-                    const x = pos ? pos[0] : 0
-                    const y = pos ? pos[1] : 0
-                    const hMenu = gui.CreatePopupMenu()
+                if (evt === WmMsg.LBUTTONDOWN) {
+                    ShowWindow(hwnd, ShowWindowCmd.RESTORE)
+                    SetForegroundWindow(hwnd)
+                } else if (evt === WmMsg.RBUTTONDOWN || evt === WmMsg.CONTEXTMENU) {
+                    SetForegroundWindow(hwnd)
+                    const [x, y] = getCursorPos()
+                    const hMenu = CreatePopupMenu()
                     if (hMenu) {
-                        gui.AppendMenu(hMenu, gui.MenuFlag.STRING, 1, '显示窗口')
-                        gui.AppendMenu(hMenu, gui.MenuFlag.SEPARATOR, 0, '')
-                        gui.AppendMenu(hMenu, gui.MenuFlag.STRING, 2, '退出')
-                        const cmd = gui.TrackPopupMenu(hMenu, x, y, undefined, hwnd)
-                        gui.DestroyMenu(hMenu)
-                        gui.SendMessage(hwnd, gui.WmMsg.NULL, 0, 0) // WM_NULL
+                        AppendMenu(hMenu, MenuFlag.STRING, 1, '显示窗口')
+                        AppendMenu(hMenu, MenuFlag.SEPARATOR, 0, NULL)
+                        AppendMenu(hMenu, MenuFlag.STRING, 2, '退出')
+                        // TPM_RETURNCMD 让命令 ID 直接作为返回值回来
+                        const cmd = TrackPopupMenu(hMenu, TrackPopupMenuFlag.RETURNCMD | TrackPopupMenuFlag.RIGHTBUTTON, x, y, 0, hwnd, NULL)
+                        DestroyMenu(hMenu)
+                        gui.SendMessage(hwnd, WmMsg.NULL, 0, 0) // WM_NULL
                         if (cmd === 1) {
-                            gui.ShowWindow(hwnd, gui.ShowWindowCmd.RESTORE)
+                            ShowWindow(hwnd, ShowWindowCmd.RESTORE)
                         } else if (cmd === 2) {
                             gui.DestroyWindow(hwnd)
                         }
@@ -158,21 +158,21 @@ function runMainApp() {
                 }
                 return 0
             }
-            if (msg === gui.WmMsg.CLOSE) {
+            if (msg === WmMsg.CLOSE) {
                 const minimizeToTray = storageGet('minimizeToTray')
                 if (minimizeToTray !== false) {
-                gui.ShowWindow(hwnd, gui.ShowWindowCmd.HIDE)
+                ShowWindow(hwnd, ShowWindowCmd.HIDE)
                 return 0
             }
             gui.DestroyWindow(hwnd)
             return 0
         }
-        if (msg === gui.WmMsg.DESTROY) {
-                gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd, uID: 1 })
+        if (msg === WmMsg.DESTROY) {
+                ShellNotifyIcon(NotifyIconCmd.DELETE, { cbSize: NOTIFYICONDATAW.size, hWnd: hwnd, uID: 1 })
                 cleanupWs()
                 destroyPrintWorker()
                 clearUpdateTimer()
-                gui.PostQuitMessage(0)
+                PostQuitMessage(0)
                 return 0
             }
         }
@@ -181,17 +181,18 @@ function runMainApp() {
     root.render(<App />)
     mainHwnd = root.hwnd
     const isAutoStart = args.includes('--autostart')
-    if (!isAutoStart || storageGet('showOnStartup') !== false) gui.ShowWindow(root.hwnd)
+    if (!isAutoStart || storageGet('showOnStartup') !== false) ShowWindow(root.hwnd, ShowWindowCmd.SHOWNORMAL)
 
     const hIcon = gui.LoadAppIcon()
     if (hIcon) {
-        const ok = gui.ShellNotifyIcon(gui.NotifyIconCmd.ADD, {
-            hwnd: root.hwnd,
+        const ok = ShellNotifyIcon(NotifyIconCmd.ADD, {
+            cbSize: NOTIFYICONDATAW.size,
+            hWnd: root.hwnd,
             uID: 1,
-            flags: gui.NotifyIconFlag.MESSAGE | gui.NotifyIconFlag.ICON | gui.NotifyIconFlag.TIP,
-            callbackMessage: WM_TRAY,
+            uFlags: NotifyIconFlag.MESSAGE | NotifyIconFlag.ICON | NotifyIconFlag.TIP,
+            uCallbackMessage: WM_TRAY,
             hIcon,
-            tip: '超人打印',
+            szTip: '超人打印',
         })
         std.out.printf('[main] tray icon %s\n', ok ? 'added' : 'FAILED')
         std.out.flush()

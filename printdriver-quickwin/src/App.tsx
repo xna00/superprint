@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
-import * as gui from 'gui'
 import * as os from 'os'
+import { WindowStyle } from 'quickwin/constants'
 import { Tab } from 'quickwin/lib/react-qw/index.js'
 import { api } from './api.js'
 import { getDeviceId, getComputerName } from './device.js'
@@ -14,8 +14,8 @@ import { LogsPanel } from './components/LogsPanel.js'
 const SettingsTab = lazy(() => import('./components/SettingsTab.js').then(m => ({ default: m.SettingsTab })))
 
 
-const VISIBLE = gui.WindowStyle.VISIBLE
-const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
+const VISIBLE = WindowStyle.VISIBLE
+const CLIPCHILDREN = WindowStyle.CLIPCHILDREN
 
 export function App() {
     const [appState, setAppState] = useState<'loading' | 'main'>('loading')

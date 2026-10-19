@@ -1,5 +1,8 @@
-import { readByte } from 'ffi'
-import * as win from 'win'
+import { readByte, readBytes } from 'ffi'
+import * as os from 'os'
+import { WCHAR } from 'quickwin/lib/ffi/bind.js'
+import { NULL, PtrArrayBuffer } from 'quickwin/lib/ffi/ctype.js'
+import { GetModuleFileName } from 'quickwin/lib/windows/kernel32.js'
 
 /** 返回北京时间 (UTC+8) 的 Date 对象 */
 export function toCST(date?: Date): Date {
@@ -7,34 +10,48 @@ export function toCST(date?: Date): Date {
 }
 
 export function getExePath(): string {
-  return win.GetModuleFileName() || ''
+    const buf = WCHAR.alloc(520)
+    GetModuleFileName(NULL, buf, 520)
+    return WCHAR.decode(buf)
 }
 
-let _utf16le: TextEncoder | null = null
+/** UTF-16LE + 结尾 NUL，返回带 .ptr 的缓冲（native 写回同一块内存） */
 export function strToWideBuf(str: string): ArrayBuffer {
-    if (!_utf16le) _utf16le = new TextEncoder('utf-16le')
-    return _utf16le.encode(str + '\0').buffer as ArrayBuffer
+    return WCHAR.encode(str)
 }
 
+const MAX_WCHARS = 4096
+
+/** 跟进任意指针逐字宽读，直到 NUL 或 MAX_WCHARS 字上限。
+ *  收裸 number（结构体指针字段是泛型 <">ptr，带品牌强转没意义） */
 export function decodeWideAtPtr(ptr: number): string {
     if (!ptr) return ''
-    let result = ''
+    const chars: number[] = []
     let pos = ptr
-    while (true) {
-        const low = readByte(pos)
-        const high = readByte(pos + 1)
-        const ch = low + high * 256
+    while (chars.length < MAX_WCHARS) {
+        const ch = readByte(pos) + readByte(pos + 1) * 256
         if (ch === 0) break
-        result += String.fromCharCode(ch)
+        chars.push(ch)
         pos += 2
     }
-    return result
+    return String.fromCharCode(...chars)
 }
 
 export function readPtr(dv: DataView, offset: number): number {
-    const low = dv.getUint32(offset, true)
-    const high = dv.getUint32(offset + 4, true)
-    return low + high * 4294967296
+    if (os.arch === 'ia32') return dv.getUint32(offset, true)
+    return dv.getUint32(offset, true) + dv.getUint32(offset + 4, true) * 4294967296
+}
+
+/** 从 native 地址读 64 位值（COM vtable 遍历用）。跨架构自动选读法。 */
+export function readQword(addr: number): number {
+    return readPtr(new DataView(readBytes(addr, 8)), 0)
+}
+
+/** 指针品牌（ptrBrand）是 TS 编译期承诺，native 侧只认地址位。
+ *  从缓冲读出、或跨本仓库/quickwin 边界传裸 number 时用此标注；
+ *  不传类型参数 = Ptr<""> = 保持裸 number。 */
+export function tag<N extends string = ''>(v: number): N extends '' ? number : number & { readonly ptrBrand: N } {
+    return v as N extends '' ? number : number & { readonly ptrBrand: N }
 }
 
 export interface AppMetadata {
@@ -63,10 +80,11 @@ declare global {
   }
 }
 
-/** Convert a GUID string like `{000214F9-0000-0000-C000-000000000046}` to a 16-byte ArrayBuffer */
-export function guidStrToBytes(guid: string): ArrayBuffer {
+/** Convert a GUID string like `{000214F9-0000-0000-C000-000000000046}` to a 16-byte buffer.
+ *  返回 PtrArrayBuffer（带 .ptr），可直接喂 <GUID>ptr 形参。 */
+export function guidStrToBytes(guid: string): PtrArrayBuffer<any> {
     const hex = guid.replace(/[{}]/g, '').replace(/-/g, '')
-    const buf = new ArrayBuffer(16)
+    const buf = new PtrArrayBuffer(16)
     const dv = new DataView(buf)
     dv.setUint32(0, parseInt(hex.substring(0, 8), 16), true)
     dv.setUint16(4, parseInt(hex.substring(8, 12), 16), true)

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import * as os from 'os'
-import * as gui from 'gui'
+import { WindowStyle } from 'quickwin/constants'
 
 import { UNINSTALL_STEPS, runUninstallStep } from '../install.js'
 
-const VISIBLE = gui.WindowStyle.VISIBLE
+const VISIBLE = WindowStyle.VISIBLE
 
 interface Props {
     onComplete: () => void

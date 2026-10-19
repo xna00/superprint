@@ -3,9 +3,9 @@ import './ua.js'
 import './metadata.js'
 import './main.js'
 import { logger } from './logger.js'
-import * as win from 'win'
+import { getExePath } from './utils.js'
 
-const exePath = win.GetModuleFileName() || 'unknown'
+const exePath = getExePath() || 'unknown'
 const baseUrl = import.meta.url.substring(0, import.meta.url.lastIndexOf('/') + 1)
 logger.log('[entry] exe:', exePath)
 logger.log('[entry] baseUrl:', baseUrl)

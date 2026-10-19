@@ -1,7 +1,7 @@
-import * as gui from 'gui'
 import { QRCode } from './QRCode.js'
+import { WindowStyle } from 'quickwin/constants'
 
-const VISIBLE = gui.WindowStyle.VISIBLE
+const VISIBLE = WindowStyle.VISIBLE
 
 export function QRTestTab() {
     return (

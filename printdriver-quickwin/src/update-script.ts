@@ -1,10 +1,11 @@
 import 'quickwin/lib/fetch.js'
 import * as std from 'std'
 import * as os from 'os'
-import * as win from 'win'
-import * as gui from 'gui'
-import { ffiCall, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_SINT32 } from 'ffi'
-import { strToWideBuf } from './utils.js'
+import { NULL } from 'quickwin/lib/ffi/ctype.js'
+import { CreateProcess, MoveFileEx } from 'quickwin/lib/windows/kernel32.js'
+import { PROCESS_INFORMATION } from 'quickwin/lib/windows/structs.js'
+import { MoveFileFlag } from 'quickwin/constants'
+import { alertBox, STARTUPINFO_CB_LEGACY } from './win32.js'
 
 function pad(n: number): string {
   return n < 10 ? '0' + n : String(n)
@@ -53,32 +54,16 @@ async function downloadTo(urls: string[], tmp: string): Promise<boolean> {
 }
 
 function startProcess(exePath: string, args?: string): boolean {
-  const k32 = win.LoadLibrary('kernel32.dll')
-  const p = k32 ? win.GetProcAddress(k32, 'CreateProcessW') : null
-  if (!p) return false
-  const cmd = strToWideBuf('"' + exePath + '"' + (args ? ' ' + args : ''))
-  const si = new ArrayBuffer(68)
-  new DataView(si).setUint32(0, 68, true)
-  const pi = new ArrayBuffer(24)
-  const ret = ffiCall(p,
-    [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER,
-     FFI_TYPE_UINT32, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER,
-     FFI_TYPE_POINTER, FFI_TYPE_POINTER],
-    [null, cmd, null, null, 0, 0, null, null, si, pi],
-    FFI_TYPE_SINT32)
-  return ret !== 0
+  const procInfo = PROCESS_INFORMATION.alloc()
+  const cmdLine = '"' + exePath + '"' + (args ? ' ' + args : '')
+  return CreateProcess(
+    NULL, cmdLine, NULL, NULL, 0, 0, NULL, NULL,
+    { cb: STARTUPINFO_CB_LEGACY }, procInfo.ptr,
+  ) !== 0
 }
 
-const _k32 = win.LoadLibrary('kernel32.dll')
-const _pMoveFileExW = _k32 ? win.GetProcAddress(_k32, 'MoveFileExW') : null
-
 function moveFileExW(oldPath: string, newPath: string): boolean {
-  if (!_pMoveFileExW) return false
-  const ret = ffiCall(_pMoveFileExW,
-    [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
-    [strToWideBuf(oldPath), strToWideBuf(newPath), 3], // MOVEFILE_REPLACE_EXISTING=1 | MOVEFILE_COPY_ALLOWED=2
-    FFI_TYPE_SINT32)
-  return ret !== 0
+  return MoveFileEx(oldPath, newPath, MoveFileFlag.REPLACE_EXISTING | MoveFileFlag.COPY_ALLOWED) !== 0
 }
 
 async function main() {
@@ -110,7 +95,7 @@ async function main() {
   std.out.flush()
 
   if (!(await downloadTo(urls, tmp))) {
-    gui.MessageBox('所有下载地址均失败')
+    alertBox('所有下载地址均失败')
     std.exit(1)
   }
 
@@ -129,7 +114,7 @@ async function main() {
     if (!moved) os.sleep(1000)
   }
   if (!moved) {
-    gui.MessageBox('替换程序文件失败')
+    alertBox('替换程序文件失败')
     std.exit(1)
   }
   try { os.remove(tmp) } catch (_) {}
@@ -139,7 +124,7 @@ async function main() {
   // 若由主程序的兜底逻辑带 --noretry 启动，则透传给新实例，避免其再次触发兜底造成死循环
   const passArgs = scriptArgs.includes('--noretry') ? '--run --noretry' : '--run'
   if (!startProcess(target, passArgs)) {
-    gui.MessageBox('启动更新程序失败')
+    alertBox('启动更新程序失败')
     std.exit(1)
   }
   std.exit(0)

@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
-import * as gui from 'gui'
 import { ListView, type Column, Button, Input, createRoot } from 'quickwin/lib/react-qw/index.js'
+import { WindowStyle } from 'quickwin/constants'
 import type { LocalPrinterInfo } from '../printer.js'
 import { QRCode } from './QRCode.js'
 import { api } from '../api.js'
 import { logger } from '../logger.js'
 import jpeg from 'jpeg-js'
 
-const VISIBLE = gui.WindowStyle.VISIBLE
-const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
+const VISIBLE = WindowStyle.VISIBLE
+const CLIPCHILDREN = WindowStyle.CLIPCHILDREN
 
 interface PrinterRow {
     name: string
@@ -93,6 +93,10 @@ const showManagerWindow = async (printerId: number, printerName: string) => {
         }
     }
 
+    // 3.x 的 getIcon 类型声明写死为 => number，但实现里显式接受 undefined（表示该行无图标）；
+    // 按实现契约标注，避免把「无头像」错映射成图标 0
+    const getIconIndex = ((_: unknown, i: number) => iconIndexMap[i]) as (record: unknown, i: number) => number
+
     const renderUsers = () => {
         const userColumns: Column<{ nickname: string; userId: string; action: string }>[] = [
             { name: '用户', dataIndex: 'nickname' },
@@ -131,7 +135,7 @@ const showManagerWindow = async (printerId: number, printerName: string) => {
                     data={userData}
                     icons={icons}
                     iconSize={AVATAR_SIZE}
-                    getIcon={(_, i) => iconIndexMap[i]}
+                    getIcon={getIconIndex}
                     style={{ flexGrow: 1 }}
                 />
             </w>

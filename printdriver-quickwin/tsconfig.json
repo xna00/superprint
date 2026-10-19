@@ -11,10 +11,14 @@
     "rootDir": "src",
     "outDir": "./dist-tsgo",
     "lib": ["ESNext"],
-    "types": ["./node_modules/quickwin/quickwin.d.ts"],
+    "types": ["quickwin"],
     "jsx": "react-jsx",
     "jsxImportSource": "react",
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "./node_modules/quickwin/lib/react-qw/jsx.d.ts", "../node_modules/quickwin/lib/react-qw/jsx.d.ts"],
+  // 本项目 lib 只有 ESNext（无 DOM），而 src/api.ts 的 `import ... from 'api'` 会把
+  // ../api/index.ts 拉进本程序，那里用了裸 `Request`/`Response`。
+  // 这两个全局由 quickwin/lib/http-common.d.ts 的 `declare global` 提供，但
+  // lib/fetch.d.ts 并没有 import 它（见 quickwin issue），故这里显式纳入（纯类型，无运行时影响）。
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "../node_modules/quickwin/lib/http-common.d.ts"],
   "exclude": []
 }

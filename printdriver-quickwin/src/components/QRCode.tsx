@@ -3,12 +3,15 @@ import * as gui from 'gui'
 import { generate, correction, mode } from 'lean-qr'
 import { createBitmap, deleteObject } from '../qr.js'
 import { scaleFactor } from 'quickwin/lib/react-qw/reconciler.js'
+import { InvalidateRect } from 'quickwin/lib/windows/user32.js'
+import { NULL } from 'quickwin/lib/ffi/ctype.js'
+import { ImageType, StaticMsg, StaticStyleEx, WindowStyle } from 'quickwin/constants'
 
-const VISIBLE = gui.WindowStyle.VISIBLE
-const SS_BITMAP = gui.StaticStyleEx.BITMAP
-const SS_CENTERIMAGE = gui.StaticStyleEx.CENTERIMAGE
-const STM_SETIMAGE = gui.StaticMsg.SETIMAGE
-const IMAGE_BITMAP = gui.ImageType.BITMAP
+const VISIBLE = WindowStyle.VISIBLE
+const SS_BITMAP = StaticStyleEx.BITMAP
+const SS_CENTERIMAGE = StaticStyleEx.CENTERIMAGE
+const STM_SETIMAGE = StaticMsg.SETIMAGE
+const IMAGE_BITMAP = ImageType.BITMAP
 
 interface QRCodeProps {
     text: string
@@ -56,7 +59,7 @@ export function QRCode({ text, size }: QRCodeProps) {
         hbmpRef.current = hbmp
 
         const oldBmp = gui.SendMessage(hStatic, STM_SETIMAGE, IMAGE_BITMAP, hbmp)
-        gui.InvalidateRect(hStatic, null, true)
+        InvalidateRect(hStatic, NULL, 1)
         if (oldBmp && oldBmp !== hbmp) {
             deleteObject(oldBmp)
         }

@@ -1,35 +1,14 @@
-import { ffiCall, FFI_TYPE_SINT32, FFI_TYPE_UINT32, FFI_TYPE_UINT64, FFI_TYPE_POINTER } from 'ffi'
-import * as win from 'win'
+import { PtrArrayBuffer } from 'quickwin/lib/ffi/ctype.js'
+import { CreateBitmap, DeleteObject } from 'quickwin/lib/windows/gdi32.js'
+import { tag } from './utils.js'
 
-const _gdi32 = win.LoadLibrary('gdi32.dll')
-if (!_gdi32) throw new Error('gdi32.dll not found')
-
-const _CreateBitmap = (() => {
-    const ptr = win.GetProcAddress(_gdi32, 'CreateBitmap')
-    if (!ptr) throw new Error('gdi32!CreateBitmap not found')
-    return ptr
-})()
-
-const _DeleteObject = (() => {
-    const ptr = win.GetProcAddress(_gdi32, 'DeleteObject')
-    if (!ptr) throw new Error('gdi32!DeleteObject not found')
-    return ptr
-})()
-
+/** 位图数据只读，拷进带 .ptr 的缓冲即可（<BYTE>ptr 位只认 PtrArrayBuffer，且无拷贝构造） */
 export function createBitmap(width: number, height: number, bpp: number, bits: ArrayBuffer): number {
-    return ffiCall(
-        _CreateBitmap,
-        [FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_UINT32, FFI_TYPE_UINT32, FFI_TYPE_POINTER],
-        [width, height, 1, bpp, bits],
-        FFI_TYPE_UINT64
-    )
+    const pab = new PtrArrayBuffer(bits.byteLength)
+    new Uint8Array(pab).set(new Uint8Array(bits))
+    return CreateBitmap(width, height, 1, bpp, pab)
 }
 
 export function deleteObject(hObj: number): boolean {
-    return !!ffiCall(
-        _DeleteObject,
-        [FFI_TYPE_UINT64],
-        [hObj],
-        FFI_TYPE_SINT32
-    )
+    return !!DeleteObject(tag<'HGDIOBJ'>(hObj))
 }

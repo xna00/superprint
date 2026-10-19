@@ -1,65 +1,49 @@
 import 'quickwin/lib/polyfill.js'
 import 'quickwin/lib/fetch.js'
 import * as std from 'std'
-import * as gui from 'gui'
 import * as os from 'os'
-import { ffiCall, bufferPtr, FFI_TYPE_POINTER, FFI_TYPE_VOID, FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_UINT32 } from 'ffi'
-import * as win from 'win'
-import type { Document, Page, Pixmap } from 'quickwin/vendor/mupdf-wasm/mupdf.js'
+import { bufferPtr, LoadLibrary } from 'ffi'
+import { NULL } from 'quickwin/lib/ffi/ctype.js'
+import type { MaybePtr, PtrArrayBuffer } from 'quickwin/lib/ffi/ctype.js'
+import { bind, BYTE, WCHAR } from 'quickwin/lib/ffi/bind.js'
+import { BITMAPINFOHEADER, DEVMODEW } from 'quickwin/lib/windows/structs.js'
+import { GetLastError, RtlMoveMemory } from 'quickwin/lib/windows/kernel32.js'
+import { ClosePrinter, OpenPrinter } from 'quickwin/lib/windows/winspool.js'
+import { DeleteDC, GetDeviceCaps, SetStretchBltMode, StretchDIBits } from 'quickwin/lib/windows/gdi32.js'
+import { ColorUse, DeviceCap, DevMode, RasterOp, StretchBltMode } from 'quickwin/constants'
+import {
+    CreateDCW, DocumentPropertiesW, EndDoc, EndPage, ResetDCW, SetBrushOrgEx, StartDocW, StartPage,
+} from './win32.js'
+import { getExePath, readPtr, tag } from './utils.js'
+import type { Document, Page, Pixmap } from '@quickwinlabs/mupdf-wasm'
 import type { WorkerInMsg, WorkerOutMsg } from './worker-types.js'
-import { strToWideBuf, getExePath } from './utils.js'
 import { api } from './api.js'
 import { logger } from './logger.js'
-import mupdfWasmUrl from 'quickwin/vendor/mupdf-wasm/mupdf-wasm.wasm?url'
-type MuPdfModule = typeof import('quickwin/vendor/mupdf-wasm/mupdf.js').default
+import mupdfWasmUrl from '@quickwinlabs/mupdf-wasm/mupdf-wasm.wasm?url'
+type MuPdfModule = typeof import('@quickwinlabs/mupdf-wasm')
 
 const wasmUrl = mupdfWasmUrl
 
-const _gdi32 = win.LoadLibrary('gdi32.dll')
-const _kernel32 = win.LoadLibrary('kernel32.dll')
-if (!_gdi32) throw new Error('gdi32.dll not found')
-function gdip(name: string) {
-    const ptr = win.GetProcAddress(_gdi32!, name)
-    if (!ptr) throw new Error('gdi32!' + name + ' not found')
-    return ptr
-}
-const CreateDCW = gdip('CreateDCW')
-const DeleteDC = gdip('DeleteDC')
-const StartDocW = gdip('StartDocW')
-const EndDoc = gdip('EndDoc')
-const StartPage = gdip('StartPage')
-const EndPage = gdip('EndPage')
-const GetDeviceCaps = gdip('GetDeviceCaps')
-const StretchDIBits = gdip('StretchDIBits')
-const ResetDCW = gdip('ResetDCW')
-const SetStretchBltMode = gdip('SetStretchBltMode')
-const SetBrushOrgEx = gdip('SetBrushOrgEx')
-const GetLastError = _kernel32 ? win.GetProcAddress(_kernel32, 'GetLastError') : 0
-const RtlMoveMemory = _kernel32 ? win.GetProcAddress(_kernel32, 'RtlMoveMemory') : 0
-function gle(): number {
-    return GetLastError ? ffiCall(GetLastError, [], [], FFI_TYPE_UINT32) : 0
-}
+const HORZRES = DeviceCap.HORZRES
+const VERTRES = DeviceCap.VERTRES
+const LOGPIXELSX = DeviceCap.LOGPIXELSX
+const LOGPIXELSY = DeviceCap.LOGPIXELSY
 
-const HORZRES = gui.DeviceCap.HORZRES
-const VERTRES = gui.DeviceCap.VERTRES
-const LOGPIXELSX = gui.DeviceCap.LOGPIXELSX
-const LOGPIXELSY = gui.DeviceCap.LOGPIXELSY
+/** DocumentPropertiesW 的 fMode 位掩码。3.0.4 的 DevMode 枚举只收了 OUT_BUFFER。 */
+const DM_IN_BUFFER = 8
 
 interface DibResult {
-    data: ArrayBuffer
+    data: PtrArrayBuffer<any>
     w: number
     h: number
 }
 
-function makeBitmapInfo(w: number, h: number): ArrayBuffer {
-    const bmi = new ArrayBuffer(40)
-    const bv = new DataView(bmi)
-    bv.setUint32(0, 40, true)
-    bv.setInt32(4, w, true)
-    bv.setInt32(8, -h, true)
-    bv.setUint16(12, 1, true)
-    bv.setUint16(14, 24, true)
-    return bmi
+/** BI_RGB 顶向下 DIB（biHeight 取负）——与 quickwin 例子 PdfCanvas.tsx 同型 */
+function makeBitmapInfo(w: number, h: number, bpp: number) {
+    return BITMAPINFOHEADER.encode({
+        biSize: BITMAPINFOHEADER.size, biWidth: w, biHeight: -h,
+        biPlanes: 1, biBitCount: bpp,
+    })
 }
 
 let _mupdfPromise: Promise<MuPdfModule> | null = null
@@ -77,9 +61,10 @@ async function loadMuPdf(): Promise<MuPdfModule> {
         logger.log('[worker] wasm binary size=' + wasmBinary.byteLength)
         globalThis.$libmupdf_wasm_Module = { wasmBinary, locateFile: (p) => p }
         logger.log('[worker] importing mupdf.js...')
-        const mod = await import('quickwin/vendor/mupdf-wasm/mupdf.js')
+        // 包是命名导出（无 default），import() 直接给到 module namespace
+        const mod = await import('@quickwinlabs/mupdf-wasm')
         logger.log('[worker] MuPDF loaded')
-        return mod.default
+        return mod
     })()
     return _mupdfPromise
 }
@@ -101,7 +86,8 @@ function renderPdfPageToDib(mupdf: MuPdfModule, doc: Document, pageIndex: number
         const w = pixmap.getWidth()
         const h = pixmap.getHeight()
         const dibStride = Math.floor((w * 3 + 3) / 4) * 4
-        const dib = new Uint8Array(h * dibStride)
+        const dib = BYTE.alloc(h * dibStride)
+        const dst = new Uint8Array(dib)
 
         for (let y = 0; y < h; y++) {
             const srcOff = y * srcStride
@@ -109,13 +95,13 @@ function renderPdfPageToDib(mupdf: MuPdfModule, doc: Document, pageIndex: number
             for (let x = 0; x < w; x++) {
                 const sx = srcOff + x * 3
                 const dx = dstOff + x * 3
-                dib[dx] = srcPixels[sx + 2]
-                dib[dx + 1] = srcPixels[sx + 1]
-                dib[dx + 2] = srcPixels[sx]
+                dst[dx] = srcPixels[sx + 2]
+                dst[dx + 1] = srcPixels[sx + 1]
+                dst[dx + 2] = srcPixels[sx]
             }
         }
 
-        return { data: dib.buffer, w, h }
+        return { data: dib, w, h }
     } catch (e: unknown) {
         logger.log('[worker] renderPdfPageToDib error page=' + pageIndex + ':', e instanceof Error ? e.stack : String(e))
         return null
@@ -125,107 +111,107 @@ function renderPdfPageToDib(mupdf: MuPdfModule, doc: Document, pageIndex: number
     }
 }
 
-// PDFium FFI
-const FFI_PTR = FFI_TYPE_POINTER
-const FFI_U64 = FFI_TYPE_UINT64
-const FFI_S32 = FFI_TYPE_SINT32
-const FFI_U32 = FFI_TYPE_UINT32
-const FFI_VOID = FFI_TYPE_VOID
+// ---------------------------------------------------------------------------
+// PDFium（DLL 是运行时下载的，不能模块加载期 bind —— 惰性绑定）
+// ---------------------------------------------------------------------------
 
 const PDFIUM_DLL = 'pdfium-win32-x64-chromium7947.dll'
 const pdfiumDllUrl = new URL('../vendor/pdfium-win32-x64-chromium7947.dll', import.meta.url).href
 
-let _pdfiumInit: Promise<Record<string, number>> | null = null
+/** PDFium C API：FPDF_DOCUMENT / FPDF_PAGE / FPDF_BITMAP 在 C 侧都是 void*，
+ *  这里各打一个品牌把三者分开（doc/page/bitmap 串用编译期就报错）。品牌不花代价：
+ *  运行时返回位只在 name 有 decode 时才转码，BYTE 无 decode → 原样给回地址 number。
+ *  取像素缓冲的位用 <BYTE>ptr（FPDFBitmap_GetBuffer 返回的就该是「能进
+ *  RtlMoveMemory <BYTE>ptr 位的那个类型」，品牌在这里表达比调用点 cast 干净）。 */
+async function loadPdfium() {
+    logger.log('[worker] initPDFium: downloading pdfium DLL from', pdfiumDllUrl)
+    const resp = await fetch(pdfiumDllUrl)
+    if (!resp.ok) throw new Error('download PDFium DLL failed: ' + resp.status)
+    const buf = await resp.arrayBuffer()
+    const exeDir = getExePath().split('\\').slice(0, -1).join('\\')
+    const localPath = exeDir + '\\' + PDFIUM_DLL
+    const f = std.open(localPath, 'wb')
+    if (!f) throw new Error('cannot open ' + localPath + ' for writing')
+    f.write(buf, 0, buf.byteLength)
+    f.close()
+    logger.log('[worker] PDFium DLL saved to', localPath)
+    if (!LoadLibrary(PDFIUM_DLL)) throw new Error('LoadLibrary failed for ' + PDFIUM_DLL)
 
-async function initPDFium(): Promise<Record<string, number>> {
-    if (_pdfiumInit) return _pdfiumInit
-    _pdfiumInit = (async () => {
-        logger.log('[worker] initPDFium: downloading pdfium DLL from', pdfiumDllUrl)
-        const resp = await fetch(pdfiumDllUrl)
-        if (!resp.ok) throw new Error('download PDFium DLL failed: ' + resp.status)
-        const buf = await resp.arrayBuffer()
-        const exeDir = getExePath().split('\\').slice(0, -1).join('\\')
-        const localPath = exeDir + '\\' + PDFIUM_DLL
-        const f = std.open(localPath, 'wb')
-        if (!f) throw new Error('cannot open ' + localPath + ' for writing')
-        f.write(buf, 0, buf.byteLength)
-        f.close()
-        logger.log('[worker] PDFium DLL saved to', localPath)
-        const h = win.LoadLibrary(PDFIUM_DLL)
-        if (!h) throw new Error('LoadLibrary failed for ' + PDFIUM_DLL)
-        const names = [
-            'FPDF_InitLibrary', 'FPDF_DestroyLibrary',
-            'FPDF_LoadMemDocument', 'FPDF_CloseDocument',
-            'FPDF_GetPageCount', 'FPDF_LoadPage', 'FPDF_ClosePage',
-            'FPDF_GetPageSizeByIndex',
-            'FPDFBitmap_Create', 'FPDFBitmap_Destroy', 'FPDFBitmap_FillRect',
-            'FPDFBitmap_GetBuffer', 'FPDFBitmap_GetStride',
-            'FPDF_RenderPageBitmap',
-        ]
-        const procs: Record<string, number> = {}
-        for (const name of names) {
-            const ptr = win.GetProcAddress(h, name)
-            if (!ptr) throw new Error('pdfium!' + name + ' not found')
-            procs[name] = ptr
-        }
-        ffiCall(procs['FPDF_InitLibrary'], [], [], FFI_VOID)
-        logger.log('[worker] PDFium initialized')
-        return procs
-    })()
+    // bind 内部按 DLL 名 LoadLibrary（有缓存），与上面是同一个已加载模块
+    const pdfium = {
+        initLibrary: bind(PDFIUM_DLL, 'FPDF_InitLibrary', ' -> void'),
+        destroyLibrary: bind(PDFIUM_DLL, 'FPDF_DestroyLibrary', ' -> void'),
+        loadMemDocument: bind(PDFIUM_DLL, 'FPDF_LoadMemDocument', '<>ptr i32 <>ptr -> <FPDF_DOCUMENT>ptr'),
+        closeDocument: bind(PDFIUM_DLL, 'FPDF_CloseDocument', '<FPDF_DOCUMENT>ptr -> void'),
+        getPageCount: bind(PDFIUM_DLL, 'FPDF_GetPageCount', '<FPDF_DOCUMENT>ptr -> i32'),
+        loadPage: bind(PDFIUM_DLL, 'FPDF_LoadPage', '<FPDF_DOCUMENT>ptr i32 -> <FPDF_PAGE>ptr'),
+        closePage: bind(PDFIUM_DLL, 'FPDF_ClosePage', '<FPDF_PAGE>ptr -> void'),
+        getPageSizeByIndex: bind(PDFIUM_DLL, 'FPDF_GetPageSizeByIndex', '<FPDF_DOCUMENT>ptr i32 <>ptr <>ptr -> i32'),
+        bitmapCreate: bind(PDFIUM_DLL, 'FPDFBitmap_Create', 'i32 i32 i32 -> <FPDF_BITMAP>ptr'),
+        bitmapDestroy: bind(PDFIUM_DLL, 'FPDFBitmap_Destroy', '<FPDF_BITMAP>ptr -> void'),
+        bitmapFillRect: bind(PDFIUM_DLL, 'FPDFBitmap_FillRect', '<FPDF_BITMAP>ptr i32 i32 i32 i32 u32 -> void'),
+        bitmapGetBuffer: bind(PDFIUM_DLL, 'FPDFBitmap_GetBuffer', '<FPDF_BITMAP>ptr -> <BYTE>ptr'),
+        bitmapGetStride: bind(PDFIUM_DLL, 'FPDFBitmap_GetStride', '<FPDF_BITMAP>ptr -> i32'),
+        renderPageBitmap: bind(PDFIUM_DLL, 'FPDF_RenderPageBitmap', '<FPDF_BITMAP>ptr <FPDF_PAGE>ptr i32 i32 i32 i32 i32 i32 -> void'),
+    }
+    pdfium.initLibrary()
+    logger.log('[worker] PDFium initialized')
+    return pdfium
+}
+
+type Pdfium = Awaited<ReturnType<typeof loadPdfium>>
+
+let _pdfiumInit: Promise<Pdfium> | null = null
+
+function initPDFium(): Promise<Pdfium> {
+    if (!_pdfiumInit) _pdfiumInit = loadPdfium()
     return _pdfiumInit
 }
 
-function makeBitmapInfo32(w: number, h: number): ArrayBuffer {
-    const bmi = new ArrayBuffer(40)
-    const bv = new DataView(bmi)
-    bv.setUint32(0, 40, true)
-    bv.setInt32(4, w, true)
-    bv.setInt32(8, -h, true)
-    bv.setUint16(12, 1, true)
-    bv.setUint16(14, 32, true)
-    return bmi
-}
-
-function renderPdfPageWithPDFium(procs: Record<string, number>, doc: number, pageIndex: number, scale: number, pageW: number, pageH: number): DibResult | null {
-    let page: number | null = null
-    let bmp: number | null = null
+function renderPdfPageWithPDFium(pdfium: Pdfium, doc: MaybePtr<'FPDF_DOCUMENT'>, pageIndex: number, scale: number, pageW: number, pageH: number): DibResult | null {
+    let page: MaybePtr<'FPDF_PAGE'> = NULL
+    let bmp: MaybePtr<'FPDF_BITMAP'> = NULL
     try {
-        page = ffiCall(procs['FPDF_LoadPage'], [FFI_U64, FFI_S32], [doc, pageIndex], FFI_PTR)
-        if (page === null || page === 0) return null
+        page = pdfium.loadPage(doc, pageIndex)
+        if (!page) return null
 
         const isLandscape = pageW > pageH
         const bmpW = isLandscape ? (pageH * scale) | 0 : (pageW * scale) | 0
         const bmpH = isLandscape ? (pageW * scale) | 0 : (pageH * scale) | 0
         const rotate = isLandscape ? 3 : 0
 
-        // 32-bit BGRx (alpha=0): compatible with BI_RGB 32-bit, no pixel conversion needed
-        bmp = ffiCall(procs['FPDFBitmap_Create'], [FFI_S32, FFI_S32, FFI_S32], [bmpW, bmpH, 0], FFI_PTR)
-        if (bmp === null || bmp === 0) return null
+        // 32-bit BGRx (alpha=0)：与 BI_RGB 32 位兼容，无需逐像素转换（但见下面 0x10 的历史遗留说明）
+        bmp = pdfium.bitmapCreate(bmpW, bmpH, 0)
+        if (!bmp) return null
 
-        ffiCall(procs['FPDFBitmap_FillRect'], [FFI_U64, FFI_S32, FFI_S32, FFI_S32, FFI_S32, FFI_U32],
-            [bmp, 0, 0, bmpW, bmpH, 0xFFFFFFFF], FFI_VOID)
-        ffiCall(procs['FPDF_RenderPageBitmap'], [FFI_U64, FFI_U64, FFI_S32, FFI_S32, FFI_S32, FFI_S32, FFI_S32, FFI_U32],
-            [bmp, page, 0, 0, bmpW, bmpH, rotate, 0x10], FFI_VOID)
+        pdfium.bitmapFillRect(bmp, 0, 0, bmpW, bmpH, 0xFFFFFFFF)
+        // 【历史遗留 · 迁移中未改】末位 0x10 是 FPDF_REVERSE_BYTE_ORDER —— 实测（wine +
+        // vendor 里这份 pdfium，页面内容是纯蓝 `0 0 1 rg` 填充）：
+        //     flags=0x00 → 内存 B=255 G=0 R=0（正是 BI_RGB 32bpp DIB 期望的 BGRx）
+        //     flags=0x10 → 内存 B=0   G=0 R=255（再经 StretchDIBits 按 BI_RGB 解释 → 蓝变红）
+        // 即该 flag 让 R/B 互换，与上面「无需逐像素转换」的意图正好相反（1.x 起就是 0x10）。
+        // 按「迁移不改行为」原样保留；要修就是去掉这个 flag（传 0），属独立改动、需真机打印复验。
+        pdfium.renderPageBitmap(bmp, page, 0, 0, bmpW, bmpH, rotate, 0x10)
 
-        const stride = ffiCall(procs['FPDFBitmap_GetStride'], [FFI_U64], [bmp], FFI_S32)
-        const ptr = ffiCall(procs['FPDFBitmap_GetBuffer'], [FFI_U64], [bmp], FFI_PTR)
-        if (ptr === null || ptr === 0) return null
+        const stride = pdfium.bitmapGetStride(bmp)
+        const srcPtr = pdfium.bitmapGetBuffer(bmp)
+        if (!srcPtr) return null
 
+        // native → JS 单次拷贝：bitmapGetBuffer 的品牌就是 <BYTE>ptr，直接进 RtlMoveMemory 的源位
         const pixelSize = bmpH * stride
-        const pixelBuf = new ArrayBuffer(pixelSize)
-        if (RtlMoveMemory) {
-            ffiCall(RtlMoveMemory, [FFI_PTR, FFI_U64, FFI_U32], [pixelBuf, ptr, pixelSize], FFI_VOID)
-        }
+        const pixelBuf = BYTE.alloc(pixelSize)
+        RtlMoveMemory(pixelBuf.ptr, srcPtr, pixelSize)
         return { data: pixelBuf, w: bmpW, h: bmpH }
     } finally {
-        if (bmp) ffiCall(procs['FPDFBitmap_Destroy'], [FFI_U64], [bmp], FFI_VOID)
-        if (page) ffiCall(procs['FPDF_ClosePage'], [FFI_U64], [page], FFI_VOID)
+        if (bmp) pdfium.bitmapDestroy(bmp)
+        if (page) pdfium.closePage(page)
     }
 }
 
+/** 等比缩放居中贴到打印 DC 上。use32bit 决定 DIB 位深（PDFium 出 32 位、MuPDF 出 24 位）。 */
 function centerAndStretch(hdc: number, dib: DibResult, use32bit: boolean): boolean {
-    const paperW = ffiCall(GetDeviceCaps, [FFI_U64, FFI_S32], [hdc, HORZRES], FFI_S32)
-    const paperH = ffiCall(GetDeviceCaps, [FFI_U64, FFI_S32], [hdc, VERTRES], FFI_S32)
+    const paperW = GetDeviceCaps(tag<'HDC'>(hdc), HORZRES)
+    const paperH = GetDeviceCaps(tag<'HDC'>(hdc), VERTRES)
     const scaleX = paperW / dib.w
     const scaleY = paperH / dib.h
     const sc = scaleX < scaleY ? scaleX : scaleY
@@ -233,210 +219,150 @@ function centerAndStretch(hdc: number, dib: DibResult, use32bit: boolean): boole
     const drawH = Math.floor(dib.h * sc)
     const drawX = Math.floor((paperW - drawW) / 2)
     const drawY = Math.floor((paperH - drawH) / 2)
-    const bmi = use32bit ? makeBitmapInfo32(dib.w, dib.h) : makeBitmapInfo(dib.w, dib.h)
-    const sdRet = ffiCall(StretchDIBits, [
-        FFI_U64, FFI_S32, FFI_S32, FFI_S32, FFI_S32,
-        FFI_S32, FFI_S32, FFI_S32, FFI_S32,
-        FFI_PTR, FFI_PTR, FFI_U32, FFI_U32,
-    ], [
-        hdc, drawX, drawY, drawW, drawH,
+    const bmi = makeBitmapInfo(dib.w, dib.h, use32bit ? 32 : 24)
+    const sdRet = StretchDIBits(
+        tag<'HDC'>(hdc), drawX, drawY, drawW, drawH,
         0, 0, dib.w, dib.h,
-        dib.data, bmi, 0, gui.RasterOp.SRCCOPY,
-    ], FFI_S32)
+        dib.data, bmi, ColorUse.RGB_COLORS, RasterOp.SRCCOPY,
+    )
     return sdRet > 0
 }
 
 async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolean, tumble: boolean, renderEngine: string, renderDPI: number, docName: string): Promise<boolean> {
     logger.log('[worker] printPdf:', printerName, 'duplex:', duplex, 'tumble:', tumble, 'renderEngine:', renderEngine)
 
-    const printerNameBuf = strToWideBuf(printerName)
-
-    const hdc = ffiCall(
-        CreateDCW,
-        [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
-        [null, printerNameBuf, null, null],
-        FFI_TYPE_UINT64
-    )
-
+    const hdc = CreateDCW(NULL, printerName, NULL, NULL)
     if (!hdc) {
-        logger.log('[worker] CreateDCW failed for printer "' + printerName + '", GLE=' + gle())
+        logger.log('[worker] CreateDCW failed for printer "' + printerName + '", GLE=' + GetLastError())
         return false
     }
 
-    const _wspool = win.LoadLibrary('winspool.drv')
     let hPrinter = 0
-    let devmodeBuf: ArrayBuffer | null = null
-    let DocumentPropertiesW: number | null = 0
-    let ClosePrinter: number | null = 0
+    let devmodeBuf: PtrArrayBuffer<any> | null = null
 
-    if (_wspool) {
-        const OpenPrinterW = win.GetProcAddress(_wspool, 'OpenPrinterW')
-        DocumentPropertiesW = win.GetProcAddress(_wspool, 'DocumentPropertiesW')
-        ClosePrinter = win.GetProcAddress(_wspool, 'ClosePrinter')
-        if (OpenPrinterW && DocumentPropertiesW && ClosePrinter) {
-            const hPrinterBuf = new ArrayBuffer(8)
-            const openRet = ffiCall(
-                OpenPrinterW,
-                [FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
-                [printerNameBuf, hPrinterBuf, null],
-                FFI_TYPE_SINT32
-            )
-            if (openRet) {
-                const hpDv = new DataView(hPrinterBuf)
-                hPrinter = hpDv.getUint32(0, true) + hpDv.getUint32(4, true) * 4294967296
-
-                const dmSize = ffiCall(
-                    DocumentPropertiesW,
-                    [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
-                    [0, hPrinter, printerNameBuf, null, null, 0],
-                    FFI_TYPE_SINT32
-                )
-
-                if (dmSize > 0) {
-                    devmodeBuf = new ArrayBuffer(dmSize)
-                } else {
-                    logger.log('[worker] DocumentPropertiesW size query failed, dmSize=' + dmSize + ' GLE=' + gle())
-                    DocumentPropertiesW = 0
-                }
-            } else {
-                logger.log('[worker] OpenPrinterW failed for "' + printerName + '", GLE=' + gle())
-            }
+    // 打开打印机，取一份 DEVMODE 用于改双面参数（失败则跳过，不影响打印）
+    const hPrinterSlot = BYTE.alloc(8)
+    if (OpenPrinter(printerName, hPrinterSlot, NULL)) {
+        hPrinter = readPtr(new DataView(hPrinterSlot), 0)
+        const dmSize = DocumentPropertiesW(NULL, hPrinter, printerName, NULL, NULL, 0)
+        if (dmSize > 0) {
+            devmodeBuf = BYTE.alloc(dmSize)
+        } else {
+            logger.log('[worker] DocumentPropertiesW size query failed, dmSize=' + dmSize + ' GLE=' + GetLastError())
         }
+    } else {
+        logger.log('[worker] OpenPrinterW failed for "' + printerName + '", GLE=' + GetLastError())
     }
 
-    let paperW = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, HORZRES], FFI_TYPE_SINT32)
-    let paperH = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, VERTRES], FFI_TYPE_SINT32)
-    const dpiX = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, LOGPIXELSX], FFI_TYPE_SINT32)
-    const dpiY = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, LOGPIXELSY], FFI_TYPE_SINT32)
+    let paperW = GetDeviceCaps(tag<'HDC'>(hdc), HORZRES)
+    let paperH = GetDeviceCaps(tag<'HDC'>(hdc), VERTRES)
+    const dpiX = GetDeviceCaps(tag<'HDC'>(hdc), LOGPIXELSX)
+    const dpiY = GetDeviceCaps(tag<'HDC'>(hdc), LOGPIXELSY)
     logger.log('[worker] paper:', paperW, 'x', paperH, 'dpi:', dpiX, 'x', dpiY)
     if (paperW <= 0 || paperH <= 0 || dpiX <= 0 || dpiY <= 0) {
         logger.log('[worker] WARNING: invalid paper/dpi from GetDeviceCaps')
-        ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+        DeleteDC(tag<'HDC'>(hdc))
         return false
     }
 
     const duplexVal: number = duplex ? (tumble ? 3 : 2) : 1
-    if (devmodeBuf && hPrinter && DocumentPropertiesW) {
-        const outRet = ffiCall(
-            DocumentPropertiesW,
-            [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
-            [0, hPrinter, printerNameBuf, devmodeBuf, null, gui.DevMode.OUT_BUFFER],
-            FFI_TYPE_SINT32
-        )
+    if (devmodeBuf && hPrinter) {
+        const outRet = DocumentPropertiesW(NULL, hPrinter, printerName, devmodeBuf.ptr, NULL, DevMode.OUT_BUFFER)
         if (outRet > 0) {
-            const dv = new DataView(devmodeBuf)
-            dv.setUint32(72, dv.getUint32(72, true) | gui.DevMode.DUPLEX, true)
-            dv.setUint16(94, duplexVal, true)
-            const dmRet = ffiCall(
-                DocumentPropertiesW,
-                [FFI_TYPE_UINT64, FFI_TYPE_UINT64, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_POINTER, FFI_TYPE_UINT32],
-                [0, hPrinter, printerNameBuf, devmodeBuf, devmodeBuf, 10],
-                FFI_TYPE_SINT32
+            // 就地打补丁：dmFields |= DM_DUPLEX，dmDuplex = duplexVal（缺省字段跳过）
+            const dm = DEVMODEW.decode(devmodeBuf)
+            DEVMODEW.encode({ dmFields: dm.dmFields | DevMode.DUPLEX, dmDuplex: duplexVal }, devmodeBuf)
+            const dmRet = DocumentPropertiesW(
+                NULL, hPrinter, printerName, devmodeBuf.ptr, devmodeBuf.ptr,
+                DM_IN_BUFFER | DevMode.OUT_BUFFER,
             )
             if (dmRet > 0) {
-                const resetHdc = ffiCall(
-                    ResetDCW,
-                    [FFI_TYPE_UINT64, FFI_TYPE_POINTER],
-                    [hdc, devmodeBuf],
-                    FFI_TYPE_UINT64
-                )
+                const resetHdc = ResetDCW(hdc, devmodeBuf)
                 if (resetHdc) {
-                    paperW = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, HORZRES], FFI_TYPE_SINT32)
-                    paperH = ffiCall(GetDeviceCaps, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, VERTRES], FFI_TYPE_SINT32)
+                    paperW = GetDeviceCaps(tag<'HDC'>(hdc), HORZRES)
+                    paperH = GetDeviceCaps(tag<'HDC'>(hdc), VERTRES)
                 } else {
-                    logger.log('[worker] ResetDCW duplex failed, GLE=' + gle())
+                    logger.log('[worker] ResetDCW duplex failed, GLE=' + GetLastError())
                 }
             } else {
-                logger.log('[worker] DocumentPropertiesW validation failed, ret=' + dmRet + ' GLE=' + gle())
+                logger.log('[worker] DocumentPropertiesW validation failed, ret=' + dmRet + ' GLE=' + GetLastError())
             }
         } else {
-            logger.log('[worker] DocumentPropertiesW init failed, ret=' + outRet + ' GLE=' + gle())
+            logger.log('[worker] DocumentPropertiesW init failed, ret=' + outRet + ' GLE=' + GetLastError())
         }
     }
 
-    const docNameBuf = strToWideBuf(docName || 'SuperPrint')
-    const docNamePtr = bufferPtr(docNameBuf)
+    // DOCINFOW（x64 布局 40B）：cbSize@0、lpszDocName@8、lpszOutput/lpszDatatype=NULL、fwType@32=0
+    const docNameBuf = WCHAR.encode(docName || 'SuperPrint')
+    const docInfo = BYTE.alloc(40)
+    const docInfoDv = new DataView(docInfo)
+    docInfoDv.setUint32(0, 40, true)
+    docInfoDv.setBigUint64(8, BigInt(docNameBuf.ptr), true)
 
-    const docInfo = new ArrayBuffer(40)
-    const docInfoView = new DataView(docInfo)
-    docInfoView.setUint32(0, 40, true)
-    docInfoView.setUint32(4, 0, true)
-    docInfoView.setBigUint64(8, BigInt(docNamePtr), true)
-    docInfoView.setBigUint64(16, 0n, true)
-    docInfoView.setBigUint64(24, 0n, true)
-    docInfoView.setUint32(32, 0, true)
-    docInfoView.setUint32(36, 0, true)
-
-    const docRet = ffiCall(
-        StartDocW,
-        [FFI_TYPE_UINT64, FFI_TYPE_POINTER],
-        [hdc, docInfo],
-        FFI_TYPE_SINT32
-    )
-
+    const docRet = StartDocW(hdc, docInfo.ptr)
     if (docRet <= 0) {
-        logger.log('[worker] StartDocW failed, ret=' + docRet + ' GLE=' + gle())
-        const ddRet = ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
+        logger.log('[worker] StartDocW failed, ret=' + docRet + ' GLE=' + GetLastError())
+        const ddRet = DeleteDC(tag<'HDC'>(hdc))
         logger.log('[worker] DeleteDC (startdoc fail path) returned:', ddRet)
-        if (hPrinter && ClosePrinter) ffiCall(ClosePrinter, [FFI_TYPE_UINT64], [hPrinter], FFI_TYPE_SINT32)
+        if (hPrinter) ClosePrinter(hPrinter)
         return false
     }
 
     const scale = renderDPI / 72
 
     if (renderEngine === 'pdfium') {
-        const procs = await initPDFium()
+        const pdfium = await initPDFium()
 
-        const pdfDoc = ffiCall(procs['FPDF_LoadMemDocument'], [FFI_PTR, FFI_S32, FFI_PTR], [pdfBuf, pdfBuf.byteLength, null], FFI_PTR)
+        const pdfDoc = pdfium.loadMemDocument(bufferPtr(pdfBuf), pdfBuf.byteLength, NULL)
         if (!pdfDoc) {
             logger.log('[worker] FPDF_LoadMemDocument failed')
-            ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-            ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-            if (hPrinter && ClosePrinter) ffiCall(ClosePrinter, [FFI_TYPE_UINT64], [hPrinter], FFI_TYPE_SINT32)
+            EndDoc(hdc)
+            DeleteDC(tag<'HDC'>(hdc))
+            if (hPrinter) ClosePrinter(hPrinter)
             return false
         }
         try {
-            const totalPages = ffiCall(procs['FPDF_GetPageCount'], [FFI_U64], [pdfDoc], FFI_S32)
+            const totalPages = pdfium.getPageCount(pdfDoc)
             logger.log('[worker] PDF pages:', totalPages)
 
             for (let i = 0; i < totalPages; i++) {
                 logger.log('[worker] page ' + (i + 1) + '/' + totalPages)
-                const spRet = ffiCall(StartPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-                if (spRet <= 0) logger.log('[worker] StartPage failed, ret=' + spRet + ' GLE=' + gle())
-                ffiCall(SetStretchBltMode, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, 4], FFI_TYPE_SINT32)
-                ffiCall(SetBrushOrgEx, [FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER], [hdc, 0, 0, null], FFI_TYPE_SINT32)
+                const spRet = StartPage(hdc)
+                if (spRet <= 0) logger.log('[worker] StartPage failed, ret=' + spRet + ' GLE=' + GetLastError())
+                SetStretchBltMode(tag<'HDC'>(hdc), StretchBltMode.HALFTONE)
+                SetBrushOrgEx(hdc, 0, 0, NULL)
                 try {
                     let t0 = Date.now()
-                    const wBuf = new ArrayBuffer(8), hBuf = new ArrayBuffer(8)
-                    const ret = ffiCall(procs['FPDF_GetPageSizeByIndex'], [FFI_U64, FFI_S32, FFI_PTR, FFI_PTR],
-                        [pdfDoc, i, wBuf, hBuf], FFI_S32)
+                    const sizeBuf = BYTE.alloc(16)
+                    const ret = pdfium.getPageSizeByIndex(pdfDoc, i, sizeBuf.ptr, sizeBuf.ptr + 8)
                     if (ret <= 0) logger.log('[worker] page ' + i + ' GetPageSizeByIndex failed')
-                    const pageW = new DataView(wBuf).getFloat64(0, true)
-                    const pageH = new DataView(hBuf).getFloat64(0, true)
-                    const dib = renderPdfPageWithPDFium(procs, pdfDoc, i, scale, pageW, pageH)
+                    const sizeDv = new DataView(sizeBuf)
+                    const pageW = sizeDv.getFloat64(0, true)
+                    const pageH = sizeDv.getFloat64(8, true)
+                    const dib = renderPdfPageWithPDFium(pdfium, pdfDoc, i, scale, pageW, pageH)
                     let t1 = Date.now()
                     if (dib) {
                         logger.log('[worker] page ' + i + ' render: ' + (t1 - t0) + 'ms (' + dib.w + 'x' + dib.h + ')')
                         const ok = centerAndStretch(hdc, dib, true)
                         logger.log('[worker] page ' + i + ' stretch ok:', ok)
-                        if (!ok) logger.log('[worker] StretchDIBits failed for page ' + i + ' GLE=' + gle())
+                        if (!ok) logger.log('[worker] StretchDIBits failed for page ' + i + ' GLE=' + GetLastError())
                     } else {
                         logger.log('[worker] page ' + i + ' render failed')
                     }
                 } catch (e: unknown) {
                     logger.log('[worker] page ' + i + ' error:', e instanceof Error ? e.stack : String(e))
                 }
-                const epRet = ffiCall(EndPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-                if (epRet <= 0) logger.log('[worker] EndPage failed, ret=' + epRet + ' GLE=' + gle())
+                const epRet = EndPage(hdc)
+                if (epRet <= 0) logger.log('[worker] EndPage failed, ret=' + epRet + ' GLE=' + GetLastError())
             }
         } catch (e: unknown) {
             logger.log('[worker] PDFium processing error:', e instanceof Error ? e.stack : String(e))
-            ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-            ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-            if (hPrinter && ClosePrinter) ffiCall(ClosePrinter, [FFI_TYPE_UINT64], [hPrinter], FFI_TYPE_SINT32)
+            EndDoc(hdc)
+            DeleteDC(tag<'HDC'>(hdc))
+            if (hPrinter) ClosePrinter(hPrinter)
             return false
         } finally {
-            ffiCall(procs['FPDF_CloseDocument'], [FFI_U64], [pdfDoc], FFI_VOID)
+            pdfium.closeDocument(pdfDoc)
         }
     } else {
         const mupdf = await loadMuPdf()
@@ -448,10 +374,10 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
 
             for (let i = 0; i < totalPages; i++) {
                 logger.log('[worker] page ' + (i + 1) + '/' + totalPages)
-                const spRet = ffiCall(StartPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-                if (spRet <= 0) logger.log('[worker] StartPage failed, ret=' + spRet + ' GLE=' + gle())
-                ffiCall(SetStretchBltMode, [FFI_TYPE_UINT64, FFI_TYPE_SINT32], [hdc, 4], FFI_TYPE_SINT32)
-                ffiCall(SetBrushOrgEx, [FFI_TYPE_UINT64, FFI_TYPE_SINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER], [hdc, 0, 0, null], FFI_TYPE_SINT32)
+                const spRet = StartPage(hdc)
+                if (spRet <= 0) logger.log('[worker] StartPage failed, ret=' + spRet + ' GLE=' + GetLastError())
+                SetStretchBltMode(tag<'HDC'>(hdc), StretchBltMode.HALFTONE)
+                SetBrushOrgEx(hdc, 0, 0, NULL)
                 try {
                     let isLandscape = false
                     let t0 = Date.now()
@@ -471,21 +397,21 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                         logger.log('[worker] page ' + i + ' render: ' + (t1 - t0) + 'ms (' + dib.w + 'x' + dib.h + ')' + (isLandscape ? ' (rotated)' : ''))
                         const ok = centerAndStretch(hdc, dib, false)
                         logger.log('[worker] page ' + i + ' stretch ok:', ok)
-                        if (!ok) logger.log('[worker] StretchDIBits failed for page ' + i + ' GLE=' + gle())
+                        if (!ok) logger.log('[worker] StretchDIBits failed for page ' + i + ' GLE=' + GetLastError())
                     } else {
                         logger.log('[worker] page ' + i + ' render failed')
                     }
                 } catch (e: unknown) {
                     logger.log('[worker] page ' + i + ' error:', e instanceof Error ? e.stack : String(e))
                 }
-                const epRet = ffiCall(EndPage, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-                if (epRet <= 0) logger.log('[worker] EndPage failed, ret=' + epRet + ' GLE=' + gle())
+                const epRet = EndPage(hdc)
+                if (epRet <= 0) logger.log('[worker] EndPage failed, ret=' + epRet + ' GLE=' + GetLastError())
             }
         } catch (e: unknown) {
             logger.log('[worker] MuPDF processing error:', e instanceof Error ? e.stack : String(e))
-            ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-            ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-            if (hPrinter && ClosePrinter) ffiCall(ClosePrinter, [FFI_TYPE_UINT64], [hPrinter], FFI_TYPE_SINT32)
+            EndDoc(hdc)
+            DeleteDC(tag<'HDC'>(hdc))
+            if (hPrinter) ClosePrinter(hPrinter)
             if (doc) try { doc.destroy() } catch {}
             return false
         } finally {
@@ -493,12 +419,12 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         }
     }
 
-    const edRet = ffiCall(EndDoc, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-    if (edRet <= 0) logger.log('[worker] EndDoc failed, ret=' + edRet + ' GLE=' + gle())
+    const edRet = EndDoc(hdc)
+    if (edRet <= 0) logger.log('[worker] EndDoc failed, ret=' + edRet + ' GLE=' + GetLastError())
     logger.log('[worker] calling DeleteDC (success path)')
-    const ddRet = ffiCall(DeleteDC, [FFI_TYPE_UINT64], [hdc], FFI_TYPE_SINT32)
-    logger.log('[worker] DeleteDC (success path) returned:', ddRet, 'GLE=' + gle())
-    if (hPrinter && ClosePrinter) ffiCall(ClosePrinter, [FFI_TYPE_UINT64], [hPrinter], FFI_TYPE_SINT32)
+    const ddRet = DeleteDC(tag<'HDC'>(hdc))
+    logger.log('[worker] DeleteDC (success path) returned:', ddRet, 'GLE=' + GetLastError())
+    if (hPrinter) ClosePrinter(hPrinter)
 
     logger.log('[worker] printPdf done')
     return true

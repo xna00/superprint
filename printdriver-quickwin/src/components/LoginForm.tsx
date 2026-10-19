@@ -1,8 +1,8 @@
-import * as gui from 'gui'
 import { Button, Input } from 'quickwin/lib/react-qw/index.js'
+import { WindowStyle } from 'quickwin/constants'
 
-const VISIBLE = gui.WindowStyle.VISIBLE
-const CLIPCHILDREN = gui.WindowStyle.CLIPCHILDREN
+const VISIBLE = WindowStyle.VISIBLE
+const CLIPCHILDREN = WindowStyle.CLIPCHILDREN
 
 interface LoginFormProps {
     loginUser: string

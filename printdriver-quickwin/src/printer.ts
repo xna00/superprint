@@ -1,20 +1,10 @@
-import * as win from 'win'
-import * as gui from 'gui'
-import { ffiCall, bufferPtr, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_SINT32 } from 'ffi'
-import { decodeWideAtPtr, readPtr } from './utils.js'
-
-const _winspool = win.LoadLibrary('winspool.drv')
-if (!_winspool) throw new Error('winspool.drv not found')
-function gdip(name: string) {
-    const ptr = win.GetProcAddress(_winspool!, name)
-    if (!ptr) throw new Error('winspool!' + name + ' not found')
-    return ptr
-}
-const GetDefaultPrinterW = gdip('GetDefaultPrinterW')
-const EnumPrintersW = gdip('EnumPrintersW')
-
-const PRINTER_ENUM_LOCAL = gui.PrinterEnum.LOCAL
-const PRINTER_ENUM_CONNECTIONS = gui.PrinterEnum.CONNECTIONS
+import { WCHAR } from 'quickwin/lib/ffi/bind.js'
+import { structArray } from 'quickwin/lib/ffi/struct.js'
+import { NULL, PtrArrayBuffer } from 'quickwin/lib/ffi/ctype.js'
+import { EnumPrinters, GetDefaultPrinter } from 'quickwin/lib/windows/winspool.js'
+import { PRINTER_INFO_2W } from 'quickwin/lib/windows/structs.js'
+import { PrinterEnum } from 'quickwin/constants'
+import { decodeWideAtPtr } from './utils.js'
 
 export interface LocalPrinterInfo {
     name: string
@@ -25,40 +15,32 @@ export interface LocalPrinterInfo {
 }
 
 export function enumLocalPrinters(): LocalPrinterInfo[] {
-    const flags = PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS
+    const flags = PrinterEnum.LOCAL | PrinterEnum.CONNECTIONS
     const level = 2
-    const neededBuf = new Uint32Array(new ArrayBuffer(4))
-    const returnedBuf = new Uint32Array(new ArrayBuffer(4))
+    const neededBuf = new PtrArrayBuffer(4)
+    const returnedBuf = new PtrArrayBuffer(4)
+    const neededU = new Uint32Array(neededBuf)
+    const returnedU = new Uint32Array(returnedBuf)
 
-    ffiCall(
-        EnumPrintersW,
-        [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
-        [flags, null, level, null, 0, neededBuf.buffer, returnedBuf.buffer],
-        FFI_TYPE_SINT32
-    )
+    // 两段式：先 NULL 探测所需字节数，再按需求分配重调
+    EnumPrinters(flags, NULL, level, NULL, 0, neededBuf, returnedBuf)
 
-    if (neededBuf[0] === 0) return []
+    if (neededU[0] === 0) return []
 
-    const printerBuf = new ArrayBuffer(neededBuf[0])
-    const ret = ffiCall(
-        EnumPrintersW,
-        [FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_UINT32, FFI_TYPE_POINTER, FFI_TYPE_POINTER],
-        [flags, null, level, printerBuf, neededBuf[0], neededBuf.buffer, returnedBuf.buffer],
-        FFI_TYPE_SINT32
-    )
+    const printerBuf = new PtrArrayBuffer(neededU[0])
+    const ret = EnumPrinters(flags, NULL, level, printerBuf, neededU[0], neededBuf, returnedBuf)
 
     if (ret === 0) return []
 
+    // 出参是结构数组 + 尾部宽字符串区（byteLength 不是 size 整数倍）→ count 必填
+    const infos = structArray(PRINTER_INFO_2W).decode(printerBuf, returnedU[0])
     const printers: LocalPrinterInfo[] = []
-    const dv = new DataView(printerBuf)
-    const structSize = 136
-
-    for (let i = 0; i < returnedBuf[0] && i < 100; i++) {
-        const off = i * structSize
-        const name = decodeWideAtPtr(readPtr(dv, off + 8))
+    for (let i = 0; i < infos.length && i < 100; i++) {
+        const inf = infos[i]!
+        const name = decodeWideAtPtr(inf.pPrinterName)
         if (!name) continue
-        const port = decodeWideAtPtr(readPtr(dv, off + 24))
-        const driver = decodeWideAtPtr(readPtr(dv, off + 32))
+        const port = decodeWideAtPtr(inf.pPortName)
+        const driver = decodeWideAtPtr(inf.pDriverName)
         printers.push({ name, port, driver, enabled: false, id: null })
     }
 
@@ -66,18 +48,13 @@ export function enumLocalPrinters(): LocalPrinterInfo[] {
 }
 
 export function getDefaultPrinter(): string | null {
-    const sizeBuf = new ArrayBuffer(4)
-    const sizeArr = new Uint32Array(sizeBuf)
-    sizeArr[0] = 256
-    const nameBuf = new ArrayBuffer(512)
+    const sizeBuf = new PtrArrayBuffer(4)
+    new Uint32Array(sizeBuf)[0] = 256
+    const nameBuf = WCHAR.alloc(256)
 
-    const ret = ffiCall(
-        GetDefaultPrinterW,
-        [FFI_TYPE_POINTER, FFI_TYPE_POINTER],
-        [nameBuf, sizeBuf],
-        FFI_TYPE_SINT32
-    )
+    const ret = GetDefaultPrinter(nameBuf, sizeBuf)
 
     if (ret === 0) return null
-    return decodeWideAtPtr(bufferPtr(nameBuf))
+    const name = WCHAR.decode(nameBuf)
+    return name || null
 }

@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react'
-import * as gui from 'gui'
 import * as os from 'os'
 import { CheckBox, Button, RadioButton, Input } from 'quickwin/lib/react-qw/index.js'
+import { NotifyIconCmd, WindowStyle } from 'quickwin/constants'
+import { ShellNotifyIcon } from 'quickwin/lib/windows/shell32.js'
+import { PostQuitMessage } from 'quickwin/lib/windows/user32.js'
+import { NOTIFYICONDATAW } from 'quickwin/lib/windows/structs.js'
 import { storageGet, storageSet, getRenderEngine, setRenderEngine, getRenderDPI, setRenderDPI } from '../storage.js'
 import { checkAndUpdate } from '../update.js'
 import { getExePath } from '../utils.js'
 import { logger } from '../logger.js'
 import { mainHwnd, cleanupMain } from '../main.js'
 
-const VISIBLE = gui.WindowStyle.VISIBLE
+const VISIBLE = WindowStyle.VISIBLE
 
 export function SettingsTab() {
   const [minimizeToTray, setMinimizeToTray] = useState(() => {
@@ -91,9 +94,9 @@ export function SettingsTab() {
       </w>
       <w type="STATIC" ws={VISIBLE} style={{ flexDirection: 'row', gap: 4 }}>
         <Button onClick={() => {
-          if (mainHwnd) gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd: mainHwnd, uID: 1 })
+          if (mainHwnd) ShellNotifyIcon(NotifyIconCmd.DELETE, { cbSize: NOTIFYICONDATAW.size, hWnd: mainHwnd, uID: 1 })
           cleanupMain()
-          gui.PostQuitMessage(0)
+          PostQuitMessage(0)
         }} style={{ width: 110, height: 26 }}>退出</Button>
       </w>
     </w>

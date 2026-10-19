@@ -1,10 +1,14 @@
 import 'quickwin/lib/polyfill.js'
-import * as gui from 'gui'
 import * as std from 'std'
 import * as os from 'os'
-import * as win from 'win'
-import { ffiCall, FFI_TYPE_UINT32, FFI_TYPE_SINT32, FFI_TYPE_POINTER } from 'ffi'
-import { strToWideBuf, getExePath } from './utils.js'
+import { NULL } from 'quickwin/lib/ffi/ctype.js'
+import { CreateProcess } from 'quickwin/lib/windows/kernel32.js'
+import { PostQuitMessage } from 'quickwin/lib/windows/user32.js'
+import { ShellNotifyIcon } from 'quickwin/lib/windows/shell32.js'
+import { NOTIFYICONDATAW, PROCESS_INFORMATION } from 'quickwin/lib/windows/structs.js'
+import { NotifyIconCmd } from 'quickwin/constants'
+import { getExePath } from './utils.js'
+import { releaseSingleInstanceMutex, STARTUPINFO_CB_LEGACY } from './win32.js'
 import { ENTRY_HASH } from './config.js'
 import { api } from './api.js'
 import { mainHwnd, cleanupMain, hMutex } from './main.js'
@@ -17,16 +21,6 @@ interface CheckUpdateResult {
   exeDownloadUrls: string[]
   entryJsChanged: boolean
   updateExeDownloadUrls: string[]
-}
-
-let _inited = false
-let pCreateProcessW: number | null = null
-
-function initFfi() {
-  if (_inited) return
-  _inited = true
-  const kernel32 = win.LoadLibrary('kernel32.dll')
-  pCreateProcessW = kernel32 ? win.GetProcAddress(kernel32, 'CreateProcessW') : null
 }
 
 let hashWorker: os.Worker | null = null
@@ -49,28 +43,13 @@ async function getExeHash(exePath: string): Promise<string> {
     return _exeHash
 }
 
-
-function startNewProcess(exePath: string) {
-  initFfi()
-  if (!pCreateProcessW) return false
-  const cmdBuf = strToWideBuf('"' + exePath + '" --run')
-  const startupInfo = new ArrayBuffer(68)
-  const dv = new DataView(startupInfo)
-  dv.setUint32(0, 68, true)
-  const procInfo = new ArrayBuffer(24)
-  const ret = ffiCall(
-    pCreateProcessW,
-    [
-      FFI_TYPE_POINTER, FFI_TYPE_POINTER,
-      FFI_TYPE_POINTER, FFI_TYPE_POINTER,
-      FFI_TYPE_UINT32, FFI_TYPE_UINT32,
-      FFI_TYPE_POINTER, FFI_TYPE_POINTER,
-      FFI_TYPE_POINTER, FFI_TYPE_POINTER,
-    ],
-    [null, cmdBuf, null, null, 0, 0, null, null, startupInfo, procInfo],
-    FFI_TYPE_SINT32
-  )
-  return ret !== 0
+/** 拉起新版 exe（不带工作目录、不继承句柄，与历史行为一致） */
+function startNewProcess(exePath: string): boolean {
+  const procInfo = PROCESS_INFORMATION.alloc()
+  return CreateProcess(
+    NULL, '"' + exePath + '" --run', NULL, NULL, 0, 0, NULL, NULL,
+    { cb: STARTUPINFO_CB_LEGACY }, procInfo.ptr,
+  ) !== 0
 }
 
 async function tryFetch(urls: string[]) {
@@ -160,14 +139,10 @@ export async function checkAndUpdate() {
     if (!started) {
       logger.log('[update] CreateProcessW failed, you may restart manually')
     }
-    if (mainHwnd) gui.ShellNotifyIcon(gui.NotifyIconCmd.DELETE, { hwnd: mainHwnd, uID: 1 })
-    if (hMutex) {
-      const k32 = win.LoadLibrary('kernel32.dll')
-      const pReleaseMutex = k32 ? win.GetProcAddress(k32, 'ReleaseMutex') : null
-      if (pReleaseMutex) ffiCall(pReleaseMutex, [FFI_TYPE_UINT32], [hMutex], FFI_TYPE_SINT32)
-    }
+    if (mainHwnd) ShellNotifyIcon(NotifyIconCmd.DELETE, { cbSize: NOTIFYICONDATAW.size, hWnd: mainHwnd, uID: 1 })
+    if (hMutex) releaseSingleInstanceMutex(hMutex)
     cleanupMain()
-    gui.PostQuitMessage(0)
+    PostQuitMessage(0)
   }
 }
 
