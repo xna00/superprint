@@ -70,12 +70,17 @@ const MAX_ATTEMPTS = 3 // 每个地址的重试次数
 const RETRY_DELAYS = [1000, 2000] // 每次重试前的退避(ms)
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-export const convertWithWpsApi = async (filePath: string, outputPath: string): Promise<boolean> => {
+export const convertWithWpsApi = async (
+  filePath: string,
+  outputPath: string,
+  attempts: number = MAX_ATTEMPTS,
+  delays: number[] = RETRY_DELAYS,
+): Promise<boolean> => {
   const fileBuffer = readFileSync(filePath)
   const fileName = basename(filePath)
 
   for (const baseUrl of WPS2PDF_URLS) {
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= attempts; attempt++) {
       // FormData 的 body 只能读一次，每次尝试都要重建
       const form = new FormData()
       form.append('file', new Blob([fileBuffer]), fileName)
@@ -96,7 +101,7 @@ export const convertWithWpsApi = async (filePath: string, outputPath: string): P
             writeFileSync(outputPath, pdfBuffer)
             return true
           }
-          logger.error(`WPS转PDF返回空内容 [${baseUrl}] 第 ${attempt}/${MAX_ATTEMPTS} 次`)
+          logger.error(`WPS转PDF返回空内容 [${baseUrl}] 第 ${attempt}/${attempts} 次`)
         } else {
           let detail = `HTTP ${response.status}`
           try {
@@ -105,19 +110,19 @@ export const convertWithWpsApi = async (filePath: string, outputPath: string): P
           } catch {
             // 忽略响应解析失败
           }
-          logger.error(`WPS转PDF失败 [${baseUrl}] 第 ${attempt}/${MAX_ATTEMPTS} 次:`, detail)
+          logger.error(`WPS转PDF失败 [${baseUrl}] 第 ${attempt}/${attempts} 次:`, detail)
           // 4xx 是格式不支持/文件过大等客户端错误，对同一地址重试无意义 → 直接换下一个地址
           if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
             break
           }
         }
       } catch (error) {
-        logger.error(`WPS转PDF请求失败 [${baseUrl}] 第 ${attempt}/${MAX_ATTEMPTS} 次:`, error)
+        logger.error(`WPS转PDF请求失败 [${baseUrl}] 第 ${attempt}/${attempts} 次:`, error)
       } finally {
         clearTimeout(timer)
       }
 
-      if (attempt < MAX_ATTEMPTS) await sleep(RETRY_DELAYS[attempt - 1] ?? 2000)
+      if (attempt < attempts) await sleep(delays[attempt - 1] ?? 2000)
     }
   }
 
