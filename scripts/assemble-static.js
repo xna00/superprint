@@ -6,9 +6,6 @@
  *
  *   npm run assemble   # 只做拷贝（假定已 build 过）
  *   npm run deploy     # build + assemble
- *
- * 注意：printdriver/ 那套 C++ 产物（PrintDriver.exe / Setup.exe）在 Linux 上建不出来，
- * 找不到来源时会保留 server/static/ 里已有的文件不动。
  */
 
 const fs = require('node:fs')
@@ -74,40 +71,7 @@ fs.rmSync(staticPrintdriverDir, { recursive: true, force: true })
 copyInto(quickwinDist, staticPrintdriverDir)
 log(`printdriver-quickwin/dist → server/static/printdriver/`)
 
-// ---------- 3. printdriver（C++，可选）→ server/static/ ----------
-const printdriverSources = [
-  path.join(rootDir, 'printdriver', 'output'), // 本地 / CI 的 C++ 构建产物
-  path.join(rootDir, 'artifacts', 'printdriver'), // 旧的 CI 下载目录
-]
-const printdriverSrc = printdriverSources.find(
-  (d) => fs.existsSync(path.join(d, 'PrintDriver.exe')) && fs.existsSync(path.join(d, 'Setup.exe')),
-)
-
-if (!printdriverSrc) {
-  warn('没找到 PrintDriver.exe / Setup.exe，保留 server/static/ 里现有的驱动文件不动')
-  warn(`  找过：${printdriverSources.map((d) => path.relative(rootDir, d)).join('、')}`)
-} else {
-  const copyFile = (name, as) => {
-    fs.copyFileSync(path.join(printdriverSrc, name), path.join(staticDir, as))
-  }
-  copyFile('PrintDriver.exe', 'PrintDriver.exe')
-  copyFile('Setup.exe', 'Setup.exe')
-
-  const jsonPath = path.join(printdriverSrc, 'printdriver.json')
-  if (fs.existsSync(jsonPath)) {
-    fs.copyFileSync(jsonPath, path.join(staticDir, 'printdriver.json'))
-    const { version } = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
-    if (version) {
-      copyFile('PrintDriver.exe', `PrintDriver-${version}.exe`)
-      copyFile('Setup.exe', `Setup-${version}.exe`)
-    }
-    log(`printdriver → server/static/（PrintDriver/Setup.exe + printdriver.json, version ${version}）`)
-  } else {
-    warn('printdriver.json 不存在，跳过版本号副本（客户端 checkDriverUpdate 会拿不到版本）')
-  }
-}
-
-// ---------- 4. 重建 .br ----------
+// ---------- 3. 重建 .br ----------
 // nodeAdapter 只要发现 <file>.br 就直接发它，陈旧的不删就会发旧内容。
 // 规则与 api/uploadStatic.ts 保持一致：>1024 字节的文件才压。
 const MIN_BR_SIZE = 1024
