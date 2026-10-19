@@ -70,7 +70,7 @@ const MAX_ATTEMPTS = 3 // 每个地址的重试次数
 const RETRY_DELAYS = [1000, 2000] // 每次重试前的退避(ms)
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-const convertWithWpsApi = async (filePath: string, outputPath: string): Promise<boolean> => {
+export const convertWithWpsApi = async (filePath: string, outputPath: string): Promise<boolean> => {
   const fileBuffer = readFileSync(filePath)
   const fileName = basename(filePath)
 
