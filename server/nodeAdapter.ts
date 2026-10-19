@@ -6,6 +6,7 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { apiHandler } from "./api/handler.ts";
+import { als, createRequestInfo } from "./request-context.ts";
 import {createWebSocketServer} from './ws/index.ts'
 import { logger } from './logger.ts';
 const __filename = fileURLToPath(import.meta.url);
@@ -111,13 +112,17 @@ const serveStatic = (pathname: string, req: IncomingMessage, res: ServerResponse
   createReadStream(filePath).pipe(res);
 };
 
-const server = createServer({}, (req, res) => {
-  logger.log(req.method, req.url, 'UA:', req.headers['user-agent']);
-
+const server = createServer({}, async (req, res) => {
   assert(req.url);
+  const webReq = makeRequest(req);
+  const info = createRequestInfo(webReq);
   const pathname = new URL(req.url, base).pathname;
+  logger.log(`[${info.id}]`, req.method, req.url, 'UA:', req.headers['user-agent']);
+
   if (req.url.startsWith("/api/")) {
-    apiHandler(makeRequest(req)).then(respond.bind(null, res));
+    const response = await als.run(info, () => apiHandler(webReq));
+    logger.log(`[${info.id}]`, response.status, `${(performance.now() - info.perf.startTime).toFixed(0)}ms`)
+    respond(res, response);
   } else {
     serveStatic(pathname, req, res);
   }

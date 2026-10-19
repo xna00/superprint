@@ -16,7 +16,7 @@ import {
   unlinkPrinterFromWeixinKfUser,
 } from "../models/db.ts";
 import { ApiError } from "./utils.ts";
-import { getInfo } from "./global.ts";
+import { getInfo } from "../request-context.ts";
 import { getKfBaseLink, PRINT_MAN_KF_OPEN_ID } from "./weixin/link.ts";
 
 const VIRTUAL_PORTS = new Set([
@@ -31,7 +31,7 @@ const getComputerId = () => {
   const info = getInfo();
   const computerId = info.request.headers.get("x-computer-id");
   if (!computerId) {
-    throw new ApiError(401, {}, "未授权设备");
+    throw new ApiError(401, "未授权设备", {}, "API_UNAUTHORIZED", {});
   }
   return computerId;
 };
@@ -39,7 +39,7 @@ const getComputerId = () => {
 const getExistingComputerId = () => {
   const computerId = getComputerId();
   if (!findComputerById(computerId)) {
-    throw new ApiError(404, {}, "计算机不存在", "ENTITY_NOT_FOUND");
+    throw new ApiError(404, "计算机不存在", {}, "ENTITY_NOT_FOUND", {});
   }
   return computerId;
 };
@@ -90,7 +90,7 @@ export const getPrinterKfLink = async (printerId: number) => {
   const computerId = getExistingComputerId();
   const printer = findPrinterById(printerId);
   if (!printer || printer.computerId !== computerId) {
-    throw new ApiError(404, {}, "打印机不存在", "ENTITY_NOT_FOUND");
+    throw new ApiError(404, "打印机不存在", {}, "ENTITY_NOT_FOUND", {});
   }
   const bindKey = ensurePrinterBindKey(printer.id);
   const baseLink = await getKfBaseLink(PRINT_MAN_KF_OPEN_ID);
@@ -101,7 +101,7 @@ export const regeneratePrinterBindKey = async (printerId: number) => {
   const computerId = getExistingComputerId();
   const printer = findPrinterById(printerId);
   if (!printer || printer.computerId !== computerId) {
-    throw new ApiError(404, {}, "打印机不存在", "ENTITY_NOT_FOUND");
+    throw new ApiError(404, "打印机不存在", {}, "ENTITY_NOT_FOUND", {});
   }
   const bindKey = dbRegeneratePrinterBindKey(printer.id);
   const baseLink = await getKfBaseLink(PRINT_MAN_KF_OPEN_ID);
@@ -112,7 +112,7 @@ export const listPrinterUsers = async (printerId: number) => {
   const computerId = getExistingComputerId();
   const printer = findPrinterById(printerId);
   if (!printer || printer.computerId !== computerId) {
-    throw new ApiError(404, {}, "打印机不存在", "ENTITY_NOT_FOUND");
+    throw new ApiError(404, "打印机不存在", {}, "ENTITY_NOT_FOUND", {});
   }
   const users = listWeixinKfUsersByPrinterId(printerId);
   return { users };
@@ -122,7 +122,7 @@ export const removePrinterUser = async (printerId: number, externalUserId: strin
   const computerId = getExistingComputerId();
   const printer = findPrinterById(printerId);
   if (!printer || printer.computerId !== computerId) {
-    throw new ApiError(404, {}, "打印机不存在", "ENTITY_NOT_FOUND");
+    throw new ApiError(404, "打印机不存在", {}, "ENTITY_NOT_FOUND", {});
   }
   unlinkPrinterFromWeixinKfUser(externalUserId, printerId);
   return { success: true };

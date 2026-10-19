@@ -9,6 +9,8 @@ export * as version from "./version.ts";
 export * as uploadStatic from "./uploadStatic.ts";
 export * as deployHint from "./deployHint.ts";
 
+export type { ApiErrorType } from "./utils.ts";
+
 export const _outhello = (req: Request) => {
   logger.log(req);
   return {

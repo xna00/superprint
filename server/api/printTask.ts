@@ -23,7 +23,7 @@ import {
 import { ApiError, addTokenToUrl, decryptString } from "./utils.ts"
 import { notifyCheckJobs } from "../ws/index.ts"
 import { sendMsgMenuMessage, sendTextMessage } from "./weixin/send.ts"
-import { getInfo } from "./global.ts"
+import { getInfo } from "../request-context.ts"
 import { logger } from "../logger.ts";
 
 const WEIXIN_KF_ID = 'wkHnU4FQAAnkssZ2Y0t7gAKpQxcw7gjQ'
@@ -32,7 +32,7 @@ const getExternalUserId = async () => {
   const info = getInfo();
   const cookie = info.request.headers.get("cookie") || "";
   const tokenMatch = cookie.match(/token=([^;]+)/);
-  if (!tokenMatch) throw new ApiError(401, {}, "未登录！");
+  if (!tokenMatch) throw new ApiError(401, "未登录！", {}, "API_UNAUTHORIZED", {});
   return await decryptString(tokenMatch[1]);
 };
 
@@ -40,7 +40,7 @@ const getComputerId = () => {
   const info = getInfo();
   const computerId = info.request.headers.get("x-computer-id");
   if (!computerId || !findComputerById(computerId)) {
-    throw new ApiError(401, {}, "未授权设备");
+    throw new ApiError(401, "未授权设备", {}, "API_UNAUTHORIZED", {});
   }
   return computerId;
 };
@@ -48,15 +48,15 @@ const getComputerId = () => {
 const verifyComputerForTask = (computerId: string, task: { printerId: number }) => {
   const printer = findPrinterById(task.printerId);
   if (!printer || printer.computerId !== computerId) {
-    throw new ApiError(403, {}, "无权操作此打印任务");
+    throw new ApiError(403, "无权操作此打印任务", {}, "API_FORBIDDEN", {});
   }
 };
 
 export const getAllPrinters = async (printTaskId: number) => {
   const externalUserId = await getExternalUserId();
   const task = findPrintTaskById(printTaskId);
-  if (!task) throw new ApiError(404, {}, '打印任务不存在');
-  if (task.externalUserId !== externalUserId) throw new ApiError(403, {}, '无权操作');
+  if (!task) throw new ApiError(404, '打印任务不存在', {}, "ENTITY_NOT_FOUND", {});
+  if (task.externalUserId !== externalUserId) throw new ApiError(403, '无权操作', {}, "API_FORBIDDEN", {});
   const printers = listPrintersByWeixinKfUser(externalUserId, task.weixinKfId);
   return printers.map(p => ({
     printerId: p.id,
@@ -70,10 +70,10 @@ export const getPrintTaskDetail = async (printTaskId: number) => {
   const externalUserId = await getExternalUserId();
   const printTask = findPrintTaskWithDetails(printTaskId);
   if (!printTask) {
-    throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
+    throw new ApiError(404, '打印任务不存在', {}, "ENTITY_NOT_FOUND", {})
   }
   if (printTask.externalUserId !== externalUserId) {
-    throw new ApiError(403, {}, '无权操作');
+    throw new ApiError(403, '无权操作', {}, "API_FORBIDDEN", {});
   }
   return printTask
 }
@@ -82,17 +82,17 @@ export const updatePrintTask = async (printTaskId: number, printerId: number) =>
   const externalUserId = await getExternalUserId();
   const printTask = findPrintTaskWithPrinter(printTaskId);
   if (!printTask) {
-    throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
+    throw new ApiError(404, '打印任务不存在', {}, "ENTITY_NOT_FOUND", {})
   }
   if (printTask.externalUserId !== externalUserId) {
-    throw new ApiError(403, {}, '无权操作');
+    throw new ApiError(403, '无权操作', {}, "API_FORBIDDEN", {});
   }
   if (printTask.state !== 'waiting_confirmation') {
-    throw new ApiError(400, {}, '只能修改待确认状态的任务', 'INVALID_STATE')
+    throw new ApiError(400, '只能修改待确认状态的任务', {}, "INVALID_STATE", {})
   }
   const printer = findPrinterById(printerId)
   if (!printer) {
-    throw new ApiError(404, {}, '打印机不存在', 'ENTITY_NOT_FOUND')
+    throw new ApiError(404, '打印机不存在', {}, "ENTITY_NOT_FOUND", {})
   }
   updatePrintTaskPrinterId(printTaskId, printerId)
   return { success: true }
@@ -102,14 +102,14 @@ export const updatePrintFile = async (fileId: number, duplex: boolean, tumble: b
   const externalUserId = await getExternalUserId();
   const file = findPrintFileById(fileId)
   if (!file) {
-    throw new ApiError(404, {}, '文件不存在', 'ENTITY_NOT_FOUND')
+    throw new ApiError(404, '文件不存在', {}, "ENTITY_NOT_FOUND", {})
   }
   const task = findPrintTaskById(file.printTaskId)
   if (!task || task.state !== 'waiting_confirmation') {
-    throw new ApiError(400, {}, '只能修改待确认状态的任务', 'INVALID_STATE')
+    throw new ApiError(400, '只能修改待确认状态的任务', {}, "INVALID_STATE", {})
   }
   if (task.externalUserId !== externalUserId) {
-    throw new ApiError(403, {}, '无权操作');
+    throw new ApiError(403, '无权操作', {}, "API_FORBIDDEN", {});
   }
   updatePrintFileOptions(fileId, duplex, tumble)
   return { success: true }
@@ -119,13 +119,13 @@ export const confirmPrintTask = async (printTaskId: number) => {
   const externalUserId = await getExternalUserId();
   const printTask = findPrintTaskWithPrinter(printTaskId)
   if (!printTask) {
-    throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
+    throw new ApiError(404, '打印任务不存在', {}, "ENTITY_NOT_FOUND", {})
   }
   if (printTask.externalUserId !== externalUserId) {
-    throw new ApiError(403, {}, '无权操作');
+    throw new ApiError(403, '无权操作', {}, "API_FORBIDDEN", {});
   }
   if (printTask.state !== 'waiting_confirmation') {
-    throw new ApiError(400, {}, '只能确认待确认状态的任务', 'INVALID_STATE')
+    throw new ApiError(400, '只能确认待确认状态的任务', {}, "INVALID_STATE", {})
   }
   updatePrintTaskState(printTaskId, 'waiting_print')
   if (printTask.printer) {
@@ -138,11 +138,11 @@ export const fileSucceed = async (id: number) => {
   const computerId = getComputerId();
   const file = findPrintFileById(id)
   if (!file) {
-    throw new ApiError(404, {}, '文件不存在', 'ENTITY_NOT_FOUND')
+    throw new ApiError(404, '文件不存在', {}, "ENTITY_NOT_FOUND", {})
   }
   const task = findPrintTaskById(file.printTaskId)
   if (!task) {
-    throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
+    throw new ApiError(404, '打印任务不存在', {}, "ENTITY_NOT_FOUND", {})
   }
   verifyComputerForTask(computerId, task);
   updatePrintFileState(id, 'completed')
@@ -193,11 +193,11 @@ export const fileFailed = async (id: number) => {
   const computerId = getComputerId();
   const file = findPrintFileById(id)
   if (!file) {
-    throw new ApiError(404, {}, '文件不存在', 'ENTITY_NOT_FOUND')
+    throw new ApiError(404, '文件不存在', {}, "ENTITY_NOT_FOUND", {})
   }
   const task = findPrintTaskById(file.printTaskId)
   if (!task) {
-    throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
+    throw new ApiError(404, '打印任务不存在', {}, "ENTITY_NOT_FOUND", {})
   }
   verifyComputerForTask(computerId, task);
   updatePrintFileState(id, 'failed')
@@ -221,12 +221,12 @@ export const retryFailedFiles = async (printTaskId: number) => {
   const computerId = getComputerId();
   const task = findPrintTaskById(printTaskId)
   if (!task) {
-    throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
+    throw new ApiError(404, '打印任务不存在', {}, "ENTITY_NOT_FOUND", {})
   }
   verifyComputerForTask(computerId, task);
   const failedFiles = listPrintFilesByPrintTaskIdAndState(printTaskId, 'failed')
   if (failedFiles.length === 0) {
-    throw new ApiError(400, {}, '没有失败的文件', 'NO_FAILED_FILES')
+    throw new ApiError(400, '没有失败的文件', {}, "NO_FAILED_FILES", {})
   }
   for (const file of failedFiles) {
     updatePrintFileState(file.id, 'waiting_print')
@@ -259,10 +259,10 @@ export const deletePrintTask = async (printTaskId: number) => {
   const externalUserId = await getExternalUserId();
   const printTask = findPrintTaskById(printTaskId)
   if (!printTask) {
-    throw new ApiError(404, {}, '打印任务不存在', 'ENTITY_NOT_FOUND')
+    throw new ApiError(404, '打印任务不存在', {}, "ENTITY_NOT_FOUND", {})
   }
   if (printTask.externalUserId !== externalUserId) {
-    throw new ApiError(403, {}, '无权操作');
+    throw new ApiError(403, '无权操作', {}, "API_FORBIDDEN", {});
   }
   removePrintFilesByPrintTaskId(printTaskId)
   removePrintTaskById(printTaskId)

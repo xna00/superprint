@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies (workspaces)
         run: npm ci
 
+      - name: Type check (all workspaces)
+        run: npm run typecheck
+
       - name: Build all workspaces
         run: npm run build
 
@@ -33,7 +36,6 @@ jobs:
           name: all-build-artifacts
           path: |
             server/dist/
-            api/__types__/
             api/index.js
             api/index.d.ts
             web/dist/

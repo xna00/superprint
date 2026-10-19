@@ -1,4 +1,3 @@
-import { gzipSync } from "node:zlib";
 import { WECOM_ENCODING_AES_KEY } from "./constants.ts";
 
 export const addTokenToUrl = async (url: string, userId: string): Promise<string> => {
@@ -60,20 +59,39 @@ export const decryptString = async (encryptedText: string): Promise<string> => {
   return decoder.decode(decrypted)
 }
 
-export class ApiError extends Error {
+type ErrorCodeExtraDataMap = {
+  "API_NOT_FOUND": { url: string },
+  "API_BAD_REQUEST": {},
+  "API_FORBIDDEN": {},
+  "API_UNAUTHORIZED": {},
+  "API_INTERNAL_ERROR": {},
+  "ENTITY_NOT_FOUND": { url?: string },
+  "FILE_NOT_FOUND": { url?: string },
+  "INVALID_STATE": {},
+  "NO_FAILED_FILES": {},
+}
+
+type ApiErrorC<K> = K extends keyof ErrorCodeExtraDataMap ? { errorCode: K, message: string } & ErrorCodeExtraDataMap[K] : never
+
+export type ApiErrorType = ApiErrorC<keyof ErrorCodeExtraDataMap>
+
+export class ApiError<const E extends keyof ErrorCodeExtraDataMap> extends Error {
   public status: number;
   public headers: ResponseInit["headers"];
-  public errorCode?: string;
+  public errorCode: E;
+  public extraData: ErrorCodeExtraDataMap[E];
   constructor(
     status: number,
-    headers: ResponseInit["headers"],
     message: string,
-    errorCode?: string
+    headers: ResponseInit["headers"] = {},
+    errorCode: E,
+    extraData: ErrorCodeExtraDataMap[E],
   ) {
     super(message);
     this.status = status;
     this.headers = headers;
     this.errorCode = errorCode;
+    this.extraData = extraData;
   }
 }
 
@@ -99,6 +117,15 @@ export const makeJsonResponse = (
 
 export const makeJsonResponse200 = makeJsonResponse.bind(null, 200);
 
+export const makeJsonResponseApiError = (err: ApiError<any>): Response => {
+  const obj: { errorCode: string; message: string } & Record<string, unknown> = {
+    errorCode: err.errorCode,
+    message: err.message,
+  };
+  if (err.extraData) Object.assign(obj, err.extraData);
+  return makeJsonResponse(err.status, err.headers, obj);
+};
+
 /**
  *
  * @description Assert v is not undefined, or throw an ApiError.
@@ -109,7 +136,7 @@ export const assertApiError: <T>(
   status?: number
 ) => asserts v is Exclude<T, undefined> = (v, msg, status = 500) => {
   if (v === undefined) {
-    throw new ApiError(status, {}, msg);
+    throw new ApiError(status, msg, {}, "API_INTERNAL_ERROR", {});
   }
 };
 

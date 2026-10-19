@@ -3,7 +3,7 @@ import { Readable } from "node:stream"
 import { createBrotliCompress, constants as zconstants } from "node:zlib"
 import { join, extname } from "node:path"
 import { ApiError, decryptString } from "./utils.ts"
-import { getInfo } from "./global.ts"
+import { getInfo } from "../request-context.ts"
 import { findComputerById, findPrinterById, findPrintFileByFileId, findPrintTaskById } from "../models/db.ts"
 import { logger } from "../logger.ts"
 
@@ -21,7 +21,7 @@ const getExternalUserId = async () => {
   const info = getInfo();
   const cookie = info.request.headers.get("cookie") || "";
   const tokenMatch = cookie.match(/token=([^;]+)/);
-  if (!tokenMatch) throw new ApiError(401, {}, "未登录！");
+  if (!tokenMatch) throw new ApiError(401, "未登录！", {}, "API_UNAUTHORIZED", {});
   return await decryptString(tokenMatch[1]);
 };
 
@@ -33,7 +33,7 @@ const getFileAccess = async (fileName: string) => {
     }
     const computerId = info.request.headers.get("x-computer-id");
     if (!computerId || !findComputerById(computerId)) {
-        throw new ApiError(401, {}, "未授权设备");
+        throw new ApiError(401, "未授权设备", {}, "API_UNAUTHORIZED", {});
     }
     const printFile = findPrintFileByFileId(fileName.replace(/\.pdf$/, ''));
     if (printFile) {
@@ -41,7 +41,7 @@ const getFileAccess = async (fileName: string) => {
         if (task) {
             const printer = findPrinterById(task.printerId);
             if (!printer || printer.computerId !== computerId) {
-                throw new ApiError(403, {}, "无权操作此打印任务");
+                throw new ApiError(403, "无权操作此打印任务", {}, "API_FORBIDDEN", {});
             }
         }
     }
@@ -58,7 +58,7 @@ export const getFile = async (fileName: string) => {
     try {
         accessSync(filePath, constants.R_OK)
     } catch {
-        throw new ApiError(404, {}, '文件不存在', 'FILE_NOT_FOUND')
+        throw new ApiError(404, '文件不存在', {}, "FILE_NOT_FOUND", {})
     }
     const ext = extname(fileName).toLowerCase()
     const mimeType = MIME_TYPES[ext] || 'application/octet-stream'

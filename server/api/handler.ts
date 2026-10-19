@@ -1,8 +1,8 @@
 import assert from "node:assert";
-import { idMap, state } from "./global.ts";
 import * as api from "./index.ts";
-import { ApiError, makeJsonResponse } from "./utils.ts";
+import { ApiError, makeJsonResponse, makeJsonResponseApiError } from "./utils.ts";
 import { logger } from "../logger.ts";
+import { getInfo } from "../request-context.ts";
 
 const parseFn = (req: Request): [fn: any, fnName: string] => {
   const pathname = new URL(req.url).pathname;
@@ -11,7 +11,8 @@ const parseFn = (req: Request): [fn: any, fnName: string] => {
   if (
     !(
       (fnName.startsWith("get") && req.method === "GET") ||
-      req.method === "POST" || fnName.startsWith("_out")
+      req.method === "POST" ||
+      fnName.startsWith("_out")
     )
   ) {
     return [null, fnName] as const;
@@ -20,56 +21,43 @@ const parseFn = (req: Request): [fn: any, fnName: string] => {
   return [fn, fnName] as const;
 };
 
+/**
+ * This function should not throw error
+ */
 export const apiHandler = async (req: Request): Promise<Response> => {
-  let res: Response;
-
   const [fn, fnName] = parseFn(req);
   if (!fn) {
-    res = makeJsonResponse(404, {}, { errorCode: "API_NOT_FOUND", url: req.url });
-    return res;
+    return makeJsonResponseApiError(new ApiError(404, "Not Found", {}, "API_NOT_FOUND", { url: req.url }));
   }
   let params: any = null;
   if (fnName.startsWith("_out")) {
-    params = [req]
+    params = [req];
   } else {
     try {
-      if (req.method === "POST") params = await req.json();
-      else if (req.method === "GET")
+      if (req.method === "POST") {
+        params = await req.json();
+        getInfo().perf.bodyReadTime = performance.now();
+        logger.logWithId('body read:', (performance.now() - getInfo().perf.startTime).toFixed(0), 'ms');
+      } else if (req.method === "GET") {
         params = JSON.parse(new URL(req.url).searchParams.get("data") ?? "");
+        getInfo().perf.bodyReadTime = performance.now();
+        logger.logWithId('params read:', (performance.now() - getInfo().perf.startTime).toFixed(0), 'ms');
+      }
     } catch (e) {
       assert(e instanceof Error);
       logger.error(e);
-      res = makeJsonResponse(400, {}, { message: e.message });
-      return res;
+      return makeJsonResponseApiError(new ApiError(400, e.message, {}, "API_BAD_REQUEST", {}));
     }
-
   }
 
-  const id = state.id;
-  idMap[id] = {
-    request: req,
-    status: 200,
-    headers: {},
-  };
   try {
-    const tmp = fn(...params);
-    state.id++;
-    const ret = await tmp;
-    if (ret instanceof Response) res = ret;
-    else res = makeJsonResponse(idMap[id].status, idMap[id].headers, ret);
+    const info = getInfo();
+    const ret = await fn(...params);
+    if (ret instanceof Response) return ret;
+    return makeJsonResponse(info.status, info.headers, ret);
   } catch (e) {
     logger.error(e);
-    let status = 500;
-    let headers: ResponseInit["headers"] = {};
-    let obj: object = { message: e };
-    if (e instanceof ApiError) {
-      status = e.status;
-      headers = e.headers;
-      obj = { errorCode: e.errorCode || "ERROR", message: e.message };
-    }
-    res = makeJsonResponse(status, headers, obj);
+    if (e instanceof ApiError) return makeJsonResponseApiError(e);
+    return makeJsonResponseApiError(new ApiError(500, String(e), {}, "API_INTERNAL_ERROR", {}));
   }
-
-  delete idMap[id];
-  return res;
 };

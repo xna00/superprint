@@ -1,4 +1,15 @@
-import type { Api } from "./__types__/index.js";
+import type { Api, ApiErrorType } from "server";
+
+export class ApiError extends Error {
+  status: number;
+  body?: ApiErrorType;
+
+  constructor(status: number, body?: object) {
+    super((body as { message?: string })?.message ?? `Request failed with status ${status}`);
+    this.status = status;
+    this.body = body as ApiErrorType | undefined;
+  }
+}
 
 const isGetMethod = (path: string) =>
   !!path.split("/").pop()?.startsWith("get");
