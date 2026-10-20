@@ -1,7 +1,7 @@
-import { readByte, readBytes } from 'ffi'
+import { readByte } from 'ffi'
 import * as os from 'os'
 import { WCHAR } from 'quickwin/lib/ffi/bind.js'
-import { NULL, PtrArrayBuffer } from 'quickwin/lib/ffi/ctype.js'
+import { NULL } from 'quickwin/lib/ffi/ctype.js'
 import { GetModuleFileName } from 'quickwin/lib/windows/kernel32.js'
 
 /** 返回北京时间 (UTC+8) 的 Date 对象 */
@@ -42,11 +42,6 @@ export function readPtr(dv: DataView, offset: number): number {
     return dv.getUint32(offset, true) + dv.getUint32(offset + 4, true) * 4294967296
 }
 
-/** 从 native 地址读 64 位值（COM vtable 遍历用）。跨架构自动选读法。 */
-export function readQword(addr: number): number {
-    return readPtr(new DataView(readBytes(addr, 8)), 0)
-}
-
 /** 指针品牌（ptrBrand）是 TS 编译期承诺，native 侧只认地址位。
  *  从缓冲读出、或跨本仓库/quickwin 边界传裸 number 时用此标注；
  *  不传类型参数 = Ptr<""> = 保持裸 number。 */
@@ -78,19 +73,4 @@ declare global {
   interface GlobalThis {
     __APP_METADATA__?: Deferred<AppMetadata>
   }
-}
-
-/** Convert a GUID string like `{000214F9-0000-0000-C000-000000000046}` to a 16-byte buffer.
- *  返回 PtrArrayBuffer（带 .ptr），可直接喂未加品牌的 <BYTE>ptr / <>ptr 形参。 */
-export function guidStrToBytes(guid: string): PtrArrayBuffer<''> {
-    const hex = guid.replace(/[{}]/g, '').replace(/-/g, '')
-    const buf = new PtrArrayBuffer(16)
-    const dv = new DataView(buf)
-    dv.setUint32(0, parseInt(hex.substring(0, 8), 16), true)
-    dv.setUint16(4, parseInt(hex.substring(8, 12), 16), true)
-    dv.setUint16(6, parseInt(hex.substring(12, 16), 16), true)
-    for (let i = 0; i < 8; i++) {
-        dv.setUint8(8 + i, parseInt(hex.substring(16 + i * 2, 18 + i * 2), 16))
-    }
-    return buf
 }

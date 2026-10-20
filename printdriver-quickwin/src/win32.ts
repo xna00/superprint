@@ -1,4 +1,3 @@
-import { bindLib } from 'quickwin/lib/ffi/bind.js'
 import { NULL } from 'quickwin/lib/ffi/ctype.js'
 import type { MaybePtr } from 'quickwin/lib/ffi/ctype.js'
 import { CloseHandle, CreateMutex, GetLastError, ReleaseMutex } from 'quickwin/lib/windows/kernel32.js'
@@ -6,23 +5,11 @@ import { GetCursorPos, MessageBox, PostQuitMessage } from 'quickwin/lib/windows/
 import { POINT } from 'quickwin/lib/windows/structs.js'
 import { ErrorCode } from 'quickwin/constants'
 
-// ---------------------------------------------------------------------------
-// quickwin/lib/windows 尚未覆盖的 Win32 函数，用 bindLib 就地声明。
+// 注：quickwin/lib/windows 已覆盖的函数一律从官方模块引（ole32 的 COM 三件套见
+// install.ts 直接引 quickwin/lib/windows/ole32.js），这里只留本项目专属的 helper。
 // 签名串语法见 lib/ffi/ctype.ts：i32/u32/u64/void、<NAME>ptr（可空指针）、
 // <NAME>ptr!（非空）、<>ptr（无品牌裸地址）、<BYTE>ptr（收 PtrArrayBuffer）、
 // u32@EnumName（枚举）。encoders 表里的结构体按值/按指针自动编解码。
-// ---------------------------------------------------------------------------
-
-// ole32 的 COM 三件套仍无官方绑定；LPSECURITY_ATTRIBUTES / IInterface 这些位
-// 用不到或只是地址槽 → 一律 <>ptr 收 NULL / 裸地址。
-const oleLib = bindLib('ole32.dll', {
-    CoInitialize: '<>ptr -> i32',
-    CoCreateInstance: '<>ptr <>ptr u32 <>ptr <BYTE>ptr -> i32',
-    // 零参绑定的写法是 ' -> ret'（不是 'void'）；两个 COM 收尾函数都返回 HRESULT
-    CoUninitialize: ' -> i32',
-})
-
-export const { CoInitialize, CoCreateInstance, CoUninitialize } = oleLib
 
 /** 【历史遗留 · 迁移中未改】CreateProcessW 的 STARTUPINFOW.cb 历史值。
  *  1.x 一直硬编码 68，而 68 是 **ia32** 的 sizeof(STARTUPINFOW)；x64 的 sizeof 是 104

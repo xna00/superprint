@@ -1,19 +1,21 @@
 import * as std from 'std'
 import * as os from 'os'
-import { ffiCall } from 'ffi'
-import { WCHAR } from 'quickwin/lib/ffi/bind.js'
-import { NULL, PtrArrayBuffer } from 'quickwin/lib/ffi/ctype.js'
+import * as ffi from 'ffi'
+import { bindAt, WCHAR } from 'quickwin/lib/ffi/bind.js'
+import type { CodecMap } from 'quickwin/lib/ffi/bind.js'
+import { NULL, PTR_SIZE, PtrArrayBuffer } from 'quickwin/lib/ffi/ctype.js'
+import { FAILED, SUCCEEDED, guidFields } from 'quickwin/lib/com.js'
 import {
     CreateDirectory, CreateProcess, DeleteFile, FindClose, FindFirstFile,
     FindNextFile, GetFileAttributes, GetLastError, RemoveDirectory,
 } from 'quickwin/lib/windows/kernel32.js'
 import { RegCloseKey, RegCreateKeyEx, RegDeleteKeyValue, RegSetValueEx } from 'quickwin/lib/windows/advapi32.js'
-import { PROCESS_INFORMATION, STARTUPINFOW, WIN32_FIND_DATAW } from 'quickwin/lib/windows/structs.js'
+import { IID, PROCESS_INFORMATION, STARTUPINFOW, WIN32_FIND_DATAW } from 'quickwin/lib/windows/structs.js'
+import { CoCreateInstance, CoInitializeEx, CoUninitialize } from 'quickwin/lib/windows/ole32.js'
 import {
-    ErrorCode, HKey, ProcessCreationFlag, RegAccess, RegType, Guid,
+    ClsCtx, CoInitFlag, ErrorCode, Guid, HKey, ProcessCreationFlag, RegAccess, RegType,
 } from 'quickwin/constants'
-import { CoCreateInstance, CoInitialize, CoUninitialize } from './win32.js'
-import { guidStrToBytes, readPtr, readQword } from './utils.js'
+import { readPtr } from './utils.js'
 
 const INSTALL_DIR = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
 const TARGET_EXE = INSTALL_DIR + '\\QuickSuperPrint.exe'
@@ -150,7 +152,11 @@ function regDeleteRun(): boolean {
 // shortcuts  (COM IShellLink + IPersistFile)
 // ---------------------------------------------------------------------------
 
-// IShellLinkW / IPersistFile vtable 下标
+// IShellLinkW / IPersistFile 的 vtable 下标。COM 方法没有导出名，只能按槽派发：
+// 接口对象解引用两次 = 对象 → vtable 基址 → 槽内函数地址，再用 bindAt 绑签名
+// （3.1.1 起 bindAt 是这条路的正式入口；此前只能退到 ffiCall 手填参数帧）。
+// IShellLinkW 继承 IUnknown，QI/AddRef/Release 占 0-2；IPersistFile 是另一张表，
+// 得先 QueryInterface 换过去、Save 排 6 —— 所以两组下标不共用。
 const VT_QI = 0
 const VT_RELEASE = 2
 const VT_SET_DESC = 7
@@ -159,69 +165,91 @@ const VT_SET_ARGS = 11
 const VT_SET_PATH = 20
 const VT_PERSIST_SAVE = 6
 
-/** COM vtable 调用：vt + idx*8 取槽位地址，this 走第 1 槽，可选 1 个 LPWSTR。
- *  走 ffiCall 而非 bind（bind 只认 DLL 名，不认裸地址）。 */
-function callCom(vt: number, idx: number, thisPtr: number, lpWstr?: PtrArrayBuffer<''>): void {
-    const frame = new ArrayBuffer(32)      // 4 槽 × 8 字节：x64 桩无条件读 4 槽
-    const dv = new DataView(frame)
-    dv.setBigUint64(0, BigInt(thisPtr), true)
-    if (lpWstr) dv.setBigUint64(8, BigInt(lpWstr.ptr), true)
-    const ret = new ArrayBuffer(8)
-    ffiCall(readQword(vt + idx * 8), frame, ret, 0)
-    if (new DataView(ret).getInt32(0, true) !== 0) {
-        throw new Error('COM 调用失败: vtable idx ' + idx)
-    }
+// quickwin/constants 的 Guid 只收录 IIDs，ShellLink 的 CLSID 得自己写
+const CLSSTRING_ShellLink = '{00021401-0000-0000-C000-000000000046}'
+
+/** 取接口对象第 idx 个 vtable 槽并绑成可调函数。
+ *  vtable 是每类共享的静态表：同一对象每个槽只绑一次，别在循环里绑
+ *  （bindAt 刻意不做缓存，见 lib/ffi/bind.ts 注释）。 */
+function vtSlot<const S extends string, E extends CodecMap = {}>(
+    obj: number, idx: number, sig: S, encoders?: E,
+) {
+    return bindAt(ffi.readPtr(ffi.readPtr(obj) + idx * PTR_SIZE), sig, encoders)
 }
 
-function callComArg(fn: number, thisPtr: number, lpWstr: PtrArrayBuffer<''>): number {
-    const frame = new ArrayBuffer(32)
-    const dv = new DataView(frame)
-    dv.setBigUint64(0, BigInt(thisPtr), true)
-    dv.setBigUint64(8, BigInt(lpWstr.ptr), true)
-    const ret = new ArrayBuffer(8)
-    ffiCall(fn, frame, ret, 0)
-    return new DataView(ret).getInt32(0, true)
+/** HRESULT 的十六进制形态，报错时用。 */
+function hrHex(hr: number): string {
+    return '0x' + (hr >>> 0).toString(16)
 }
-
-const CLSID_ShellLink = guidStrToBytes('{00021401-0000-0000-C000-000000000046}')
-const IID_IShellLinkW = guidStrToBytes(Guid.IID_ISHELLLINKW)
-const IID_IPersistFile = guidStrToBytes(Guid.IID_IPERSISTFILE)
 
 function createShortcut(targetPath: string, args: string, shortcutPath: string, desc: string): boolean {
-    CoInitialize(NULL)
-
-    const ppv = new PtrArrayBuffer(8)
-    if (CoCreateInstance(CLSID_ShellLink.ptr, NULL, 1, IID_IShellLinkW.ptr, ppv) !== 0) {
-        CoUninitialize()
-        throw new Error('CoCreateInstance 失败')
+    // S_FALSE 也是成功态（同线程同公寓重复初始化），故用 SUCCEEDED 而非比 0
+    if (!SUCCEEDED(CoInitializeEx(NULL, CoInitFlag.APARTMENTTHREADED))) {
+        throw new Error('CoInitializeEx 失败（线程公寓模型冲突？）')
     }
 
-    const pSL = readPtr(new DataView(ppv), 0)
-    const vt = readQword(pSL)
+    const ppv = new PtrArrayBuffer(PTR_SIZE)
+    // rclsid / riid 传「字段对象」而非 CLSID.encode(...).ptr：callPlan 只在槽写器**返回**缓冲
+    // 时把它 held 到原生调用之后（bind.js 的 callPlan）。传裸地址走 number 快路径、不 held，
+    // 内联临时的缓冲寿命就全看 GC 脸色。代价是丢掉 .encode() 的 CLSID/IID 品牌（编译期拦
+    // 不住两参互换），故两处 GUID 字面量必须逐一核对——IID 用 constants 的枚举，不手写。
+    const hrNew = CoCreateInstance(
+        guidFields(CLSSTRING_ShellLink),
+        guidFields(Guid.IID_ISHELLLINKW),
+        ClsCtx.INPROC_SERVER,
+        ppv.ptr,
+    )
+    if (FAILED(hrNew)) {
+        CoUninitialize()
+        throw new Error('CoCreateInstance 失败 hr=' + hrHex(hrNew))
+    }
 
-    callCom(vt, VT_SET_PATH, pSL, WCHAR.encode(targetPath))
-    if (args) callCom(vt, VT_SET_ARGS, pSL, WCHAR.encode(args))
+    const pSL = ffi.readPtr(ppv.ptr)
+    const releaseSL = () => vtSlot(pSL, VT_RELEASE, '<>ptr -> i32')(pSL)
+    const bailSL = (hr: number, what: string): never => {
+        releaseSL()
+        CoUninitialize()
+        throw new Error(what + ' 失败 hr=' + hrHex(hr))
+    }
+
+    // IShellLinkW::SetPath / SetArguments / SetWorkingDirectory / SetDescription 同形 (THIS, PCWSTR)
+    const setWstr = '<>ptr <WCHAR>ptr! -> i32' as const
+    const hrPath = vtSlot(pSL, VT_SET_PATH, setWstr)(pSL, targetPath)
+    if (FAILED(hrPath)) bailSL(hrPath, 'IShellLinkW::SetPath')
+    if (args) {
+        const hr = vtSlot(pSL, VT_SET_ARGS, setWstr)(pSL, args)
+        if (FAILED(hr)) bailSL(hr, 'IShellLinkW::SetArguments')
+    }
     const slash = targetPath.lastIndexOf('\\')
-    if (slash !== -1) callCom(vt, VT_SET_WORKDIR, pSL, WCHAR.encode(targetPath.substring(0, slash)))
-    if (desc) callCom(vt, VT_SET_DESC, pSL, WCHAR.encode(desc))
-
-    const ppf = new PtrArrayBuffer(8)
-    const hrQI = callComArg(readQword(vt + VT_QI * 8), pSL, IID_IPersistFile)
-    if (hrQI !== 0) {
-        callCom(vt, VT_RELEASE, pSL)
-        CoUninitialize()
-        throw new Error('QueryInterface(IPersistFile) 失败')
+    if (slash !== -1) {
+        const hr = vtSlot(pSL, VT_SET_WORKDIR, setWstr)(pSL, targetPath.substring(0, slash))
+        if (FAILED(hr)) bailSL(hr, 'IShellLinkW::SetWorkingDirectory')
+    }
+    if (desc) {
+        const hr = vtSlot(pSL, VT_SET_DESC, setWstr)(pSL, desc)
+        if (FAILED(hr)) bailSL(hr, 'IShellLinkW::SetDescription')
     }
 
-    const pPF = readPtr(new DataView(ppf), 0)
-    const pfVt = readQword(pPF)
-    const hrSave = callComArg(readQword(pfVt + VT_PERSIST_SAVE * 8), pPF, WCHAR.encode(shortcutPath))
+    // QueryInterface(THIS, REFIID, void**) 三个槽一个都不能少。旧版 callComArg 只填 2 槽，
+    // 出参槽恒为 0 —— QueryInterface 要么往 NULL 写、要么回 E_INVALIDARG，Save 永远走不到，
+    // 快捷方式因此从未真正落盘。
+    const ppf = new PtrArrayBuffer(PTR_SIZE)
+    const hrQI = vtSlot(pSL, VT_QI, '<>ptr <IID>ptr! <>ptr! -> i32', { IID })(
+        pSL,
+        guidFields(Guid.IID_IPERSISTFILE),   // 对象形，同 CoCreateInstance：由 bind 内部编码并 held
+        ppf.ptr,
+    )
+    if (FAILED(hrQI)) bailSL(hrQI, 'QueryInterface(IPersistFile)')
 
-    callCom(pfVt, VT_RELEASE, pPF)
-    callCom(vt, VT_RELEASE, pSL)
+    const pPF = ffi.readPtr(ppf.ptr)
+    // IPersistFile::Save(THIS, pszFileName, fRemember)；fRemember=0 不记「当前文件」属性
+    const hrSave = vtSlot(pPF, VT_PERSIST_SAVE, '<>ptr <WCHAR>ptr! u32 -> i32')(pPF, shortcutPath, 0)
+
+    vtSlot(pPF, VT_RELEASE, '<>ptr -> i32')(pPF)
+    releaseSL()
     CoUninitialize()
 
-    if (hrSave !== 0) throw new Error('IPersistFile::Save 失败 hr=' + hrSave)
+    if (FAILED(hrSave)) throw new Error('IPersistFile::Save 失败 hr=' + hrHex(hrSave))
     return true
 }
 
