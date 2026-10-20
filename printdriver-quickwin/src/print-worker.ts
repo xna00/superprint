@@ -3,18 +3,18 @@ import 'quickwin/lib/fetch.js'
 import * as std from 'std'
 import * as os from 'os'
 import { bufferPtr, LoadLibrary } from 'ffi'
-import { NULL } from 'quickwin/lib/ffi/ctype.js'
-import type { MaybePtr, PtrArrayBuffer } from 'quickwin/lib/ffi/ctype.js'
+import { NULL, PtrArrayBuffer } from 'quickwin/lib/ffi/ctype.js'
+import type { MaybePtr, Ptr } from 'quickwin/lib/ffi/ctype.js'
 import { bind, BYTE, WCHAR } from 'quickwin/lib/ffi/bind.js'
-import { BITMAPINFOHEADER, DEVMODEW } from 'quickwin/lib/windows/structs.js'
+import { BITMAPINFOHEADER, DEVMODEW, DOCINFOW } from 'quickwin/lib/windows/structs.js'
 import { GetLastError, RtlMoveMemory } from 'quickwin/lib/windows/kernel32.js'
-import { ClosePrinter, OpenPrinter } from 'quickwin/lib/windows/winspool.js'
-import { DeleteDC, GetDeviceCaps, SetStretchBltMode, StretchDIBits } from 'quickwin/lib/windows/gdi32.js'
-import { ColorUse, DeviceCap, DevMode, RasterOp, StretchBltMode } from 'quickwin/constants'
+import { ClosePrinter, DocumentProperties, OpenPrinter } from 'quickwin/lib/windows/winspool.js'
 import {
-    CreateDCW, DocumentPropertiesW, EndDoc, EndPage, ResetDCW, SetBrushOrgEx, StartDocW, StartPage,
-} from './win32.js'
-import { getExePath, readPtr, tag } from './utils.js'
+    CreateDC, DeleteDC, EndDoc, EndPage, GetDeviceCaps, ResetDC, SetBrushOrgEx,
+    SetStretchBltMode, StartDoc, StartPage, StretchDIBits,
+} from 'quickwin/lib/windows/gdi32.js'
+import { ColorUse, DeviceCap, DmField, DmModeFlag, RasterOp, StretchBltMode } from 'quickwin/constants'
+import { getExePath, readPtr } from './utils.js'
 import type { Document, Page, Pixmap } from '@quickwinlabs/mupdf-wasm'
 import type { WorkerInMsg, WorkerOutMsg } from './worker-types.js'
 import { api } from './api.js'
@@ -29,11 +29,8 @@ const VERTRES = DeviceCap.VERTRES
 const LOGPIXELSX = DeviceCap.LOGPIXELSX
 const LOGPIXELSY = DeviceCap.LOGPIXELSY
 
-/** DocumentPropertiesW 的 fMode 位掩码。3.0.4 的 DevMode 枚举只收了 OUT_BUFFER。 */
-const DM_IN_BUFFER = 8
-
 interface DibResult {
-    data: PtrArrayBuffer<any>
+    data: PtrArrayBuffer<''>
     w: number
     h: number
 }
@@ -209,9 +206,9 @@ function renderPdfPageWithPDFium(pdfium: Pdfium, doc: MaybePtr<'FPDF_DOCUMENT'>,
 }
 
 /** 等比缩放居中贴到打印 DC 上。use32bit 决定 DIB 位深（PDFium 出 32 位、MuPDF 出 24 位）。 */
-function centerAndStretch(hdc: number, dib: DibResult, use32bit: boolean): boolean {
-    const paperW = GetDeviceCaps(tag<'HDC'>(hdc), HORZRES)
-    const paperH = GetDeviceCaps(tag<'HDC'>(hdc), VERTRES)
+function centerAndStretch(hdc: Ptr<'HDC'>, dib: DibResult, use32bit: boolean): boolean {
+    const paperW = GetDeviceCaps(hdc, HORZRES)
+    const paperH = GetDeviceCaps(hdc, VERTRES)
     const scaleX = paperW / dib.w
     const scaleY = paperH / dib.h
     const sc = scaleX < scaleY ? scaleX : scaleY
@@ -221,7 +218,7 @@ function centerAndStretch(hdc: number, dib: DibResult, use32bit: boolean): boole
     const drawY = Math.floor((paperH - drawH) / 2)
     const bmi = makeBitmapInfo(dib.w, dib.h, use32bit ? 32 : 24)
     const sdRet = StretchDIBits(
-        tag<'HDC'>(hdc), drawX, drawY, drawW, drawH,
+        hdc, drawX, drawY, drawW, drawH,
         0, 0, dib.w, dib.h,
         dib.data, bmi, ColorUse.RGB_COLORS, RasterOp.SRCCOPY,
     )
@@ -231,78 +228,79 @@ function centerAndStretch(hdc: number, dib: DibResult, use32bit: boolean): boole
 async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolean, tumble: boolean, renderEngine: string, renderDPI: number, docName: string): Promise<boolean> {
     logger.log('[worker] printPdf:', printerName, 'duplex:', duplex, 'tumble:', tumble, 'renderEngine:', renderEngine)
 
-    const hdc = CreateDCW(NULL, printerName, NULL, NULL)
+    const hdc = CreateDC('winspool', printerName, NULL, NULL)
     if (!hdc) {
-        logger.log('[worker] CreateDCW failed for printer "' + printerName + '", GLE=' + GetLastError())
+        logger.log('[worker] CreateDC failed for printer "' + printerName + '", GLE=' + GetLastError())
         return false
     }
 
     let hPrinter = 0
-    let devmodeBuf: PtrArrayBuffer<any> | null = null
+    let devmodeBuf: PtrArrayBuffer<'DEVMODEW'> | null = null
 
     // 打开打印机，取一份 DEVMODE 用于改双面参数（失败则跳过，不影响打印）
     const hPrinterSlot = BYTE.alloc(8)
     if (OpenPrinter(printerName, hPrinterSlot, NULL)) {
         hPrinter = readPtr(new DataView(hPrinterSlot), 0)
-        const dmSize = DocumentPropertiesW(NULL, hPrinter, printerName, NULL, NULL, 0)
+        const dmSize = DocumentProperties(NULL, hPrinter, printerName, NULL, NULL, 0)
         if (dmSize > 0) {
-            devmodeBuf = BYTE.alloc(dmSize)
+            // dmSize 通常 > DEVMODEW.size（尾部是驱动私有的 DM DriverExtra 字段），按返回的大小
+            // 精确分配——DEVMODEW.alloc(n) 是 n 个结构体（size*n 字节），这里要的是 n 字节。
+            devmodeBuf = new PtrArrayBuffer<'DEVMODEW'>(dmSize)
         } else {
-            logger.log('[worker] DocumentPropertiesW size query failed, dmSize=' + dmSize + ' GLE=' + GetLastError())
+            logger.log('[worker] DocumentProperties size query failed, dmSize=' + dmSize + ' GLE=' + GetLastError())
         }
     } else {
         logger.log('[worker] OpenPrinterW failed for "' + printerName + '", GLE=' + GetLastError())
     }
 
-    let paperW = GetDeviceCaps(tag<'HDC'>(hdc), HORZRES)
-    let paperH = GetDeviceCaps(tag<'HDC'>(hdc), VERTRES)
-    const dpiX = GetDeviceCaps(tag<'HDC'>(hdc), LOGPIXELSX)
-    const dpiY = GetDeviceCaps(tag<'HDC'>(hdc), LOGPIXELSY)
+    let paperW = GetDeviceCaps(hdc, HORZRES)
+    let paperH = GetDeviceCaps(hdc, VERTRES)
+    const dpiX = GetDeviceCaps(hdc, LOGPIXELSX)
+    const dpiY = GetDeviceCaps(hdc, LOGPIXELSY)
     logger.log('[worker] paper:', paperW, 'x', paperH, 'dpi:', dpiX, 'x', dpiY)
     if (paperW <= 0 || paperH <= 0 || dpiX <= 0 || dpiY <= 0) {
         logger.log('[worker] WARNING: invalid paper/dpi from GetDeviceCaps')
-        DeleteDC(tag<'HDC'>(hdc))
+        DeleteDC(hdc)
         return false
     }
 
     const duplexVal: number = duplex ? (tumble ? 3 : 2) : 1
     if (devmodeBuf && hPrinter) {
-        const outRet = DocumentPropertiesW(NULL, hPrinter, printerName, devmodeBuf.ptr, NULL, DevMode.OUT_BUFFER)
+        const outRet = DocumentProperties(NULL, hPrinter, printerName, devmodeBuf.ptr, NULL, DmModeFlag.OUT_BUFFER)
         if (outRet > 0) {
-            // 就地打补丁：dmFields |= DM_DUPLEX，dmDuplex = duplexVal（缺省字段跳过）
+            // 就地打补丁：dmFields |= DM_DUPLEX，dmDuplex = duplexVal（缺省字段跳过，
+            // encode 带 buf 形态只写给到的字段，不清缓冲 → 尾部 DM DriverExtra 原样保留）
             const dm = DEVMODEW.decode(devmodeBuf)
-            DEVMODEW.encode({ dmFields: dm.dmFields | DevMode.DUPLEX, dmDuplex: duplexVal }, devmodeBuf)
-            const dmRet = DocumentPropertiesW(
+            DEVMODEW.encode({ dmFields: dm.dmFields | DmField.DUPLEX, dmDuplex: duplexVal }, devmodeBuf)
+            const dmRet = DocumentProperties(
                 NULL, hPrinter, printerName, devmodeBuf.ptr, devmodeBuf.ptr,
-                DM_IN_BUFFER | DevMode.OUT_BUFFER,
+                DmModeFlag.IN_BUFFER | DmModeFlag.OUT_BUFFER,
             )
             if (dmRet > 0) {
-                const resetHdc = ResetDCW(hdc, devmodeBuf)
+                const resetHdc = ResetDC(hdc, devmodeBuf.ptr)
                 if (resetHdc) {
-                    paperW = GetDeviceCaps(tag<'HDC'>(hdc), HORZRES)
-                    paperH = GetDeviceCaps(tag<'HDC'>(hdc), VERTRES)
+                    paperW = GetDeviceCaps(hdc, HORZRES)
+                    paperH = GetDeviceCaps(hdc, VERTRES)
                 } else {
-                    logger.log('[worker] ResetDCW duplex failed, GLE=' + GetLastError())
+                    logger.log('[worker] ResetDC duplex failed, GLE=' + GetLastError())
                 }
             } else {
-                logger.log('[worker] DocumentPropertiesW validation failed, ret=' + dmRet + ' GLE=' + GetLastError())
+                logger.log('[worker] DocumentProperties validation failed, ret=' + dmRet + ' GLE=' + GetLastError())
             }
         } else {
-            logger.log('[worker] DocumentPropertiesW init failed, ret=' + outRet + ' GLE=' + GetLastError())
+            logger.log('[worker] DocumentProperties init failed, ret=' + outRet + ' GLE=' + GetLastError())
         }
     }
 
-    // DOCINFOW（x64 布局 40B）：cbSize@0、lpszDocName@8、lpszOutput/lpszDatatype=NULL、fwType@32=0
+    // DOCINFOW：lpszDocName 走 WCHAR.encode 拿品牌化缓冲；两个缓冲都是 JS 持有的，
+    // 须在 EndDoc 返回前保持引用（DOCINFOW 是纯入参位，只把地址写进参数槽）
     const docNameBuf = WCHAR.encode(docName || 'SuperPrint')
-    const docInfo = BYTE.alloc(40)
-    const docInfoDv = new DataView(docInfo)
-    docInfoDv.setUint32(0, 40, true)
-    docInfoDv.setBigUint64(8, BigInt(docNameBuf.ptr), true)
+    const docInfo = DOCINFOW.encode({ cbSize: DOCINFOW.size, lpszDocName: docNameBuf.ptr, fwType: 0 })
 
-    const docRet = StartDocW(hdc, docInfo.ptr)
+    const docRet = StartDoc(hdc, docInfo.ptr)
     if (docRet <= 0) {
         logger.log('[worker] StartDocW failed, ret=' + docRet + ' GLE=' + GetLastError())
-        const ddRet = DeleteDC(tag<'HDC'>(hdc))
+        const ddRet = DeleteDC(hdc)
         logger.log('[worker] DeleteDC (startdoc fail path) returned:', ddRet)
         if (hPrinter) ClosePrinter(hPrinter)
         return false
@@ -317,7 +315,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         if (!pdfDoc) {
             logger.log('[worker] FPDF_LoadMemDocument failed')
             EndDoc(hdc)
-            DeleteDC(tag<'HDC'>(hdc))
+            DeleteDC(hdc)
             if (hPrinter) ClosePrinter(hPrinter)
             return false
         }
@@ -329,7 +327,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                 logger.log('[worker] page ' + (i + 1) + '/' + totalPages)
                 const spRet = StartPage(hdc)
                 if (spRet <= 0) logger.log('[worker] StartPage failed, ret=' + spRet + ' GLE=' + GetLastError())
-                SetStretchBltMode(tag<'HDC'>(hdc), StretchBltMode.HALFTONE)
+                SetStretchBltMode(hdc, StretchBltMode.HALFTONE)
                 SetBrushOrgEx(hdc, 0, 0, NULL)
                 try {
                     let t0 = Date.now()
@@ -358,7 +356,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         } catch (e: unknown) {
             logger.log('[worker] PDFium processing error:', e instanceof Error ? e.stack : String(e))
             EndDoc(hdc)
-            DeleteDC(tag<'HDC'>(hdc))
+            DeleteDC(hdc)
             if (hPrinter) ClosePrinter(hPrinter)
             return false
         } finally {
@@ -376,7 +374,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
                 logger.log('[worker] page ' + (i + 1) + '/' + totalPages)
                 const spRet = StartPage(hdc)
                 if (spRet <= 0) logger.log('[worker] StartPage failed, ret=' + spRet + ' GLE=' + GetLastError())
-                SetStretchBltMode(tag<'HDC'>(hdc), StretchBltMode.HALFTONE)
+                SetStretchBltMode(hdc, StretchBltMode.HALFTONE)
                 SetBrushOrgEx(hdc, 0, 0, NULL)
                 try {
                     let isLandscape = false
@@ -410,7 +408,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
         } catch (e: unknown) {
             logger.log('[worker] MuPDF processing error:', e instanceof Error ? e.stack : String(e))
             EndDoc(hdc)
-            DeleteDC(tag<'HDC'>(hdc))
+            DeleteDC(hdc)
             if (hPrinter) ClosePrinter(hPrinter)
             if (doc) try { doc.destroy() } catch {}
             return false
@@ -422,7 +420,7 @@ async function printPdf(pdfBuf: ArrayBuffer, printerName: string, duplex: boolea
     const edRet = EndDoc(hdc)
     if (edRet <= 0) logger.log('[worker] EndDoc failed, ret=' + edRet + ' GLE=' + GetLastError())
     logger.log('[worker] calling DeleteDC (success path)')
-    const ddRet = DeleteDC(tag<'HDC'>(hdc))
+    const ddRet = DeleteDC(hdc)
     logger.log('[worker] DeleteDC (success path) returned:', ddRet, 'GLE=' + GetLastError())
     if (hPrinter) ClosePrinter(hPrinter)
 

@@ -81,8 +81,8 @@ declare global {
 }
 
 /** Convert a GUID string like `{000214F9-0000-0000-C000-000000000046}` to a 16-byte buffer.
- *  返回 PtrArrayBuffer（带 .ptr），可直接喂 <GUID>ptr 形参。 */
-export function guidStrToBytes(guid: string): PtrArrayBuffer<any> {
+ *  返回 PtrArrayBuffer（带 .ptr），可直接喂未加品牌的 <BYTE>ptr / <>ptr 形参。 */
+export function guidStrToBytes(guid: string): PtrArrayBuffer<''> {
     const hex = guid.replace(/[{}]/g, '').replace(/-/g, '')
     const buf = new PtrArrayBuffer(16)
     const dv = new DataView(buf)

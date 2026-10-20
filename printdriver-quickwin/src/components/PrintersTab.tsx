@@ -93,9 +93,9 @@ const showManagerWindow = async (printerId: number, printerName: string) => {
         }
     }
 
-    // 3.x 的 getIcon 类型声明写死为 => number，但实现里显式接受 undefined（表示该行无图标）；
-    // 按实现契约标注，避免把「无头像」错映射成图标 0
-    const getIconIndex = ((_: unknown, i: number) => iconIndexMap[i]) as (record: unknown, i: number) => number
+    // 3.1.0 起 getIcon 的声明就是 number | undefined（undefined = 该行无图标）；
+    // 别把「无头像」错映射成图标 0
+    const getIconIndex = (_: unknown, i: number) => iconIndexMap[i]
 
     const renderUsers = () => {
         const userColumns: Column<{ nickname: string; userId: string; action: string }>[] = [

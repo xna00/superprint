@@ -4,6 +4,7 @@ import * as gui from 'gui'
 import * as os from 'os'
 import * as std from 'std'
 import { NULL } from 'quickwin/lib/ffi/ctype.js'
+import type { MaybePtr } from 'quickwin/lib/ffi/ctype.js'
 import { CloseHandle } from 'quickwin/lib/windows/kernel32.js'
 import { ShellNotifyIcon } from 'quickwin/lib/windows/shell32.js'
 import {
@@ -27,7 +28,7 @@ import { acquireSingleInstanceMutex, bailOnSecondInstance, getCursorPos } from '
 
 export let printWorker: PrintWorker | null = null
 export let mainHwnd: gui.HWND | null = null
-export let hMutex: number | null = null
+export let hMutex: MaybePtr<'HMUTEX'> | null = null
 
 const MUTEX_NAME = 'SuperPrint_SingleInstance'
 

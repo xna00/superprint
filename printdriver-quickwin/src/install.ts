@@ -7,12 +7,12 @@ import {
     CreateDirectory, CreateProcess, DeleteFile, FindClose, FindFirstFile,
     FindNextFile, GetFileAttributes, GetLastError, RemoveDirectory,
 } from 'quickwin/lib/windows/kernel32.js'
-import { RegCreateKeyEx, RegCloseKey, RegSetValueEx } from 'quickwin/lib/windows/advapi32.js'
+import { RegCloseKey, RegCreateKeyEx, RegDeleteKeyValue, RegSetValueEx } from 'quickwin/lib/windows/advapi32.js'
 import { PROCESS_INFORMATION, STARTUPINFOW, WIN32_FIND_DATAW } from 'quickwin/lib/windows/structs.js'
 import {
     ErrorCode, HKey, ProcessCreationFlag, RegAccess, RegType, Guid,
 } from 'quickwin/constants'
-import { CoCreateInstance, CoInitialize, CoUninitialize, RegDeleteKeyValueW } from './win32.js'
+import { CoCreateInstance, CoInitialize, CoUninitialize } from './win32.js'
 import { guidStrToBytes, readPtr, readQword } from './utils.js'
 
 const INSTALL_DIR = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
@@ -139,7 +139,10 @@ function regSetRun(cmdLine: string): boolean {
 }
 
 function regDeleteRun(): boolean {
-    const hr = RegDeleteKeyValueW(HKey.CURRENT_USER, RUN_KEY, RUN_VALUE)
+    // RegDeleteKeyValue 是 Vista 才加的导出，更老的系统上绑定为 null → 这步做不了，
+    // 返回 false 让卸载界面如实标失败（别静默留下开机自启项）
+    if (!RegDeleteKeyValue) return false
+    const hr = RegDeleteKeyValue(HKey.CURRENT_USER, RUN_KEY, RUN_VALUE)
     return hr === 0 || hr === ErrorCode.FILE_NOT_FOUND   // value 不存在视同成功
 }
 
@@ -158,7 +161,7 @@ const VT_PERSIST_SAVE = 6
 
 /** COM vtable 调用：vt + idx*8 取槽位地址，this 走第 1 槽，可选 1 个 LPWSTR。
  *  走 ffiCall 而非 bind（bind 只认 DLL 名，不认裸地址）。 */
-function callCom(vt: number, idx: number, thisPtr: number, lpWstr?: PtrArrayBuffer<any>): void {
+function callCom(vt: number, idx: number, thisPtr: number, lpWstr?: PtrArrayBuffer<''>): void {
     const frame = new ArrayBuffer(32)      // 4 槽 × 8 字节：x64 桩无条件读 4 槽
     const dv = new DataView(frame)
     dv.setBigUint64(0, BigInt(thisPtr), true)
@@ -170,7 +173,7 @@ function callCom(vt: number, idx: number, thisPtr: number, lpWstr?: PtrArrayBuff
     }
 }
 
-function callComArg(fn: number, thisPtr: number, lpWstr: PtrArrayBuffer<any>): number {
+function callComArg(fn: number, thisPtr: number, lpWstr: PtrArrayBuffer<''>): number {
     const frame = new ArrayBuffer(32)
     const dv = new DataView(frame)
     dv.setBigUint64(0, BigInt(thisPtr), true)

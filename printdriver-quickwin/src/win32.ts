@@ -1,6 +1,7 @@
 import { bindLib } from 'quickwin/lib/ffi/bind.js'
 import { NULL } from 'quickwin/lib/ffi/ctype.js'
-import { CloseHandle, GetLastError } from 'quickwin/lib/windows/kernel32.js'
+import type { MaybePtr } from 'quickwin/lib/ffi/ctype.js'
+import { CloseHandle, CreateMutex, GetLastError, ReleaseMutex } from 'quickwin/lib/windows/kernel32.js'
 import { GetCursorPos, MessageBox, PostQuitMessage } from 'quickwin/lib/windows/user32.js'
 import { POINT } from 'quickwin/lib/windows/structs.js'
 import { ErrorCode } from 'quickwin/constants'
@@ -12,34 +13,8 @@ import { ErrorCode } from 'quickwin/constants'
 // u32@EnumName（枚举）。encoders 表里的结构体按值/按指针自动编解码。
 // ---------------------------------------------------------------------------
 
-const mutexLib = bindLib('kernel32.dll', {
-    // LPSECURITY_ATTRIBUTES 用不到 → <>ptr 收 NULL
-    CreateMutexW: '<>ptr <>ptr <WCHAR>ptr -> <>ptr',
-    ReleaseMutex: '<>ptr -> i32',
-})
-
-const printLib = bindLib('gdi32.dll', {
-    // lpInit 是 DEVMODE*，不注册 encoder → 只收裸地址
-    CreateDCW: '<WCHAR>ptr <WCHAR>ptr <WCHAR>ptr <>ptr -> <>ptr',
-    StartDocW: '<>ptr <>ptr -> i32',
-    EndDoc: '<>ptr -> i32',
-    StartPage: '<>ptr -> i32',
-    EndPage: '<>ptr -> i32',
-    ResetDCW: '<>ptr <BYTE>ptr -> <>ptr',
-    SetBrushOrgEx: '<>ptr i32 i32 <>ptr -> i32',
-})
-
-const winspoolLib = bindLib('winspool.drv', {
-    // pDevMode / pDevModeOutput 是持久缓冲（API 会往里写）→ 只收 .ptr，不注册 encoder。
-    // fMode 是 DM_IN_BUFFER|DM_OUT_BUFFER 位掩码，而 3.0.4 的 DevMode 枚举只收了
-    // OUT_BUFFER（缺 IN_BUFFER=8）→ 用裸 u32，避免给组合值做枚举强转。
-    DocumentPropertiesW: '<>ptr <>ptr <WCHAR>ptr <>ptr <>ptr u32 -> i32',
-})
-
-const advapiLib = bindLib('advapi32.dll', {
-    RegDeleteKeyValueW: '<>ptr <WCHAR>ptr <WCHAR>ptr -> i32',
-})
-
+// ole32 的 COM 三件套仍无官方绑定；LPSECURITY_ATTRIBUTES / IInterface 这些位
+// 用不到或只是地址槽 → 一律 <>ptr 收 NULL / 裸地址。
 const oleLib = bindLib('ole32.dll', {
     CoInitialize: '<>ptr -> i32',
     CoCreateInstance: '<>ptr <>ptr u32 <>ptr <BYTE>ptr -> i32',
@@ -47,10 +22,6 @@ const oleLib = bindLib('ole32.dll', {
     CoUninitialize: ' -> i32',
 })
 
-export const { CreateMutexW, ReleaseMutex } = mutexLib
-export const { CreateDCW, StartDocW, EndDoc, StartPage, EndPage, ResetDCW, SetBrushOrgEx } = printLib
-export const { DocumentPropertiesW } = winspoolLib
-export const { RegDeleteKeyValueW } = advapiLib
 export const { CoInitialize, CoCreateInstance, CoUninitialize } = oleLib
 
 /** 【历史遗留 · 迁移中未改】CreateProcessW 的 STARTUPINFOW.cb 历史值。
@@ -82,16 +53,16 @@ export function getCursorPos(): [number, number] {
 }
 
 /** 创建全局命名互斥体防多开。
- *  @returns 已有实例在跑 → null；否则返回句柄（退出前须 ReleaseMutex）。
- *  句柄为 0 表示创建失败，调用方按「未拿到句柄」处理即可。 */
-export function acquireSingleInstanceMutex(name: string): number | null {
-    const h = CreateMutexW(NULL, NULL, name)
+ *  @returns 已有实例在跑或创建失败 → null；否则返回句柄（退出前须 ReleaseMutex）。
+ *  句柄带 HMUTEX 品牌，退出前直接喂 ReleaseMutex，不用再转。 */
+export function acquireSingleInstanceMutex(name: string): MaybePtr<'HMUTEX'> | null {
+    const h = CreateMutex(NULL, 0, name)
     if (GetLastError() === ErrorCode.ALREADY_EXISTS) return null
     return h
 }
 
 /** 释放互斥体并关闭句柄（进程退出前调用，避免句柄泄漏）。 */
-export function releaseSingleInstanceMutex(h: number | null): void {
+export function releaseSingleInstanceMutex(h: MaybePtr<'HMUTEX'> | null): void {
     if (!h) return
     ReleaseMutex(h)
     CloseHandle(h)
