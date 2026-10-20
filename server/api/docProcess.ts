@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs"
 import { join, extname } from "node:path"
 import UZIP from "uzip"
 import { recognizeDocument, type RecognizedDocument } from "./ai.ts"
-import { downloadMedia, convertOfficeToPdf } from "./weixin/download.ts"
+import { downloadMedia, convertOfficeToPdf, type DownloadResult } from "./weixin/download.ts"
 import { generateTaskId } from "./weixin/message.ts"
 import {
   findPrintTaskWithPrinter,
@@ -25,6 +25,17 @@ const ensureUploadsDir = (): void => {
   if (!existsSync(UPLOADS_DIR)) {
     mkdirSync(UPLOADS_DIR, { recursive: true })
   }
+}
+
+const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'])
+
+// 识别直接用下载到的原图，不再走「图片 → PDF → 图片」的往返
+const resolveRecognizeUrl = (downloadResult: DownloadResult): string => {
+  const ext = extname(downloadResult.originalPath).toLowerCase()
+  if (!IMAGE_EXTS.has(ext)) {
+    throw new Error(`目前只支持发送图片，请拍照或截图后发送（收到 ${ext || '未知格式'}）`)
+  }
+  return `file://${downloadResult.originalPath}`
 }
 
 export const generateDocx = (data: RecognizedDocument): Buffer => {
@@ -80,9 +91,7 @@ export const processDocumentSimple = async (
   const downloadResult = await downloadMedia(mediaId, true, false)
   logger.log(`文件下载完成: ${downloadResult.filename}`)
 
-  const ext = extname(downloadResult.filename).toLowerCase()
-  const filePath = join(UPLOADS_DIR, downloadResult.fileId + ext)
-  const fileUrl = `file://${filePath}`
+  const fileUrl = resolveRecognizeUrl(downloadResult)
 
   logger.log('开始识别公文...')
   const recognized = await recognizeDocument(fileUrl)
@@ -118,9 +127,7 @@ export const processDocument = async (
   const downloadResult = await downloadMedia(mediaId, true, false)
   logger.log(`文件下载完成: ${downloadResult.filename}`)
 
-  const ext = extname(downloadResult.filename).toLowerCase()
-  const filePath = join(UPLOADS_DIR, downloadResult.fileId + ext)
-  const fileUrl = `file://${filePath}`
+  const fileUrl = resolveRecognizeUrl(downloadResult)
 
   logger.log('开始识别公文...')
   const recognized = await recognizeDocument(fileUrl)

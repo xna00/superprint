@@ -192,6 +192,8 @@ export type DownloadResult = {
   fileId: string
   filename: string
   converted: boolean
+  /** 下载后落盘的原文件路径（图片/Office 转换前，用于识别时直接读取原图） */
+  originalPath: string
 }
 
 export const downloadMedia = async (
@@ -235,14 +237,14 @@ export const downloadMedia = async (
   if (isOfficeFile(extLower)) {
     const pdfPath = await convertOfficeToPdf(filePath)
     if (pdfPath) {
-      return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf'), converted: true }
+      return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf'), converted: true, originalPath: filePath }
     }
   } else if (['.jpg', '.jpeg', '.png', '.gif'].includes(extLower)) {
     const pdfPath = await convertImageToPdf(filePath)
-    return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf'), converted: true }
+    return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf'), converted: true, originalPath: filePath }
   }
 
-  return { fileId: hash, filename, converted: false }
+  return { fileId: hash, filename, converted: false, originalPath: filePath }
 }
 
 export const getFilePath = (fileId: string): string | null => {

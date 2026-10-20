@@ -1,15 +1,19 @@
-import { execSync } from "node:child_process"
-import { readFileSync, writeFileSync, unlinkSync, existsSync } from "node:fs"
-import { join } from "node:path"
-import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
+import { extname } from "node:path"
 import { GLM_API_KEY } from "./constants.local.ts"
 import { jsonrepair } from "jsonrepair"
-import { logger } from "../logger.ts";
 
 const ZHIPU_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4'
 const MODEL_NAME = 'glm-4v-flash'
 
-const UPLOADS_DIR = join(process.cwd(), 'uploads')
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.bmp': 'image/bmp',
+  '.webp': 'image/webp',
+}
 
 type GLMChoice = { message?: { content?: string } };
 type GLMResponse = { choices?: GLMChoice[] };
@@ -20,83 +24,38 @@ export type RecognizedDocument = {
   title: string
 }
 
-export const pdfToImage = (pdfPath: string): string | null => {
-  const hash = createHash('sha256').update(pdfPath + Date.now().toString()).digest('hex').slice(0, 16)
-  const outputPrefix = join(UPLOADS_DIR, `temp_${hash}`)
-  const outputPath = `${outputPrefix}.jpg`
-
-  try {
-    execSync(`pdftoppm -jpeg -singlefile -r 200 "${pdfPath}" "${outputPrefix}"`, { stdio: 'ignore' })
-    if (existsSync(outputPath)) {
-      return outputPath
-    }
-    return null
-  } catch (error) {
-    logger.error('PDF转图片失败:', error)
-    return null
+// 图片直接转 base64 交给大模型，不做 PDF 中转
+const toImageDataUrl = (filePath: string): string => {
+  const ext = extname(filePath).toLowerCase()
+  const mime = IMAGE_MIME_TYPES[ext]
+  if (!mime) {
+    throw new Error(`目前只支持发送图片，请拍照或截图后发送（收到 ${ext || '未知格式'}）`)
   }
+  return `data:${mime};base64,${readFileSync(filePath).toString('base64')}`
+}
+
+const mimeFromContentType = (contentType: string): string | null => {
+  const ct = contentType.toLowerCase()
+  return Object.values(IMAGE_MIME_TYPES).find(mime => ct.startsWith(mime)) ?? null
 }
 
 export const recognizeDocument = async (fileUrl: string): Promise<RecognizedDocument> => {
-  let imageUrl = fileUrl
-
-  // 处理本地文件 (file:// URL)
+  // 本地文件 (file:// URL)
   if (fileUrl.startsWith('file://')) {
-    const localPath = fileUrl.replace('file://', '')
-    const ext = localPath.split('.').pop()?.toLowerCase() || ''
-    const isPdf = ext === 'pdf'
-
-    if (isPdf) {
-      const imagePath = pdfToImage(localPath)
-      if (imagePath) {
-        const imageBuffer = readFileSync(imagePath)
-        const base64Image = imageBuffer.toString('base64')
-        imageUrl = `data:image/jpeg;base64,${base64Image}`
-        try { unlinkSync(imagePath) } catch {}
-      } else {
-        throw new Error('PDF转图片失败')
-      }
-    } else {
-      // 图片文件，直接转 base64
-      const imageBuffer = readFileSync(localPath)
-      const base64Image = imageBuffer.toString('base64')
-      imageUrl = `data:image/jpeg;base64,${base64Image}`
-    }
-    return recognizeFromImageUrl(imageUrl)
+    return recognizeFromImageUrl(toImageDataUrl(fileUrl.replace('file://', '')))
   }
 
-  // 远程 URL，先检测类型
-  let isPdf = false
-  try {
-    const resp = await fetch(fileUrl, { method: 'HEAD', signal: AbortSignal.timeout(5000) })
-    const contentType = resp.headers.get('content-type') || ''
-    isPdf = contentType.toLowerCase().includes('pdf')
-  } catch {
-    try {
-      const resp = await fetch(fileUrl, { signal: AbortSignal.timeout(5000) })
-      const contentType = resp.headers.get('content-type') || ''
-      isPdf = contentType.toLowerCase().includes('pdf')
-    } catch {
-      // 无法判断，假设不是 PDF
-    }
+  // 远程 URL：只接受图片
+  const resp = await fetch(fileUrl, { signal: AbortSignal.timeout(15000) })
+  if (!resp.ok) {
+    throw new Error(`下载待识别文件失败: HTTP ${resp.status}`)
   }
-
-  if (isPdf) {
-    const resp = await fetch(fileUrl)
-    const pdfBuffer = Buffer.from(await resp.arrayBuffer())
-    const tempPdfPath = join(UPLOADS_DIR, `temp_${Date.now()}.pdf`)
-    writeFileSync(tempPdfPath, pdfBuffer)
-    const imagePath = pdfToImage(tempPdfPath)
-    try { unlinkSync(tempPdfPath) } catch {}
-    if (imagePath) {
-      const imageBuffer = readFileSync(imagePath)
-      const base64Image = imageBuffer.toString('base64')
-      imageUrl = `data:image/jpeg;base64,${base64Image}`
-      try { unlinkSync(imagePath) } catch {}
-    }
+  const mime = mimeFromContentType(resp.headers.get('content-type') || '')
+  if (!mime) {
+    throw new Error(`目前只支持发送图片，请拍照或截图后发送（收到 ${resp.headers.get('content-type') || '未知格式'}）`)
   }
-
-  return recognizeFromImageUrl(imageUrl)
+  const buffer = Buffer.from(await resp.arrayBuffer())
+  return recognizeFromImageUrl(`data:${mime};base64,${buffer.toString('base64')}`)
 }
 
 const recognizeFromImageUrl = async (imageUrl: string): Promise<RecognizedDocument> => {
