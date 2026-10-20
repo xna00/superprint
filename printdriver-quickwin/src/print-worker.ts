@@ -29,6 +29,22 @@ const VERTRES = DeviceCap.VERTRES
 const LOGPIXELSX = DeviceCap.LOGPIXELSX
 const LOGPIXELSY = DeviceCap.LOGPIXELSY
 
+/** FPDF_RenderPageBitmap 的 rotate 参数。fpdfview.h 的取值域就这 4 个、全列得出来，
+ *  所以做成 enum 挂进 EnumMap（bind 签名写 i32@FpdfRotate）——传 4 以外的数字编译期就报错。
+ *  位掩码类的参数（如同一个调用里的 flags）做不了这个：值域列不全，A|B 会塌成 number。 */
+export const enum FpdfRotate {
+    NORMAL = 0,
+    CW90 = 1,
+    CW180 = 2,
+    CCW90 = 3,
+}
+
+declare global {
+    interface EnumMap {
+        FpdfRotate: FpdfRotate
+    }
+}
+
 interface DibResult {
     data: PtrArrayBuffer<''>
     w: number
@@ -149,7 +165,10 @@ async function loadPdfium() {
         bitmapFillRect: bind(PDFIUM_DLL, 'FPDFBitmap_FillRect', '<FPDF_BITMAP>ptr i32 i32 i32 i32 u32 -> void'),
         bitmapGetBuffer: bind(PDFIUM_DLL, 'FPDFBitmap_GetBuffer', '<FPDF_BITMAP>ptr -> <BYTE>ptr'),
         bitmapGetStride: bind(PDFIUM_DLL, 'FPDFBitmap_GetStride', '<FPDF_BITMAP>ptr -> i32'),
-        renderPageBitmap: bind(PDFIUM_DLL, 'FPDF_RenderPageBitmap', '<FPDF_BITMAP>ptr <FPDF_PAGE>ptr i32 i32 i32 i32 i32 i32 -> void'),
+        // C 侧 8 参：(bmp, page, start_x, start_y, size_x, size_y, rotate, flags)。
+        // start/size 都是位图像素坐标；rotate 挂 EnumMap 收窄到 0..3；flags 是位掩码，
+        // 值域列不全（A|B 会塌成 number 过不了 enum 检查），保持裸 i32。
+        renderPageBitmap: bind(PDFIUM_DLL, 'FPDF_RenderPageBitmap', '<FPDF_BITMAP>ptr <FPDF_PAGE>ptr i32 i32 i32 i32 i32@FpdfRotate i32 -> void'),
     }
     pdfium.initLibrary()
     logger.log('[worker] PDFium initialized')
@@ -172,23 +191,24 @@ function renderPdfPageWithPDFium(pdfium: Pdfium, doc: MaybePtr<'FPDF_DOCUMENT'>,
         page = pdfium.loadPage(doc, pageIndex)
         if (!page) return null
 
+        // 横版页把位图建成竖版尺寸，再让 PDFium 自己转 90°（rotate=3 = 逆时针），
+        // 最后靠 centerAndStretch 的等比缩放铺到纵向纸面
         const isLandscape = pageW > pageH
         const bmpW = isLandscape ? (pageH * scale) | 0 : (pageW * scale) | 0
         const bmpH = isLandscape ? (pageW * scale) | 0 : (pageH * scale) | 0
-        const rotate = isLandscape ? 3 : 0
+        const rotate = isLandscape ? FpdfRotate.CCW90 : FpdfRotate.NORMAL
 
-        // 32-bit BGRx (alpha=0)：与 BI_RGB 32 位兼容，无需逐像素转换（但见下面 0x10 的历史遗留说明）
+        // format=0 → PDFium 实际给 32-bit BGRA（vendor 这份 build 实测 stride = w*4），
+        // 正是 BI_RGB 32 位 DIB 期望的 B,G,R,X 顺序，无需逐像素转换。
         bmp = pdfium.bitmapCreate(bmpW, bmpH, 0)
         if (!bmp) return null
 
         pdfium.bitmapFillRect(bmp, 0, 0, bmpW, bmpH, 0xFFFFFFFF)
-        // 【历史遗留 · 迁移中未改】末位 0x10 是 FPDF_REVERSE_BYTE_ORDER —— 实测（wine +
-        // vendor 里这份 pdfium，页面内容是纯蓝 `0 0 1 rg` 填充）：
-        //     flags=0x00 → 内存 B=255 G=0 R=0（正是 BI_RGB 32bpp DIB 期望的 BGRx）
-        //     flags=0x10 → 内存 B=0   G=0 R=255（再经 StretchDIBits 按 BI_RGB 解释 → 蓝变红）
-        // 即该 flag 让 R/B 互换，与上面「无需逐像素转换」的意图正好相反（1.x 起就是 0x10）。
-        // 按「迁移不改行为」原样保留；要修就是去掉这个 flag（传 0），属独立改动、需真机打印复验。
-        pdfium.renderPageBitmap(bmp, page, 0, 0, bmpW, bmpH, rotate, 0x10)
+        // flags 必须传 0。98aec6d 当年塞的 0x10 是 FPDF_REVERSE_BYTE_ORDER——把位图输出翻成
+        // R,G,B,X，和 BI_RGB 正好相反，打印出来蓝红互换、青变黄（实测同一份纯蓝内容：带 0x10
+        // 读回 0xffff0000，去掉读回 0xff0000ff）。那次提交信息里写的 FPDF_RENDER_PRINTING 其实
+        // 叫 FPDF_PRINTING，值是 0x800，不是 0x10。
+        pdfium.renderPageBitmap(bmp, page, 0, 0, bmpW, bmpH, rotate, 0)
 
         const stride = pdfium.bitmapGetStride(bmp)
         const srcPtr = pdfium.bitmapGetBuffer(bmp)
