@@ -1,7 +1,7 @@
 import * as std from 'std'
 import * as os from 'os'
 import * as ffi from 'ffi'
-import { bindAt, WCHAR } from 'quickwin/lib/ffi/bind.js'
+import { bind, bindAt, WCHAR } from 'quickwin/lib/ffi/bind.js'
 import type { CodecMap } from 'quickwin/lib/ffi/bind.js'
 import { NULL, PTR_SIZE, PtrArrayBuffer } from 'quickwin/lib/ffi/ctype.js'
 import { FAILED, SUCCEEDED, guidFields } from 'quickwin/lib/com.js'
@@ -10,8 +10,8 @@ import {
     FindNextFile, GetFileAttributes, GetLastError, RemoveDirectory,
 } from 'quickwin/lib/windows/kernel32.js'
 import { RegCloseKey, RegCreateKeyEx, RegDeleteKeyValue, RegSetValueEx } from 'quickwin/lib/windows/advapi32.js'
-import { IID, PROCESS_INFORMATION, STARTUPINFOW, WIN32_FIND_DATAW } from 'quickwin/lib/windows/structs.js'
-import { CoCreateInstance, CoInitializeEx, CoUninitialize } from 'quickwin/lib/windows/ole32.js'
+import { CLSID, IID, PROCESS_INFORMATION, STARTUPINFOW, WIN32_FIND_DATAW } from 'quickwin/lib/windows/structs.js'
+import { CoInitializeEx, CoUninitialize } from 'quickwin/lib/windows/ole32.js'
 import {
     ClsCtx, CoInitFlag, ErrorCode, Guid, HKey, HResult, ProcessCreationFlag, RegAccess, RegType,
 } from 'quickwin/constants'
@@ -214,6 +214,18 @@ function logInstall(msg: string): void {
     } catch (_) {}
 }
 
+// ole32.js 的 CoCreateInstance 绑定是 4 槽 `<CLSID>ptr! <IID>ptr! u32 <>ptr!`，漏了第 2 位
+// pUnkOuter —— 真实签名 CoCreateInstance(rclsid, pUnkOuter, dwClsContext, riid, ppv) 是 5 参
+// （mingw-w64 combaseapi.h:258）。照官方绑定写会让 riid 落进 pUnkOuter、ppv 落进 riid 槽、
+// 出参槽没人写，真机上一律 E_INVALIDARG(0x80070057)，快捷方式因此从未落盘。这里按真实
+// 签名本地重绑，别改回 import ole32.js 的 CoCreateInstance。
+// rclsid / riid 传「字段对象」而非 CLSID.encode(...).ptr：callPlan 只在槽写器**返回**缓冲
+// 时把它 held 到原生调用之后（bind.js 的 callPlan）；传裸地址走 number 快路径、不 held，
+// 内联临时的缓冲寿命全看 GC 脸色。代价是丢掉 .encode() 的 CLSID/IID 品牌（编译期拦不住
+// rclsid/riid 互换），故 GUID 字面量必须逐一核对——IID 用 constants 的枚举，不手写。
+const CoCreateInstance5 = /*@__PURE__*/ bind('ole32.dll', 'CoCreateInstance',
+    '<CLSID>ptr! <>ptr u32 <IID>ptr! <>ptr! -> i32', { CLSID, IID })
+
 function createShortcut(targetPath: string, args: string, shortcutPath: string, desc: string): boolean {
     // S_FALSE 是同线程同公寓重复初始化（也是成功态）；RPC_E_CHANGED_MODE 是线程已被初始化
     // 成别的公寓模型——那也不是失败，只是「初始化不是我们做的，收尾就不能 CoUninitialize」。
@@ -228,15 +240,12 @@ function createShortcut(targetPath: string, args: string, shortcutPath: string, 
     }
 
     const ppv = new PtrArrayBuffer(PTR_SIZE)
-    // rclsid / riid 传「字段对象」而非 CLSID.encode(...).ptr：callPlan 只在槽写器**返回**缓冲
-    // 时把它 held 到原生调用之后（bind.js 的 callPlan）。传裸地址走 number 快路径、不 held，
-    // 内联临时的缓冲寿命就全看 GC 脸色。代价是丢掉 .encode() 的 CLSID/IID 品牌（编译期拦
-    // 不住两参互换），故两处 GUID 字面量必须逐一核对——IID 用 constants 的枚举，不手写。
-    const hrNew = CoCreateInstance(
-        guidFields(CLSSTRING_ShellLink),
-        guidFields(Guid.IID_ISHELLLINKW),
-        ClsCtx.INPROC_SERVER,
-        ppv.ptr,
+    const hrNew = CoCreateInstance5(
+        guidFields(CLSSTRING_ShellLink),   // rclsid
+        NULL,                             // pUnkOuter
+        ClsCtx.INPROC_SERVER,             // dwClsContext
+        guidFields(Guid.IID_ISHELLLINKW), // riid
+        ppv.ptr,                          // ppv 出参槽
     )
     if (FAILED(hrNew)) {
         if (didInit) CoUninitialize()
