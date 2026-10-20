@@ -6,6 +6,7 @@ import { CreateProcess, MoveFileEx } from 'quickwin/lib/windows/kernel32.js'
 import { PROCESS_INFORMATION } from 'quickwin/lib/windows/structs.js'
 import { MoveFileFlag } from 'quickwin/constants'
 import { alertBox, STARTUPINFO_CB_LEGACY } from './win32.js'
+import { ensureInstalled, missingInstallFiles } from './install.js'
 
 function pad(n: number): string {
   return n < 10 ? '0' + n : String(n)
@@ -91,6 +92,28 @@ async function main() {
     std.exit(ok ? 0 : 1)
   }
 
+  if (scriptArgs.includes('--install-only')) {
+    // CI 用：跑完整安装（下载+落盘+快捷方式+开机自启）但不启动程序、不弹窗，退出码反映结果。
+    // 下载失败不算失败——快捷方式不依赖网络（CDN 可达性由 --selftest 负责），否则一次跨境抖动
+    // 就把 CI 判红，而它挡住的正是安装逻辑本身的回归。
+    std.out.printf('install-only: start\n')
+    std.out.flush()
+    const installDir = localAppData + '\\SuperPrint'
+    const target = installDir + '\\QuickSuperPrint.exe'
+    try { os.mkdir(installDir) } catch (_) {}
+    const downloaded = await downloadTo(urls, tmp)
+    const moved = downloaded && moveFileExW(tmp, target)
+    try { os.remove(tmp) } catch (_) {}
+    std.out.printf('install-only: downloaded=%s moved=%s\n',
+      downloaded ? 'true' : 'false', moved ? 'true' : 'false')
+
+    await ensureInstalled()
+    const missing = missingInstallFiles()
+    std.out.printf('install-only: missing=%d %s\n', missing.length, missing.join('|'))
+    std.out.flush()
+    std.exit(missing.length === 0 ? 0 : 1)
+  }
+
   std.out.printf('Downloading update...\n')
   std.out.flush()
 
@@ -121,6 +144,10 @@ async function main() {
 
   std.out.printf('Starting...\n')
   std.out.flush()
+  // 启动器也补一次：快捷方式/开机自启在拉起 app 之前就位；app 侧那次是幂等的兜底
+  // （用户可能绕过 Setup 直接跑 QuickSuperPrint.exe）。不能让它挡住启动——exe 已经落盘，
+  // 装完就算出岔子也得把程序拉起来。
+  try { await ensureInstalled() } catch (e) { std.err.printf('ensureInstalled failed: %s\n', String(e)) }
   // 若由主程序的兜底逻辑带 --noretry 启动，则透传给新实例，避免其再次触发兜底造成死循环
   const passArgs = scriptArgs.includes('--noretry') ? '--run --noretry' : '--run'
   if (!startProcess(target, passArgs)) {

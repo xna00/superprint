@@ -28,6 +28,12 @@ const DESKTOP_SHORTCUT = '超人打印.lnk'
 
 // quickwin/constants 没有 FILE_ATTRIBUTE_* 表
 const FILE_ATTRIBUTE_DIRECTORY = 0x10
+// GetFileAttributesW 绑定是 '-> u32'（kernel32.js:183），quickwin 用 dv.getUint32 解码成无符号：
+// 路径不存在时回 INVALID_FILE_ATTRIBUTES=0xFFFFFFFF=4294967295，不是 -1。判 `a !== -1` 恒为真，
+// dirExists 于是对不存在的路径也返回 true——mkdir 每段都 continue、一次 CreateDirectory 都不调、
+// 还报成功，后面 IPPersistFile::Save 一律 ERROR_PATH_NOT_FOUND(0x80070003)；桌面那条能成只因
+// Desktop 本来就存在。exists 只是恰好对：0xFFFFFFFF 的 DIR 位也置着，(a & DIR) === 0 得 false。
+const INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF
 
 interface ShortcutDef {
     name: string
@@ -57,13 +63,13 @@ function dirOp(ok: boolean): boolean {
 
 function exists(path: string): boolean {
     const a = GetFileAttributes(path)
-    return a !== -1 && (a & FILE_ATTRIBUTE_DIRECTORY) === 0
+    return a !== INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) === 0
 }
 
 /** 该路径存在且是目录。 */
 function dirExists(path: string): boolean {
     const a = GetFileAttributes(path)
-    return a !== -1 && (a & FILE_ATTRIBUTE_DIRECTORY) !== 0
+    return a !== INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) !== 0
 }
 
 /** CreateDirectoryW 只建一层：中间层缺失会整链失败（返回 0 + ERROR_PATH_NOT_FOUND），
@@ -78,7 +84,10 @@ function mkdir(path: string): boolean {
     for (let i = 1; i < parts.length; i++) {
         cur += '\\' + parts[i]
         if (dirExists(cur)) continue
-        if (CreateDirectory(cur, NULL) === 0) return false
+        if (CreateDirectory(cur, NULL) === 0) {
+            logInstall('mkdir FAIL=' + cur + ' err=' + GetLastError())
+            return false
+        }
     }
     return true
 }
@@ -375,6 +384,15 @@ export async function ensureInstalled(): Promise<void> {
     await ensureSetupExe()
     logInstall('ensureSetupExe done in ' + (Date.now() - t0) + 'ms')
     logInstall('ensureInstalled done')
+}
+
+/** 安装完应该就位的产物。返回缺失列表，空 = 全部就位。
+ *  Setup.exe --install-only 用它决定退出码，CI 也就靠这一条拦住「快捷方式没建出来」。 */
+export function missingInstallFiles(): string[] {
+    const expected: string[] = SHORTCUT_WHITELIST.map(s => START_MENU_DIR + '\\' + s.name)
+    expected.push((std.getenv('USERPROFILE') || '') + '\\Desktop\\' + DESKTOP_SHORTCUT)
+    expected.push(INSTALL_DIR + '\\install.log')
+    return expected.filter(p => !exists(p))
 }
 
 // ---------------------------------------------------------------------------
