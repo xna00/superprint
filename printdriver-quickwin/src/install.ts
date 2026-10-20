@@ -13,9 +13,9 @@ import { RegCloseKey, RegCreateKeyEx, RegDeleteKeyValue, RegSetValueEx } from 'q
 import { IID, PROCESS_INFORMATION, STARTUPINFOW, WIN32_FIND_DATAW } from 'quickwin/lib/windows/structs.js'
 import { CoCreateInstance, CoInitializeEx, CoUninitialize } from 'quickwin/lib/windows/ole32.js'
 import {
-    ClsCtx, CoInitFlag, ErrorCode, Guid, HKey, ProcessCreationFlag, RegAccess, RegType,
+    ClsCtx, CoInitFlag, ErrorCode, Guid, HKey, HResult, ProcessCreationFlag, RegAccess, RegType,
 } from 'quickwin/constants'
-import { readPtr } from './utils.js'
+import { readPtr, toCST } from './utils.js'
 
 const INSTALL_DIR = (std.getenv('LOCALAPPDATA') || '') + '\\SuperPrint'
 const TARGET_EXE = INSTALL_DIR + '\\QuickSuperPrint.exe'
@@ -60,8 +60,27 @@ function exists(path: string): boolean {
     return a !== -1 && (a & FILE_ATTRIBUTE_DIRECTORY) === 0
 }
 
+/** 该路径存在且是目录。 */
+function dirExists(path: string): boolean {
+    const a = GetFileAttributes(path)
+    return a !== -1 && (a & FILE_ATTRIBUTE_DIRECTORY) !== 0
+}
+
+/** CreateDirectoryW 只建一层：中间层缺失会整链失败（返回 0 + ERROR_PATH_NOT_FOUND），
+ *  整条快捷方式目录就此建不出来。这里逐段补齐；已存在的层跳过。
+ *  UNC（\\server\share）没有中间目录语义，原样创建。 */
 function mkdir(path: string): boolean {
-    return dirOp(CreateDirectory(path, NULL) !== 0)
+    if (path.indexOf('\\') === -1 || path.startsWith('\\\\')) {
+        return dirOp(CreateDirectory(path, NULL) !== 0)
+    }
+    const parts = path.split('\\').filter(Boolean)
+    let cur = parts[0]
+    for (let i = 1; i < parts.length; i++) {
+        cur += '\\' + parts[i]
+        if (dirExists(cur)) continue
+        if (CreateDirectory(cur, NULL) === 0) return false
+    }
+    return true
 }
 
 function rmdir(path: string): boolean {
@@ -182,10 +201,30 @@ function hrHex(hr: number): string {
     return '0x' + (hr >>> 0).toString(16)
 }
 
+/** 安装诊断落盘。logger 只写 console，而安装是启动器以 --run 无控制台拉起的，
+ *  失败就等于没发生——之前快捷方式建不起来查了一整天就是这个原因。
+ *  追加写；日志本身写失败就再失败，不影响主流程。 */
+function logInstall(msg: string): void {
+    try {
+        const f = std.open(INSTALL_DIR + '\\install.log', 'a')
+        if (f) {
+            f.puts('[' + toCST().toISOString() + '] ' + msg + '\n')
+            f.close()
+        }
+    } catch (_) {}
+}
+
 function createShortcut(targetPath: string, args: string, shortcutPath: string, desc: string): boolean {
-    // S_FALSE 也是成功态（同线程同公寓重复初始化），故用 SUCCEEDED 而非比 0
-    if (!SUCCEEDED(CoInitializeEx(NULL, CoInitFlag.APARTMENTTHREADED))) {
-        throw new Error('CoInitializeEx 失败（线程公寓模型冲突？）')
+    // S_FALSE 是同线程同公寓重复初始化（也是成功态）；RPC_E_CHANGED_MODE 是线程已被初始化
+    // 成别的公寓模型——那也不是失败，只是「初始化不是我们做的，收尾就不能 CoUninitialize」。
+    // 旧版忽略返回值又无条件 CoUninitialize，会把线程的 COM 计数打穿。
+    let didInit = false
+    const hrInit = CoInitializeEx(NULL, CoInitFlag.APARTMENTTHREADED)
+    if (SUCCEEDED(hrInit)) {
+        didInit = true
+    } else if (hrInit !== HResult.RPC_E_CHANGED_MODE) {
+        logInstall('createShortcut: CoInitializeEx 失败 hr=' + hrHex(hrInit) + ' ' + shortcutPath)
+        throw new Error('CoInitializeEx 失败 hr=' + hrHex(hrInit))
     }
 
     const ppv = new PtrArrayBuffer(PTR_SIZE)
@@ -200,7 +239,7 @@ function createShortcut(targetPath: string, args: string, shortcutPath: string, 
         ppv.ptr,
     )
     if (FAILED(hrNew)) {
-        CoUninitialize()
+        if (didInit) CoUninitialize()
         throw new Error('CoCreateInstance 失败 hr=' + hrHex(hrNew))
     }
 
@@ -208,7 +247,7 @@ function createShortcut(targetPath: string, args: string, shortcutPath: string, 
     const releaseSL = () => vtSlot(pSL, VT_RELEASE, '<>ptr -> i32')(pSL)
     const bailSL = (hr: number, what: string): never => {
         releaseSL()
-        CoUninitialize()
+        if (didInit) CoUninitialize()
         throw new Error(what + ' 失败 hr=' + hrHex(hr))
     }
 
@@ -247,7 +286,7 @@ function createShortcut(targetPath: string, args: string, shortcutPath: string, 
 
     vtSlot(pPF, VT_RELEASE, '<>ptr -> i32')(pPF)
     releaseSL()
-    CoUninitialize()
+    if (didInit) CoUninitialize()
 
     if (FAILED(hrSave)) throw new Error('IPersistFile::Save 失败 hr=' + hrHex(hrSave))
     return true
@@ -282,11 +321,24 @@ async function ensureSetupExe(): Promise<void> {
 }
 
 function ensureShortcuts(): void {
-    mkdir(START_MENU_DIR)
-    for (const s of SHORTCUT_WHITELIST) {
-        createShortcut(s.target, s.args, START_MENU_DIR + '\\' + s.name, s.desc)
+    // 单个快捷方式失败不能连带后面的——旧版无 try/catch，第一个抛掉整批就都建不成了。
+    const attempt = (path: string, target: string, args: string, desc: string): void => {
+        try {
+            createShortcut(target, args, path, desc)
+            logInstall('shortcut OK   ' + path)
+        } catch (e) {
+            logInstall('shortcut FAIL ' + path + ' - ' + (e instanceof Error ? e.message : String(e)))
+        }
     }
-    createShortcut(TARGET_EXE, '--run', (std.getenv('USERPROFILE') || '') + '\\Desktop\\' + DESKTOP_SHORTCUT, '超人打印')
+
+    if (!mkdir(START_MENU_DIR)) {
+        logInstall('ensureShortcuts: 开始菜单目录创建失败 ' + START_MENU_DIR)
+    }
+    for (const s of SHORTCUT_WHITELIST) {
+        attempt(START_MENU_DIR + '\\' + s.name, s.target, s.args, s.desc)
+    }
+    attempt((std.getenv('USERPROFILE') || '') + '\\Desktop\\' + DESKTOP_SHORTCUT,
+        TARGET_EXE, '--run', '超人打印')
 }
 
 function pruneShortcuts(): void {
@@ -303,10 +355,17 @@ function ensureAutoStart(): boolean {
 
 export async function ensureInstalled(): Promise<void> {
     try { os.mkdir(INSTALL_DIR) } catch (_) {}
-    await ensureSetupExe()
+    logInstall('ensureInstalled start, TARGET_EXE=' + exists(TARGET_EXE) + ' SETUP_EXE=' + exists(SETUP_EXE))
+    // 快捷方式不依赖网络，先建。卸载会删掉整个 INSTALL_DIR（含 SETUP_EXE），重装时
+    // ensureSetupExe 得走 CDN 下载——那条链路已知抖动（CI #427），不能让它挡住建快捷方式。
+    // 「更新.lnk」指向的文件暂时不存在也没关系：.lnk 本身照样有效，只是点它那一刻才会报找不到。
     ensureShortcuts()
     pruneShortcuts()
     ensureAutoStart()
+    const t0 = Date.now()
+    await ensureSetupExe()
+    logInstall('ensureSetupExe done in ' + (Date.now() - t0) + 'ms')
+    logInstall('ensureInstalled done')
 }
 
 // ---------------------------------------------------------------------------
