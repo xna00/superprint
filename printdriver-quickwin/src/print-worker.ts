@@ -15,6 +15,7 @@ import {
 } from 'quickwin/lib/windows/gdi32.js'
 import { ColorUse, DeviceCap, DmField, DmModeFlag, RasterOp, StretchBltMode } from 'quickwin/constants'
 import { getExePath, readPtr } from './utils.js'
+import { FpdfRenderFlag, FpdfRotate } from './pdfium-enum.js'
 import type { Document, Page, Pixmap } from '@quickwinlabs/mupdf-wasm'
 import type { WorkerInMsg, WorkerOutMsg } from './worker-types.js'
 import { api } from './api.js'
@@ -28,22 +29,6 @@ const HORZRES = DeviceCap.HORZRES
 const VERTRES = DeviceCap.VERTRES
 const LOGPIXELSX = DeviceCap.LOGPIXELSX
 const LOGPIXELSY = DeviceCap.LOGPIXELSY
-
-/** FPDF_RenderPageBitmap 的 rotate 参数。fpdfview.h 的取值域就这 4 个、全列得出来，
- *  所以做成 enum 挂进 EnumMap（bind 签名写 i32@FpdfRotate）——传 4 以外的数字编译期就报错。
- *  位掩码类的参数（如同一个调用里的 flags）做不了这个：值域列不全，A|B 会塌成 number。 */
-export const enum FpdfRotate {
-    NORMAL = 0,
-    CW90 = 1,
-    CW180 = 2,
-    CCW90 = 3,
-}
-
-declare global {
-    interface EnumMap {
-        FpdfRotate: FpdfRotate
-    }
-}
 
 interface DibResult {
     data: PtrArrayBuffer<''>
@@ -204,11 +189,12 @@ function renderPdfPageWithPDFium(pdfium: Pdfium, doc: MaybePtr<'FPDF_DOCUMENT'>,
         if (!bmp) return null
 
         pdfium.bitmapFillRect(bmp, 0, 0, bmpW, bmpH, 0xFFFFFFFF)
-        // flags 必须传 0。98aec6d 当年塞的 0x10 是 FPDF_REVERSE_BYTE_ORDER——把位图输出翻成
-        // R,G,B,X，和 BI_RGB 正好相反，打印出来蓝红互换、青变黄（实测同一份纯蓝内容：带 0x10
-        // 读回 0xffff0000，去掉读回 0xff0000ff）。那次提交信息里写的 FPDF_RENDER_PRINTING 其实
-        // 叫 FPDF_PRINTING，值是 0x800，不是 0x10。
-        pdfium.renderPageBitmap(bmp, page, 0, 0, bmpW, bmpH, rotate, 0)
+        // flags 只开 FPDF_PRINTING：打印质量路径，开图像重采样和文字 hinting。
+        // 绝不能带上 REVERSE_BYTE_ORDER(0x10)——它把位图输出翻成 R,G,B,X，和 BI_RGB 的
+        // B,G,R,X 正好相反，打印出来蓝红互换、青变黄（实测同一份纯蓝内容：带 0x10 读回
+        // 0xffff0000，不带读回 0xff0000ff）。98aec6d 当年就是把 0x10 误当打印旗子塞进来的，
+        // 那次提交信息里写的 FPDF_RENDER_PRINTING 其实叫 FPDF_PRINTING，值是 0x800。
+        pdfium.renderPageBitmap(bmp, page, 0, 0, bmpW, bmpH, rotate, FpdfRenderFlag.PRINTING)
 
         const stride = pdfium.bitmapGetStride(bmp)
         const srcPtr = pdfium.bitmapGetBuffer(bmp)
