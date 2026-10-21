@@ -25,6 +25,9 @@ import { notifyCheckJobs } from "../ws/index.ts"
 import { sendMsgMenuMessage, sendTextMessage } from "./weixin/send.ts"
 import { getInfo } from "../request-context.ts"
 import { logger } from "../logger.ts";
+import { existsSync, unlinkSync } from "node:fs"
+import { join } from "node:path"
+import { getUploadsDir } from "./weixin/download.ts"
 
 const WEIXIN_KF_ID = 'wkHnU4FQAAnkssZ2Y0t7gAKpQxcw7gjQ'
 
@@ -150,6 +153,7 @@ export const fileSucceed = async (id: number) => {
   const allCompleted = allFiles.every(f => f.state === 'completed')
   if (allCompleted && task.state !== 'completed') {
     updatePrintTaskState(task.id, 'completed')
+    deletePrintTaskUploadFiles(task.id)
     await sendPrintSuccessNotification(task)
   }
   return { success: true }
@@ -208,6 +212,7 @@ export const fileFailed = async (id: number) => {
   if (!hasWaiting) {
     if (allCompleted) {
       updatePrintTaskState(task.id, 'completed')
+      deletePrintTaskUploadFiles(task.id)
     } else if (hasFailed) {
       updatePrintTaskState(task.id, 'failed')
       const failedFiles = allFiles.filter(f => f.state === 'failed')
@@ -255,6 +260,28 @@ export const getPrintJobs = async () => {
   }));
 };
 
+// 一个打印任务在 uploads/ 下可能对应多个物理文件：
+// <fileId>.pdf（可打印/预览）+ <fileId>.<原扩展名>（docx/jpg 等原文件）
+const UPLOAD_FILE_EXTS = ['.pdf', '.ps', '.jpg', '.jpeg', '.png', '.gif',
+  '.bmp', '.webp', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
+
+const deletePrintTaskUploadFiles = (printTaskId: number): void => {
+  const dir = getUploadsDir()
+  for (const f of listPrintFilesByPrintTaskId(printTaskId)) {
+    for (const ext of UPLOAD_FILE_EXTS) {
+      const p = join(dir, f.fileId + ext)
+      try {
+        if (existsSync(p)) {
+          unlinkSync(p)
+          logger.log(`[cleanup] 已删除上传文件: ${p}`)
+        }
+      } catch (e) {
+        logger.warn(`[cleanup] 删除失败(跳过): ${p}`, e)
+      }
+    }
+  }
+}
+
 export const deletePrintTask = async (printTaskId: number) => {
   const externalUserId = await getExternalUserId();
   const printTask = findPrintTaskById(printTaskId)
@@ -266,5 +293,6 @@ export const deletePrintTask = async (printTaskId: number) => {
   }
   removePrintFilesByPrintTaskId(printTaskId)
   removePrintTaskById(printTaskId)
+  deletePrintTaskUploadFiles(printTaskId)
   return { success: true }
 }
