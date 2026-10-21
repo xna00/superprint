@@ -2,6 +2,12 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   base: '',
+  // 关掉 vite 的 oxc 转译插件 (builtin:vite-transform)。它抢在 rolldown 自己的 TS
+  // transform 之前把 `const enum` 转成 const 对象，rolldown 就再也看不到 TypeScript
+  // 声明，跨模块常量折叠失效 —— 导致 const enum 成员在跨 chunk 时保持属性访问
+  // (如 Sentinel.INVALID_FILE_ATTRIBUTES)，vendor 多出 25 个未 tree-shake 的 builder。
+  // 关掉后由 rolldown 自己处理 TS/TSX，const enum 完全内联，JS 总体积 -27 kB。
+  oxc: false,
   define: {
     DEBUG: 'false',
   },
