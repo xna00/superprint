@@ -1,7 +1,7 @@
 import * as std from 'std'
 import * as os from 'os'
 import * as ffi from 'ffi'
-import { bind, bindAt, WCHAR } from 'quickwin/lib/ffi/bind.js'
+import { bindAt, WCHAR } from 'quickwin/lib/ffi/bind.js'
 import type { CodecMap } from 'quickwin/lib/ffi/bind.js'
 import { NULL, PTR_SIZE, PtrArrayBuffer } from 'quickwin/lib/ffi/ctype.js'
 import { FAILED, SUCCEEDED, guidFields } from 'quickwin/lib/com.js'
@@ -10,10 +10,10 @@ import {
     FindNextFile, GetFileAttributes, GetLastError, RemoveDirectory,
 } from 'quickwin/lib/windows/kernel32.js'
 import { RegCloseKey, RegCreateKeyEx, RegDeleteKeyValue, RegSetValueEx } from 'quickwin/lib/windows/advapi32.js'
-import { CLSID, IID, PROCESS_INFORMATION, STARTUPINFOW, WIN32_FIND_DATAW } from 'quickwin/lib/windows/structs.js'
-import { CoInitializeEx, CoUninitialize } from 'quickwin/lib/windows/ole32.js'
+import { IID, PROCESS_INFORMATION, STARTUPINFOW, WIN32_FIND_DATAW } from 'quickwin/lib/windows/structs.js'
+import { CoCreateInstance, CoInitializeEx, CoUninitialize } from 'quickwin/lib/windows/ole32.js'
 import {
-    ClsCtx, CoInitFlag, ErrorCode, Guid, HKey, HResult, ProcessCreationFlag, RegAccess, RegType,
+    ClsCtx, CoInitFlag, ErrorCode, Guid, HKey, HResult, ProcessCreationFlag, RegAccess, RegType, Sentinel,
 } from 'quickwin/constants'
 import { readPtr, toCST } from './utils.js'
 
@@ -28,12 +28,6 @@ const DESKTOP_SHORTCUT = '超人打印.lnk'
 
 // quickwin/constants 没有 FILE_ATTRIBUTE_* 表
 const FILE_ATTRIBUTE_DIRECTORY = 0x10
-// GetFileAttributesW 绑定是 '-> u32'（kernel32.js:183），quickwin 用 dv.getUint32 解码成无符号：
-// 路径不存在时回 INVALID_FILE_ATTRIBUTES=0xFFFFFFFF=4294967295，不是 -1。判 `a !== -1` 恒为真，
-// dirExists 于是对不存在的路径也返回 true——mkdir 每段都 continue、一次 CreateDirectory 都不调、
-// 还报成功，后面 IPPersistFile::Save 一律 ERROR_PATH_NOT_FOUND(0x80070003)；桌面那条能成只因
-// Desktop 本来就存在。exists 只是恰好对：0xFFFFFFFF 的 DIR 位也置着，(a & DIR) === 0 得 false。
-const INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF
 
 interface ShortcutDef {
     name: string
@@ -61,15 +55,20 @@ function dirOp(ok: boolean): boolean {
     return ok || GetLastError() === ErrorCode.FILE_NOT_FOUND
 }
 
+// GetFileAttributesW 绑定是 '-> u32'（无符号读回），路径不存在时回 0xFFFFFFFF=4294967295，
+// 不是 -1：判 `a !== -1` 恒为真，dirExists 对不存在的路径也返回 true——mkdir 每段都 continue、
+// 一次 CreateDirectory 都不调、还报成功，后面 IPPersistFile::Save 一律 ERROR_PATH_NOT_FOUND
+// (0x80070003)。桌面快捷方式能成只因 Desktop 本来就存在，把整条链的失败都盖住了。
+// 哨兵用 quickwin/constants 的 Sentinel（3.1.2 起收录），别自己写 0xFFFFFFFF 也别写 -1。
 function exists(path: string): boolean {
     const a = GetFileAttributes(path)
-    return a !== INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) === 0
+    return a !== Sentinel.INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) === 0
 }
 
 /** 该路径存在且是目录。 */
 function dirExists(path: string): boolean {
     const a = GetFileAttributes(path)
-    return a !== INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) !== 0
+    return a !== Sentinel.INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) !== 0
 }
 
 /** CreateDirectoryW 只建一层：中间层缺失会整链失败（返回 0 + ERROR_PATH_NOT_FOUND），
@@ -223,18 +222,10 @@ function logInstall(msg: string): void {
     } catch (_) {}
 }
 
-// ole32.js 的 CoCreateInstance 绑定是 4 槽 `<CLSID>ptr! <IID>ptr! u32 <>ptr!`，漏了第 2 位
-// pUnkOuter —— 真实签名 CoCreateInstance(rclsid, pUnkOuter, dwClsContext, riid, ppv) 是 5 参
-// （mingw-w64 combaseapi.h:258）。照官方绑定写会让 riid 落进 pUnkOuter、ppv 落进 riid 槽、
-// 出参槽没人写，真机上一律 E_INVALIDARG(0x80070057)，快捷方式因此从未落盘。这里按真实
-// 签名本地重绑，别改回 import ole32.js 的 CoCreateInstance。
 // rclsid / riid 传「字段对象」而非 CLSID.encode(...).ptr：callPlan 只在槽写器**返回**缓冲
 // 时把它 held 到原生调用之后（bind.js 的 callPlan）；传裸地址走 number 快路径、不 held，
 // 内联临时的缓冲寿命全看 GC 脸色。代价是丢掉 .encode() 的 CLSID/IID 品牌（编译期拦不住
 // rclsid/riid 互换），故 GUID 字面量必须逐一核对——IID 用 constants 的枚举，不手写。
-const CoCreateInstance5 = /*@__PURE__*/ bind('ole32.dll', 'CoCreateInstance',
-    '<CLSID>ptr! <>ptr u32 <IID>ptr! <>ptr! -> i32', { CLSID, IID })
-
 function createShortcut(targetPath: string, args: string, shortcutPath: string, desc: string): boolean {
     // S_FALSE 是同线程同公寓重复初始化（也是成功态）；RPC_E_CHANGED_MODE 是线程已被初始化
     // 成别的公寓模型——那也不是失败，只是「初始化不是我们做的，收尾就不能 CoUninitialize」。
@@ -249,7 +240,7 @@ function createShortcut(targetPath: string, args: string, shortcutPath: string, 
     }
 
     const ppv = new PtrArrayBuffer(PTR_SIZE)
-    const hrNew = CoCreateInstance5(
+    const hrNew = CoCreateInstance(
         guidFields(CLSSTRING_ShellLink),   // rclsid
         NULL,                             // pUnkOuter
         ClsCtx.INPROC_SERVER,             // dwClsContext
