@@ -1,8 +1,8 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs"
-import { join, extname } from "node:path"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import UZIP from "uzip"
-import { recognizeDocument, type RecognizedDocument } from "./ai.ts"
-import { downloadMedia, convertOfficeToPdf, type DownloadResult } from "./weixin/download.ts"
+import { recognizeDocument, imageBufferToDataUrl, type RecognizedDocument } from "./ai.ts"
+import { downloadMediaToMemory, convertOfficeToPdf } from "./weixin/download.ts"
 import { generateTaskId } from "./weixin/message.ts"
 import {
   findPrintTaskWithPrinter,
@@ -17,26 +17,8 @@ import { addTokenToUrl } from "./utils.ts"
 import { logger } from "../logger.ts";
 
 const ASSETS_DIR = join(import.meta.dirname, "..", "assets")
-const UPLOADS_DIR = join(process.cwd(), 'uploads')
 const TEMPLATE_PATH = join(ASSETS_DIR, "文件处理.docx")
 const WEIXIN_KF_ID = 'wkHnU4FQAAIMj9uECzdKwOI_kRP_IGDQ'
-
-const ensureUploadsDir = (): void => {
-  if (!existsSync(UPLOADS_DIR)) {
-    mkdirSync(UPLOADS_DIR, { recursive: true })
-  }
-}
-
-const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'])
-
-// 识别直接用下载到的原图，不再走「图片 → PDF → 图片」的往返
-const resolveRecognizeUrl = (downloadResult: DownloadResult): string => {
-  const ext = extname(downloadResult.originalPath).toLowerCase()
-  if (!IMAGE_EXTS.has(ext)) {
-    throw new Error(`目前只支持发送图片，请拍照或截图后发送（收到 ${ext || '未知格式'}）`)
-  }
-  return `file://${downloadResult.originalPath}`
-}
 
 export const generateDocx = (data: RecognizedDocument): Buffer => {
   const templateBuffer = readFileSync(TEMPLATE_PATH)
@@ -86,25 +68,18 @@ export type ProcessDocumentResult = {
 export const processDocumentSimple = async (
   mediaId: string
 ): Promise<ProcessDocumentResult> => {
-  ensureUploadsDir()
+  const media = await downloadMediaToMemory(mediaId)
+  logger.log(`文件下载完成: ${media.filename}`)
 
-  const downloadResult = await downloadMedia(mediaId, true, false)
-  logger.log(`文件下载完成: ${downloadResult.filename}`)
-
-  const fileUrl = resolveRecognizeUrl(downloadResult)
-
+  const dataUrl = imageBufferToDataUrl(media.buffer, media.ext)
   logger.log('开始识别公文...')
-  const recognized = await recognizeDocument(fileUrl)
+  const recognized = await recognizeDocument(dataUrl)
   logger.log('识别结果:', recognized)
 
-  logger.log('生成 docx 文件...')
+  logger.log('生成 docx（内存）...')
   const docxBuffer = generateDocx(recognized)
-  const docxFileId = downloadResult.fileId + '_docx'
-  const docxPath = join(UPLOADS_DIR, docxFileId + '.docx')
-  writeFileSync(docxPath, docxBuffer)
-  logger.log(`docx 文件已保存: ${docxPath}`)
 
-  const pdfPath = await convertOfficeToPdf(docxPath)
+  const pdfPath = await convertOfficeToPdf({ buffer: docxBuffer, filename: `${media.fileId}.docx` })
   if (!pdfPath) {
     throw new Error('PDF 生成失败')
   }
@@ -112,7 +87,7 @@ export const processDocumentSimple = async (
 
   return {
     recognized,
-    fileId: docxFileId,
+    fileId: media.fileId,
     pdfPath
   }
 }
@@ -122,26 +97,19 @@ export const processDocument = async (
   kfid: string,
   externalUserId: string,
 ): Promise<ProcessDocumentResult> => {
-  ensureUploadsDir()
+  const media = await downloadMediaToMemory(mediaId)
+  logger.log(`文件下载完成: ${media.filename}`)
 
-  const downloadResult = await downloadMedia(mediaId, true, false)
-  logger.log(`文件下载完成: ${downloadResult.filename}`)
-
-  const fileUrl = resolveRecognizeUrl(downloadResult)
-
+  const dataUrl = imageBufferToDataUrl(media.buffer, media.ext)
   logger.log('开始识别公文...')
-  const recognized = await recognizeDocument(fileUrl)
+  const recognized = await recognizeDocument(dataUrl)
   logger.log('识别结果:', recognized)
 
-  logger.log('生成 docx 文件...')
+  logger.log('生成 docx（内存）...')
   const docxBuffer = generateDocx(recognized)
-  const docxFileId = downloadResult.fileId + '_docx'
-  const docxPath = join(UPLOADS_DIR, docxFileId + '.docx')
-  writeFileSync(docxPath, docxBuffer)
-  logger.log(`docx 文件已保存: ${docxPath}`)
 
-  // 转换 docx 为 PDF 供前端预览
-  const pdfPath = await convertOfficeToPdf(docxPath)
+  // 转换 docx 为 PDF 供前端预览（docx 直传 WPS，不落盘）
+  const pdfPath = await convertOfficeToPdf({ buffer: docxBuffer, filename: `${media.fileId}.docx` })
   if (pdfPath) {
     logger.log(`PDF 预览文件已生成: ${pdfPath}`)
   } else {
@@ -166,7 +134,7 @@ export const processDocument = async (
   const printFileId = insertPrintFile({
     state: "waiting_print",
     printTaskId,
-    fileId: docxFileId,
+    fileId: media.fileId,
     filename: `公文_${recognized.title || '未识别'}.docx`,
     duplex: true,
     tumble: false
@@ -196,7 +164,7 @@ export const processDocument = async (
     recognized,
     printTaskId,
     printFileId,
-    fileId: docxFileId,
+    fileId: media.fileId,
     pdfPath: pdfPath || ''
   }
 }

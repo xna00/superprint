@@ -70,14 +70,20 @@ const MAX_ATTEMPTS = 3 // 每个地址的重试次数
 const RETRY_DELAYS = [1000, 2000] // 每次重试前的退避(ms)
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
+type WpsInput = string | { buffer: Buffer; filename: string }
+
+const resolveWpsInput = (input: WpsInput): { buffer: Buffer; filename: string } =>
+  typeof input === 'string'
+    ? { buffer: readFileSync(input), filename: basename(input) }
+    : input
+
 export const convertWithWpsApi = async (
-  filePath: string,
+  input: WpsInput,
   outputPath: string,
   attempts: number = MAX_ATTEMPTS,
   delays: number[] = RETRY_DELAYS,
 ): Promise<boolean> => {
-  const fileBuffer = readFileSync(filePath)
-  const fileName = basename(filePath)
+  const { buffer: fileBuffer, filename: fileName } = resolveWpsInput(input)
 
   for (const baseUrl of WPS2PDF_URLS) {
     for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -129,19 +135,20 @@ export const convertWithWpsApi = async (
   return false
 }
 
-export const convertOfficeToPdf = async (filePath: string): Promise<string | null> => {
-  const ext = extname(filePath)
+export const convertOfficeToPdf = async (input: WpsInput): Promise<string | null> => {
+  const filename = typeof input === 'string' ? basename(input) : input.filename
+  const ext = extname(filename)
   if (!isOfficeFile(ext)) return null
 
-  const absolutePath = filePath.startsWith('/') ? filePath : join(process.cwd(), filePath)
-  const pdfPath = filePath.replace(/\.[^.]+$/, '.pdf')
+  ensureUploadsDir()
+  const pdfPath = join(UPLOADS_DIR, filename.replace(/\.[^.]+$/, '.pdf'))
 
-  if (await convertWithWpsApi(absolutePath, pdfPath)) {
+  if (await convertWithWpsApi(input, pdfPath)) {
     logger.log('WPS: PDF 转换完成', pdfPath)
     return pdfPath
   }
 
-  logger.error('Office转PDF失败（无回退）:', absolutePath)
+  logger.error('Office转PDF失败（无回退）:', pdfPath)
   return null
 }
 
@@ -245,6 +252,37 @@ export const downloadMedia = async (
   }
 
   return { fileId: hash, filename, converted: false, originalPath: filePath }
+}
+
+// 与 downloadMedia 等价，但只返回内存字节、不落盘。
+// 供 docProcess 使用：原文件仅用于 AI 识别，识别完即弃，无需写入 uploads/。
+export const downloadMediaToMemory = async (
+  mediaId: string,
+): Promise<{ fileId: string; buffer: Buffer; ext: string; filename: string }> => {
+  const accessToken = await getAccessToken()
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/media/get?access_token=${accessToken}&media_id=${mediaId}`
+
+  const response = await fetch(url)
+
+  if (!response.ok) {
+    throw new Error(`下载文件失败: HTTP ${response.status}`)
+  }
+
+  const contentType = response.headers.get('content-type')
+  if (contentType?.includes('application/json')) {
+    const errorData = await response.json() as { errcode?: number; errmsg?: string }
+    if (errorData.errcode && errorData.errcode !== 0) {
+      throw new Error(`下载文件失败: ${errorData.errmsg} (errcode: ${errorData.errcode})`)
+    }
+  }
+
+  const filename = getFilenameFromResponse(response, mediaId)
+  const arrayBuffer = await response.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+  const hash = createHash('sha256').update(buffer).digest('hex').slice(0, 16)
+  const ext = extname(filename)
+
+  return { fileId: hash, buffer, ext, filename }
 }
 
 export const getFilePath = (fileId: string): string | null => {

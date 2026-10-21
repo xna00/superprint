@@ -34,12 +34,26 @@ const toImageDataUrl = (filePath: string): string => {
   return `data:${mime};base64,${readFileSync(filePath).toString('base64')}`
 }
 
+// 与 toImageDataUrl 等价，但接受内存 Buffer，避免「先落盘再读回」的往返
+export const imageBufferToDataUrl = (buffer: Buffer, ext: string): string => {
+  const mime = IMAGE_MIME_TYPES[ext.toLowerCase()]
+  if (!mime) {
+    throw new Error(`目前只支持发送图片，请拍照或截图后发送（收到 ${ext || '未知格式'}）`)
+  }
+  return `data:${mime};base64,${buffer.toString('base64')}`
+}
+
 const mimeFromContentType = (contentType: string): string | null => {
   const ct = contentType.toLowerCase()
   return Object.values(IMAGE_MIME_TYPES).find(mime => ct.startsWith(mime)) ?? null
 }
 
 export const recognizeDocument = async (fileUrl: string): Promise<RecognizedDocument> => {
+  // 内存中的 data URL（如 docProcess 直接由字节生成，无需落盘）
+  if (fileUrl.startsWith('data:')) {
+    return recognizeFromImageUrl(fileUrl)
+  }
+
   // 本地文件 (file:// URL)
   if (fileUrl.startsWith('file://')) {
     return recognizeFromImageUrl(toImageDataUrl(fileUrl.replace('file://', '')))
