@@ -203,7 +203,7 @@ export type DownloadResult = {
   originalPath: string
 }
 
-export const downloadMedia = async (
+const downloadMediaUncached = async (
   mediaId: string,
   duplex: boolean = true,
   tumble: boolean = false
@@ -252,6 +252,33 @@ export const downloadMedia = async (
   }
 
   return { fileId: hash, filename, converted: false, originalPath: filePath }
+}
+
+// 同一 mediaId 的并发下载去重：message.ts 用 Promise.all 并发处理一批媒体消息，
+// 同一 media_id（转发、回调重投）会同时触发多次下载——重复请求微信接口、
+// 并发写同一个内容寻址文件、重复跑 PDF 转换。这里按 mediaId 合并在途请求，
+// 后到者直接复用前者的 Promise；失败即移除（不缓存失败），后续调用可重新发起。
+// duplex/tumble 在本函数体里未使用，去重键只需 mediaId。
+const inflightDownloads = new Map<string, Promise<DownloadResult>>()
+
+export const downloadMedia = async (
+  mediaId: string,
+  duplex: boolean = true,
+  tumble: boolean = false
+): Promise<DownloadResult> => {
+  const inflight = inflightDownloads.get(mediaId)
+  if (inflight) return inflight
+
+  const download = downloadMediaUncached(mediaId, duplex, tumble)
+  inflightDownloads.set(mediaId, download)
+  try {
+    return await download
+  } finally {
+    // 只删自己这一条：若期间已有更新的在途请求占位，不能误删
+    if (inflightDownloads.get(mediaId) === download) {
+      inflightDownloads.delete(mediaId)
+    }
+  }
 }
 
 // 与 downloadMedia 等价，但只返回内存字节、不落盘。
