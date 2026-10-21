@@ -13,12 +13,13 @@ import {
   updatePrintFileState,
   listPrintFilesByPrintTaskId,
   listPrintFilesByPrintTaskIdAndState,
-  listPrintTasksByState,
+  listPrintTasksByComputerIdAndState,
   insertPrintFile,
   removePrintFilesByPrintTaskId,
   removePrintTaskById,
   type PrintTaskBase,
   type PrintFileBase,
+  type PrinterBase,
 } from "../models/db.ts"
 import { ApiError, addTokenToUrl, decryptString } from "./utils.ts"
 import { notifyCheckJobs } from "../ws/index.ts"
@@ -249,14 +250,19 @@ export const retryFailedFiles = async (printTaskId: number) => {
 
 export const getPrintJobs = async () => {
   const computerId = getComputerId();
-  const printers = listPrintersByComputerId(computerId);
-  const printerIds = printers.map(p => p.id);
-  const allTasks = listPrintTasksByState('waiting_print');
-  const tasks = allTasks.filter((t) => printerIds.includes(t.printerId));
+  // 本机打印机一次性查全，建 id→PrinterBase 映射（仅按打印机数查询，非按任务数）
+  const printerIds = listPrintersByComputerId(computerId).map((p) => p.id);
+  const printerMap = new Map<number, PrinterBase>();
+  for (const id of printerIds) {
+    const p = findPrinterById(id);
+    if (p) printerMap.set(id, p);
+  }
+  // DB 侧按 computerId + state 过滤（INNER JOIN Printer），避免「跨设备全表扫描 + JS 按 printerId 过滤」
+  const tasks = listPrintTasksByComputerIdAndState(computerId, "waiting_print");
   return tasks.map((t) => ({
     ...t,
-    printer: findPrinterById(t.printerId),
-    printFiles: listPrintFilesByPrintTaskIdAndState(t.id, 'waiting_print'),
+    printer: printerMap.get(t.printerId),
+    printFiles: listPrintFilesByPrintTaskIdAndState(t.id, "waiting_print"),
   }));
 };
 

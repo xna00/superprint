@@ -481,6 +481,27 @@ export const listPrintTasksByState = (
     )
     .all({ state });
 
+// 取某台电脑下、处于指定状态的打印任务，并一次性 JOIN 出所属打印机信息。
+// 替代「先 listPrintTasksByState 全表扫描 + JS 按 printerId 过滤 + 逐任务 findPrinterById」的 N+1 写法，
+// 用于打印客户端轮询 getPrintJobs（高频热路径）。
+export const listPrintTasksByComputerIdAndState = (
+  computerId: string,
+  state: PrintTaskState,
+): PrintTaskRow[] => {
+  const rows = db
+    .prepare(
+      `SELECT ALL PrintTask.id AS id, PrintTask.state AS state, PrintTask.weixinKfId AS weixinKfId, PrintTask.externalUserId AS externalUserId, PrintTask.printerId AS printerId FROM PrintTask INNER JOIN Printer ON Printer.id = PrintTask.printerId WHERE Printer.computerId = @computerId AND PrintTask.state = @state ORDER BY PrintTask.id LIMIT -1 OFFSET 0`,
+    )
+    .all({ computerId, state });
+  return rows.map((r) => ({
+    id: r.id,
+    state: r.state,
+    weixinKfId: r.weixinKfId,
+    externalUserId: r.externalUserId,
+    printerId: r.printerId,
+  }));
+};
+
 // ── PrintFile ──
 
 export const findPrintFileById = (id: number): PrintFileBase | undefined => {
