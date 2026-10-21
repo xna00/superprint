@@ -265,14 +265,20 @@ export const getPrintJobs = async () => {
 const UPLOAD_FILE_EXTS = ['.pdf', '.ps', '.jpg', '.jpeg', '.png', '.gif',
   '.bmp', '.webp', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
 
-const deletePrintTaskUploadFiles = (printTaskId: number): void => {
+// 靠 PrintFile 行拿 fileId，所以必须早于 removePrintFilesByPrintTaskId 调用：
+// DB 行一删这里就查不到文件了，uploads 会静默漏删。
+// 返回实际删掉的文件数；0 也照打，"该删没删"在日志里一眼可见。
+const deletePrintTaskUploadFiles = (printTaskId: number): number => {
   const dir = getUploadsDir()
-  for (const f of listPrintFilesByPrintTaskId(printTaskId)) {
+  const files = listPrintFilesByPrintTaskId(printTaskId)
+  let deleted = 0
+  for (const f of files) {
     for (const ext of UPLOAD_FILE_EXTS) {
       const p = join(dir, f.fileId + ext)
       try {
         if (existsSync(p)) {
           unlinkSync(p)
+          deleted++
           logger.log(`[cleanup] 已删除上传文件: ${p}`)
         }
       } catch (e) {
@@ -280,6 +286,17 @@ const deletePrintTaskUploadFiles = (printTaskId: number): void => {
       }
     }
   }
+  logger.log(`[cleanup] printTask=${printTaskId} PrintFile ${files.length} 行，删除物理文件 ${deleted} 个`)
+  return deleted
+}
+
+// 完整清除一个打印任务：先删物理文件，再删 DB 行。
+// web 与微信两条删除路径共用——之前分开写就漏了微信那条的 uploads 清理。
+export const purgePrintTask = (printTaskId: number): number => {
+  const deleted = deletePrintTaskUploadFiles(printTaskId)
+  removePrintFilesByPrintTaskId(printTaskId)
+  removePrintTaskById(printTaskId)
+  return deleted
 }
 
 export const deletePrintTask = async (printTaskId: number) => {
@@ -291,8 +308,6 @@ export const deletePrintTask = async (printTaskId: number) => {
   if (printTask.externalUserId !== externalUserId) {
     throw new ApiError(403, '无权操作', {}, "API_FORBIDDEN", {});
   }
-  removePrintFilesByPrintTaskId(printTaskId)
-  removePrintTaskById(printTaskId)
-  deletePrintTaskUploadFiles(printTaskId)
+  purgePrintTask(printTaskId)
   return { success: true }
 }

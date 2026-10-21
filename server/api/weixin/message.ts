@@ -10,8 +10,6 @@ import {
   findPrintTaskWithPrinter,
   updatePrintTaskState,
   findPrintTaskById,
-  removePrintFilesByPrintTaskId,
-  removePrintTaskById,
   listPrintFilesByPrintTaskIdAndState,
   updatePrintFileState,
   findPrinterById,
@@ -30,6 +28,7 @@ import {
 import { notifyCheckJobs } from '../../ws/index.ts'
 import { addTokenToUrl } from '../utils.ts'
 import { processDocument, processDocumentSimple } from '../docProcess.ts'
+import { purgePrintTask } from '../printTask.ts'
 import { handlePdfConvertMessages } from '../pdfConvert.ts'
 import { handlePdfToWordMessages } from '../pdfToWord.ts'
 import { PRINT_MAN_KF_OPEN_ID, DOCUMENT_KF_OPEN_ID } from './link.ts'
@@ -227,8 +226,7 @@ const handleDeleteById = async (openKfId: string, externalUserId: string, printT
   }
 
   try {
-    removePrintFilesByPrintTaskId(printTaskId)
-    removePrintTaskById(printTaskId)
+    purgePrintTask(printTaskId)
     await sendTextMessage('✅ 已删除', openKfId, externalUserId)
     logger.log(`✅ 已删除打印任务 ID: ${printTaskId}`)
   } catch (error) {
