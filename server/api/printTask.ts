@@ -13,6 +13,7 @@ import {
   updatePrintFileState,
   listPrintFilesByPrintTaskId,
   listPrintFilesByPrintTaskIdAndState,
+  listPrintFilesByComputerIdAndStates,
   listPrintTasksByComputerIdAndState,
   insertPrintFile,
   removePrintFilesByPrintTaskId,
@@ -250,19 +251,25 @@ export const retryFailedFiles = async (printTaskId: number) => {
 
 export const getPrintJobs = async () => {
   const computerId = getComputerId();
-  // 本机打印机一次性查全，建 id→PrinterBase 映射（仅按打印机数查询，非按任务数）
-  const printerIds = listPrintersByComputerId(computerId).map((p) => p.id);
-  const printerMap = new Map<number, PrinterBase>();
-  for (const id of printerIds) {
-    const p = findPrinterById(id);
-    if (p) printerMap.set(id, p);
-  }
-  // DB 侧按 computerId + state 过滤（INNER JOIN Printer），避免「跨设备全表扫描 + JS 按 printerId 过滤」
+  // 固定 3 条查询，与打印机数 P、任务数 T 都无关（旧写法是 2 + 2T）
+  // 1) 本机打印机。补上 computerId 使元素形状与 findPrinterById 的返回一致（PrinterBase），
+  //    避免为了拿一个 computerId 字段再逐台打印机查一遍。
+  const printerMap = new Map<number, PrinterBase>(
+    listPrintersByComputerId(computerId).map((p): [number, PrinterBase] => [p.id, { ...p, computerId }]),
+  );
+  // 2) 本机 waiting_print 任务。DB 侧按 computerId 过滤，不再跨设备全表扫描后在 JS 里筛
   const tasks = listPrintTasksByComputerIdAndState(computerId, "waiting_print");
+  // 3) 这些任务的 waiting_print 文件：一次取回，按 printTaskId 分组
+  const filesByTask = new Map<number, PrintFileBase[]>();
+  for (const f of listPrintFilesByComputerIdAndStates(computerId, "waiting_print", "waiting_print")) {
+    const list = filesByTask.get(f.printTaskId);
+    if (list) list.push(f);
+    else filesByTask.set(f.printTaskId, [f]);
+  }
   return tasks.map((t) => ({
     ...t,
     printer: printerMap.get(t.printerId),
-    printFiles: listPrintFilesByPrintTaskIdAndState(t.id, "waiting_print"),
+    printFiles: filesByTask.get(t.id) ?? [],
   }));
 };
 

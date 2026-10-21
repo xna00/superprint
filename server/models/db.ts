@@ -472,18 +472,7 @@ export const removePrintTaskById = (id: number) => {
   db.prepare(`DELETE FROM PrintTask WHERE PrintTask.id = @id`).run({ id });
 };
 
-export const listPrintTasksByState = (
-  state: PrintTaskState,
-): PrintTaskRow[] =>
-  db
-    .prepare(
-      `SELECT ALL * FROM PrintTask WHERE PrintTask.state = @state ORDER BY 1 LIMIT -1 OFFSET 0`,
-    )
-    .all({ state });
-
-// 取某台电脑下、处于指定状态的打印任务，并一次性 JOIN 出所属打印机信息。
-// 替代「先 listPrintTasksByState 全表扫描 + JS 按 printerId 过滤 + 逐任务 findPrinterById」的 N+1 写法，
-// 用于打印客户端轮询 getPrintJobs（高频热路径）。
+// 取某台电脑下、处于指定状态的打印任务
 export const listPrintTasksByComputerIdAndState = (
   computerId: string,
   state: PrintTaskState,
@@ -501,6 +490,23 @@ export const listPrintTasksByComputerIdAndState = (
     printerId: r.printerId,
   }));
 };
+
+// getPrintJobs 专用：一条查询取回「本机、taskState 状态下任务」的全部 fileState 状态文件，
+// 调用方按 printTaskId 分组。替代逐任务 listPrintFilesByPrintTaskIdAndState 的 N+1。
+// 走 PrintFile→PrintTask→Printer 的 JOIN 把范围限定在本机，与 listPrintTasksByComputerIdAndState 口径一致；
+// 排序 (printTaskId, id) 保证分组后每个任务的 printFiles 顺序与原逐任务查询（按 id 升序）相同。
+// 只用命名参数：本仓库的 TypedDb 靠 SQL 里的 @name 推导参数类型，位置参数（IN (?,?)）推不出来。
+export const listPrintFilesByComputerIdAndStates = (
+  computerId: string,
+  taskState: PrintTaskState,
+  fileState: PrintFileState,
+): PrintFileBase[] =>
+  db
+    .prepare(
+      `SELECT ALL PrintFile.id AS id, PrintFile.state AS state, PrintFile.printTaskId AS printTaskId, PrintFile.fileId AS fileId, PrintFile.filename AS filename, PrintFile.duplex AS duplex, PrintFile.tumble AS tumble FROM PrintFile INNER JOIN PrintTask ON PrintTask.id = PrintFile.printTaskId INNER JOIN Printer ON Printer.id = PrintTask.printerId WHERE Printer.computerId = @computerId AND PrintTask.state = @taskState AND PrintFile.state = @fileState ORDER BY PrintFile.printTaskId, PrintFile.id LIMIT -1 OFFSET 0`,
+    )
+    .all({ computerId, taskState, fileState })
+    .map((f) => ({ ...f, duplex: Boolean(f.duplex), tumble: Boolean(f.tumble) }));
 
 // ── PrintFile ──
 
