@@ -203,13 +203,18 @@ export type DownloadResult = {
   originalPath: string
 }
 
-const downloadMediaUncached = async (
-  mediaId: string,
-  duplex: boolean = true,
-  tumble: boolean = false
-): Promise<DownloadResult> => {
-  ensureUploadsDir()
+type FetchedMedia = {
+  /** 内容 sha256 前 16 位，落盘文件名与 fileId 都用它 */
+  fileId: string
+  filename: string
+  ext: string
+  buffer: Buffer
+}
 
+// downloadMedia / downloadMediaToMemory 共用的下载核心：取 token → fetch →
+// 校验 HTTP 与微信 JSON 错误体 → 按 content-disposition/content-type 定文件名 →
+// 算内容 hash。两者只差「落盘 + 转换」vs「纯内存」，其余完全相同。
+const fetchMedia = async (mediaId: string): Promise<FetchedMedia> => {
   const accessToken = await getAccessToken()
   const url = `https://qyapi.weixin.qq.com/cgi-bin/media/get?access_token=${accessToken}&media_id=${mediaId}`
 
@@ -234,9 +239,19 @@ const downloadMediaUncached = async (
 
   const hash = createHash('sha256').update(buffer).digest('hex').slice(0, 16)
   const ext = extname(filename)
-  const fileHash = hash + ext
 
-  const filePath = join(UPLOADS_DIR, fileHash)
+  return { fileId: hash, filename, ext, buffer }
+}
+
+const downloadMediaUncached = async (
+  mediaId: string,
+  duplex: boolean = true,
+  tumble: boolean = false
+): Promise<DownloadResult> => {
+  ensureUploadsDir()
+
+  const { fileId, filename, ext, buffer } = await fetchMedia(mediaId)
+  const filePath = join(UPLOADS_DIR, fileId + ext)
 
   writeFileSync(filePath, buffer)
 
@@ -244,14 +259,14 @@ const downloadMediaUncached = async (
   if (isOfficeFile(extLower)) {
     const pdfPath = await convertOfficeToPdf(filePath)
     if (pdfPath) {
-      return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf'), converted: true, originalPath: filePath }
+      return { fileId, filename: filename.replace(/\.[^.]+$/, '.pdf'), converted: true, originalPath: filePath }
     }
   } else if (['.jpg', '.jpeg', '.png', '.gif'].includes(extLower)) {
     const pdfPath = await convertImageToPdf(filePath)
-    return { fileId: hash, filename: filename.replace(/\.[^.]+$/, '.pdf'), converted: true, originalPath: filePath }
+    return { fileId, filename: filename.replace(/\.[^.]+$/, '.pdf'), converted: true, originalPath: filePath }
   }
 
-  return { fileId: hash, filename, converted: false, originalPath: filePath }
+  return { fileId, filename, converted: false, originalPath: filePath }
 }
 
 // 同一 mediaId 的并发下载去重：message.ts 用 Promise.all 并发处理一批媒体消息，
@@ -285,32 +300,8 @@ export const downloadMedia = async (
 // 供 docProcess 使用：原文件仅用于 AI 识别，识别完即弃，无需写入 uploads/。
 export const downloadMediaToMemory = async (
   mediaId: string,
-): Promise<{ fileId: string; buffer: Buffer; ext: string; filename: string }> => {
-  const accessToken = await getAccessToken()
-  const url = `https://qyapi.weixin.qq.com/cgi-bin/media/get?access_token=${accessToken}&media_id=${mediaId}`
-
-  const response = await fetch(url)
-
-  if (!response.ok) {
-    throw new Error(`下载文件失败: HTTP ${response.status}`)
-  }
-
-  const contentType = response.headers.get('content-type')
-  if (contentType?.includes('application/json')) {
-    const errorData = await response.json() as { errcode?: number; errmsg?: string }
-    if (errorData.errcode && errorData.errcode !== 0) {
-      throw new Error(`下载文件失败: ${errorData.errmsg} (errcode: ${errorData.errcode})`)
-    }
-  }
-
-  const filename = getFilenameFromResponse(response, mediaId)
-  const arrayBuffer = await response.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
-  const hash = createHash('sha256').update(buffer).digest('hex').slice(0, 16)
-  const ext = extname(filename)
-
-  return { fileId: hash, buffer, ext, filename }
-}
+): Promise<{ fileId: string; buffer: Buffer; ext: string; filename: string }> =>
+  fetchMedia(mediaId)
 
 export const getFilePath = (fileId: string): string | null => {
   const exts = ['.pdf', '.ps', '.jpg', '.png', '.gif', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
