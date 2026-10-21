@@ -10,7 +10,7 @@ export default defineConfig({
     emptyOutDir: false,
     minify: false,
     rollupOptions: {
-      input: 'dist-tsgo/update-script.js',
+      input: 'src/update-script.ts',
       output: {
         format: 'es',
         entryFileNames: 'update-entry.js',

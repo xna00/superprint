@@ -10,7 +10,6 @@ server/data.db
 node_modules/
 */package-lock.json
 dist
-dist-tsgo
 server/static/
 server/static.backup
 server/bundle.js

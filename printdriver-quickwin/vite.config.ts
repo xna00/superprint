@@ -30,7 +30,7 @@ export default defineConfig({
     manifest: true,
     modulePreload: false,
     rollupOptions: {
-      input: 'dist-tsgo/entry.js',
+      input: 'src/entry.ts',
       output: {
         format: 'es',
         entryFileNames: 'entry.js',
