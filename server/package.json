@@ -5,8 +5,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "npx tsc --emitDeclarationOnly && node --experimental-strip-types scripts/strip-types.ts",
-    "typecheck": "npm run build",
+    "typecheck": "npx tsc --emitDeclarationOnly && node --experimental-strip-types scripts/strip-types.ts",
     "bundle": "npx tsc && npx esbuild main.ts --bundle --sourcemap --platform=node --format=esm --outfile=bundle.js",
     "start": "node --experimental-strip-types main.ts"
   },

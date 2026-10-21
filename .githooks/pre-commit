@@ -1,0 +1,35 @@
+#!/bin/sh
+# 提交前全仓校验：根目录 `npm run build` 必须通过。
+#
+# 根 build 的链路是 `npm run typecheck --workspaces` + `npm run build --workspaces`，
+# 也就是「全部 workspace 先做完整类型检查，再做 emit / 打包」，所以这一条命令
+# 同时覆盖了类型安全和产物构建。顺序不能反：server 的 typecheck 就是它的 d.ts
+# emit + strip-types，api/printdriver 的类型解析依赖这份产物。
+#
+# 各 workspace 的 build 里不重复跑 tsc：server 没有 build（typecheck 里那一遍
+# tsc 已经 emit 过了），api 用 --noCheck，web 的 tsc -b 因为 noEmit 已整个删掉。
+#
+# hooks 目录由 scripts/install-hooks.mjs 指到这里（npm install / npm ci 时自动设置，
+# 见根 package.json 的 prepare 脚本），所以新克隆的人不用手动配。
+#
+# 逃生舱：SKIP_PRECOMMIT=1 git commit ...
+#   只在紧急提交时用。事后必须补跑一次 `npm run build`。
+set -eu
+
+if [ "${SKIP_PRECOMMIT:-}" = "1" ]; then
+  echo "[pre-commit] SKIP_PRECOMMIT=1 —— 已跳过全仓校验" >&2
+  exit 0
+fi
+
+# 从 git 顶层目录跑，保证 npm workspaces 能解析（不管 hook 是从哪个子目录触发的）
+cd "$(git rev-parse --show-toplevel)"
+t0=$(date +%s)
+
+echo "[pre-commit] npm run build （全仓 typecheck + build）"
+if ! npm run build; then
+  echo "[pre-commit] ✗ 全仓 typecheck / build 未通过，提交已阻止" >&2
+  echo "[pre-commit]   先跑 npm run build 看具体报错" >&2
+  exit 1
+fi
+
+echo "[pre-commit] ✓ 全仓 typecheck + build 通过（$(($(date +%s) - t0))s）"

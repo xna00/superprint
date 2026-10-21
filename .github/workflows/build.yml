@@ -25,10 +25,9 @@ jobs:
       - name: Install dependencies (workspaces)
         run: npm ci
 
-      - name: Type check (all workspaces)
-        run: npm run typecheck
-
-      - name: Build all workspaces
+      # 根 build = 全仓 typecheck（server 的 d.ts emit + strip 也在里面）+ 各 workspace build，
+      # 一条命令就覆盖类型检查和产物，避免 tsc 跑两遍。
+      - name: Type check + build (all workspaces)
         run: npm run build
 
       - uses: actions/upload-artifact@v6
