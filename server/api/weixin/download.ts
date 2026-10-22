@@ -57,7 +57,9 @@ export const convertImageToPdf = (imagePath: string): Promise<string> => {
 }
 
 export const isOfficeFile = (ext: string): boolean => {
-  const officeExts = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
+  // .wps 是 WPS Office 存的 OLE2/CFB 文档（与 .doc 同容器），政务场景常见；
+  // workbuddy 后端实测能转（8 页 .wps → 8 页 PDF，0.74s）。
+  const officeExts = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.wps']
   return officeExts.includes(ext.toLowerCase())
 }
 

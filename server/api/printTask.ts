@@ -275,8 +275,9 @@ export const getPrintJobs = async () => {
 
 // 一个打印任务在 uploads/ 下可能对应多个物理文件：
 // <fileId>.pdf（可打印/预览）+ <fileId>.<原扩展名>（docx/jpg 等原文件）
+// 只列扩展名、不列目录，所以新支持一种办公格式时这里必须同步加，否则原文件会漏删。
 const UPLOAD_FILE_EXTS = ['.pdf', '.ps', '.jpg', '.jpeg', '.png', '.gif',
-  '.bmp', '.webp', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
+  '.bmp', '.webp', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.wps']
 
 // 靠 PrintFile 行拿 fileId，所以必须早于 removePrintFilesByPrintTaskId 调用：
 // DB 行一删这里就查不到文件了，uploads 会静默漏删。

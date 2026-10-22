@@ -307,7 +307,7 @@ const processMediaMessage = async (
     const fileResult = await downloadMedia(message.file.media_id, duplex, tumble)
 
     const ext = fileResult.filename.substring(fileResult.filename.lastIndexOf('.')).toLowerCase()
-    const officeExts = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
+    const officeExts = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.wps']
     if (!officeExts.includes(ext)) {
       logger.log(`不支持的文件类型: ${fileResult.filename}`)
       return null

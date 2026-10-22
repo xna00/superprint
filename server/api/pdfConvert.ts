@@ -7,7 +7,7 @@ import { logger } from "../logger.ts";
 const WEIXIN_KF_ID = 'wkHnU4FQAAAO-EtO4HBU2vWdk213Gwjg'
 
 const SUPPORTED_IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif']
-const SUPPORTED_OFFICE_EXTS = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
+const SUPPORTED_OFFICE_EXTS = ['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.wps']
 
 type NonEventMessage = {
   msgtype: string
