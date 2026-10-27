@@ -39,16 +39,18 @@ type UploadMediaResponse = {
   created_at: string
 }
 
+// 支持「磁盘路径」和「内存 Buffer」两种入参：公文 docx 只存在于内存，
+// 没必要为了发一条微信文件先落盘（落盘还得多一套清理逻辑）。
 export const uploadMedia = async (
-  filePath: string,
+  file: string | Buffer,
   mediaType: 'image' | 'voice' | 'video' | 'file' = 'file',
   filename?: string
 ): Promise<string> => {
   const accessToken = await getAccessToken()
   const url = `https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token=${accessToken}&type=${mediaType}`
 
-  const fileBuffer = readFileSync(filePath)
-  const displayName = filename || filePath.split('/').pop() || 'file'
+  const fileBuffer = typeof file === 'string' ? readFileSync(file) : file
+  const displayName = filename || (typeof file === 'string' ? file.split('/').pop() : undefined) || 'file'
 
   const formData = new FormData()
   formData.append('media', new Blob([fileBuffer]), displayName)

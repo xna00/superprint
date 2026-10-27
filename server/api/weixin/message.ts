@@ -27,7 +27,7 @@ import {
 } from '../../models/db.ts'
 import { notifyCheckJobs } from '../../ws/index.ts'
 import { addTokenToUrl } from '../utils.ts'
-import { processDocument, processDocumentSimple } from '../docProcess.ts'
+import { processDocument, processDocumentSimple, docxFilename, type ProcessDocumentResult } from '../docProcess.ts'
 import { purgePrintTask } from '../printTask.ts'
 import { handlePdfConvertMessages } from '../pdfConvert.ts'
 import { handlePdfToWordMessages } from '../pdfToWord.ts'
@@ -497,6 +497,26 @@ const handleMessagesByPrintMan = async (_messages: NonEventMessage[]): Promise<v
 }
 
 
+// 公文产物：先发可编辑的 docx，再发预览/打印用的 PDF。
+// docx 走内存 Buffer 不落盘；它发送失败只记日志，不能影响 PDF 和已建好的打印任务。
+const sendDocumentFiles = async (
+  result: ProcessDocumentResult,
+  kfid: string,
+  externalUserId: string
+): Promise<void> => {
+  try {
+    const filename = docxFilename(result.recognized)
+    const docxMediaId = await uploadMedia(result.docxBuffer, 'file', filename)
+    await sendFileMessage(docxMediaId, kfid, externalUserId)
+    logger.log(`已发送公文 docx: ${filename}`)
+  } catch (error) {
+    logger.error('发送公文 docx 失败（不影响 PDF）:', error)
+  }
+
+  const pdfMediaId = await uploadMedia(result.pdfPath, 'file')
+  await sendFileMessage(pdfMediaId, kfid, externalUserId)
+}
+
 const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<void> => {
   const grouped = Object.groupBy(_messages, m => m.external_userid)
 
@@ -514,22 +534,19 @@ const handleDocProcessMessages = async (_messages: NonEventMessage[]): Promise<v
       try {
         await sendTextMessage('🔍 正在识别公文，请稍候...', kfid, externalUserId)
 
-        if (kfUser) {
-          const result = await processDocument(mediaId, kfid, externalUserId)
-          const pdfMediaId = await uploadMedia(result.pdfPath, 'file')
-          await sendFileMessage(pdfMediaId, kfid, externalUserId)
-        } else {
-          const result = await processDocumentSimple(mediaId)
-          
+        const result = kfUser
+          ? await processDocument(mediaId, kfid, externalUserId)
+          : await processDocumentSimple(mediaId)
+
+        if (!kfUser) {
           await sendTextMessage(
             `✅ 公文识别完成\n\n文号: ${result.recognized.document_number}\n单位: ${result.recognized.issuing_unit}\n标题: ${result.recognized.title}`,
             kfid,
             externalUserId
           )
-
-          const pdfMediaId = await uploadMedia(result.pdfPath, 'file')
-          await sendFileMessage(pdfMediaId, kfid, externalUserId)
         }
+
+        await sendDocumentFiles(result, kfid, externalUserId)
       } catch (error: any) {
         logger.error('公文处理失败:', error)
         await sendTextMessage(`❌ 公文处理失败: ${error.message}`, kfid, externalUserId)

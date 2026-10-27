@@ -59,15 +59,28 @@ export const generateDocx = (data: RecognizedDocument): Buffer => {
 
 export type ProcessDocumentResult = {
   recognized: RecognizedDocument
+  // 公文 docx 只留在内存：发微信文件时直接用它，不必落盘
+  docxBuffer: Buffer
   printTaskId?: number
   printFileId?: number
   fileId: string
   pdfPath: string
 }
 
-export const processDocumentSimple = async (
-  mediaId: string
-): Promise<ProcessDocumentResult> => {
+// 微信里显示的文件名：标题可能含 / \ : * ? " < > | 等字符，
+// 直接当文件名会被微信拒绝或显示错乱，统一替换并截断。
+export const docxFilename = (recognized: RecognizedDocument): string => {
+  const safe = (recognized.title || '未识别')
+    .replace(/[\\/:*?"<>|\r\n\t]+/g, '_')
+    .trim()
+    .slice(0, 60)
+  return `公文_${safe || '未识别'}.docx`
+}
+
+// 两条分支（已绑定 / 未绑定打印机）共用的前半段：下载 → 识别 → 生成 docx → 转 PDF。
+// 这段原先在 processDocument 和 processDocumentSimple 里各复制一份，
+// 每加一个产物就要改两处，才收敛到这里。
+const recognizeAndConvert = async (mediaId: string): Promise<ProcessDocumentResult> => {
   const media = await downloadMediaToMemory(mediaId)
   logger.log(`文件下载完成: ${media.filename}`)
 
@@ -79,42 +92,27 @@ export const processDocumentSimple = async (
   logger.log('生成 docx（内存）...')
   const docxBuffer = generateDocx(recognized)
 
+  // docx 直传 WPS，不落盘；只有 PDF 会写到 uploads/ 供预览和打印
   const pdfPath = await convertOfficeToPdf({ buffer: docxBuffer, filename: `${media.fileId}.docx` })
   if (!pdfPath) {
     throw new Error('PDF 生成失败')
   }
   logger.log(`PDF 预览文件已生成: ${pdfPath}`)
 
-  return {
-    recognized,
-    fileId: media.fileId,
-    pdfPath
-  }
+  return { recognized, docxBuffer, fileId: media.fileId, pdfPath }
 }
+
+export const processDocumentSimple = async (
+  mediaId: string
+): Promise<ProcessDocumentResult> => recognizeAndConvert(mediaId)
 
 export const processDocument = async (
   mediaId: string,
   kfid: string,
   externalUserId: string,
 ): Promise<ProcessDocumentResult> => {
-  const media = await downloadMediaToMemory(mediaId)
-  logger.log(`文件下载完成: ${media.filename}`)
-
-  const dataUrl = imageBufferToDataUrl(media.buffer, media.ext)
-  logger.log('开始识别公文...')
-  const recognized = await recognizeDocument(dataUrl)
-  logger.log('识别结果:', recognized)
-
-  logger.log('生成 docx（内存）...')
-  const docxBuffer = generateDocx(recognized)
-
-  // 转换 docx 为 PDF 供前端预览（docx 直传 WPS，不落盘）
-  const pdfPath = await convertOfficeToPdf({ buffer: docxBuffer, filename: `${media.fileId}.docx` })
-  if (pdfPath) {
-    logger.log(`PDF 预览文件已生成: ${pdfPath}`)
-  } else {
-    logger.warn('PDF 预览文件生成失败')
-  }
+  const base = await recognizeAndConvert(mediaId)
+  const { recognized } = base
 
   const existingTask = listWaitingConfirmationTasks(externalUserId, kfid)[0]
   let printTaskId: number
@@ -134,8 +132,8 @@ export const processDocument = async (
   const printFileId = insertPrintFile({
     state: "waiting_print",
     printTaskId,
-    fileId: media.fileId,
-    filename: `公文_${recognized.title || '未识别'}.docx`,
+    fileId: base.fileId,
+    filename: docxFilename(recognized),
     duplex: true,
     tumble: false
   })
@@ -160,11 +158,5 @@ export const processDocument = async (
     logger.error("发送微信通知失败:", error)
   }
 
-  return {
-    recognized,
-    printTaskId,
-    printFileId,
-    fileId: media.fileId,
-    pdfPath: pdfPath || ''
-  }
+  return { ...base, printTaskId, printFileId }
 }
