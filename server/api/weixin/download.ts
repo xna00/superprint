@@ -4,7 +4,7 @@ import { createHash } from "node:crypto"
 import { getAccessToken } from './token.ts'
 import PDFDocument from "pdfkit"
 import { logger } from "../../logger.ts";
-import { WPS2PDF_URLS } from "../constants.ts"
+import { WPS2PDF_URLS, WPS2PDF_SHARECODE } from "../constants.ts"
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads')
 
@@ -97,7 +97,7 @@ export const convertWithWpsApi = async (
       const timer = setTimeout(() => controller.abort(), 30000)
 
       try {
-        const response = await fetch(`${baseUrl}/convert`, {
+        const response = await fetch(`${baseUrl}/convert?sharecode=${WPS2PDF_SHARECODE}`, {
           method: 'POST',
           body: form,
           signal: controller.signal
